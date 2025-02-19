@@ -21,13 +21,21 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Setup mdBook
-        uses: peaceiris/actions-mdbook@v1
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
         with:
-          mdbook-version: "0.4.40"
+          node-version: '18'
+          cache: 'yarn'
 
-      - name: Create book folder
-        run: mdbook build docs
+      - name: Install dependencies
+        run: |
+          cd docs
+          yarn install --frozen-lockfile
+
+      - name: Build website
+        run: |
+          cd docs
+          yarn build
 
       - uses: amondnet/vercel-action@v25
         id: vercel-deployment
@@ -37,7 +45,7 @@ jobs:
           scope: ${{ secrets.ORG_ID}} # Required
           vercel-args: ${{ github.ref_name == 'main' && '--prod' || '' }}
           vercel-project-id: ${{ secrets.PROJECT_ID}} # Required
-          working-directory: ./docs/book
+          working-directory: ./docs/build
 
       - name: Comment PR
         if: github.event_name == 'pull_request'
