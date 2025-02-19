@@ -1,6 +1,6 @@
 {
   "name": "@0xbow/privacy-pools-core-sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Typescript SDK for the Privacy Pool protocol",
   "repository": "https://github.com/0xbow-io/privacy-pools-core",
   "license": "Apache-2.0",
@@ -9,9 +9,7 @@
   "main": "./dist/node/index.mjs",
   "module": "./dist/esm/index.mjs",
   "browser": "./dist/esm/index.mjs",
-  "types": {
-    "import": "./dist/index.d.mts"
-  },
+  "types": "./dist/index.d.mts",
   "exports": {
     "node": {
       "types": "./dist/index.d.mts",

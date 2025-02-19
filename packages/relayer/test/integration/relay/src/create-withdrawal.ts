@@ -10,7 +10,7 @@ import {
   Withdrawal,
   WithdrawalProof,
   WithdrawalProofInput,
-} from "@defi-wonderland/privacy-pool-core-sdk";
+} from "@0xbow/privacy-pools-core-sdk";
 import { Address, defineChain, Hex } from "viem";
 import { localhost } from "viem/chains";
 

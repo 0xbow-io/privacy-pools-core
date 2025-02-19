@@ -14,7 +14,7 @@ import {
   dataMismatchFeeRecipient,
 } from "../inputs/validateWithdrawal.input.ts";
 
-import { WithdrawalProof } from "@defi-wonderland/privacy-pool-core-sdk";
+import { WithdrawalProof } from "@0xbow/privacy-pools-core-sdk";
 import * as Config from "../../src/config.ts";
 import { PrivacyPoolRelayer } from "../../src/services/privacyPoolRelayer.service.ts";
 import { RelayerDatabase } from "../../src/types/db.types.ts";

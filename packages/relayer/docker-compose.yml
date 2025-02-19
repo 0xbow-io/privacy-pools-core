@@ -8,6 +8,6 @@ services:
     volumes:
       - /tmp/pp_relayer.sqlite:/pp_relayer.sqlite
       - ./config.example.json:/build/config.json
-      - ../circuits/artifacts:/build/node_modules/@defi-wonderland/privacy-pool-core-sdk/dist/node/artifacts
+      - ../circuits/artifacts:/build/node_modules/@0xbow/privacy-pools-core-sdk/dist/node/artifacts
     ports:
       - "3000:3000" # HOST:CONTAINER

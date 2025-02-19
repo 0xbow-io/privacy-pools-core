@@ -4,7 +4,7 @@ WORKDIR /build
 RUN yarn global add typescript
 
 # Copy package files
-COPY package.json .npmrc tsconfig.build.json config.json ./
+COPY package.json tsconfig.build.json config.json ./
 RUN yarn install
 
 COPY src/ ./src/

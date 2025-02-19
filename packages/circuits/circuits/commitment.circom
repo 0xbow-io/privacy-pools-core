@@ -11,7 +11,7 @@ template CommitmentHasher() {
   //////////////////////// SIGNALS ////////////////////////
 
   signal input value;              // Value of commitment
-  signal input label;              // keccak256(pool_scope, nonce)
+  signal input label;              // keccak256(pool_scope, nonce) % SNARK_SCALAR_FIELD
   signal input nullifier;          // Nullifier of commitment
   signal input secret;             // Secret of commitment
 

@@ -2,7 +2,7 @@
 import {
   PrivacyPoolSDK,
   Circuits,
-} from "@defi-wonderland/privacy-pool-core-sdk";
+} from "@0xbow/privacy-pools-core-sdk";
 import { encodeAbiParameters } from "viem";
 
 // Function to temporarily redirect stdout

@@ -2,7 +2,7 @@ import {
   Address,
   Withdrawal,
   WithdrawalProof,
-} from "@defi-wonderland/privacy-pool-core-sdk";
+} from "@0xbow/privacy-pools-core-sdk";
 import { WithdrawalPayload } from "../interfaces/relayer/request.js";
 
 export interface SdkProviderInterface {

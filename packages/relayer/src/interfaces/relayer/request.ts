@@ -1,7 +1,7 @@
 import {
   Withdrawal,
   WithdrawalProof,
-} from "@defi-wonderland/privacy-pool-core-sdk";
+} from "@0xbow/privacy-pools-core-sdk";
 
 /**
  * Represents the proof payload for a relayer request.

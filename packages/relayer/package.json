@@ -33,7 +33,7 @@
     "docker:run": "docker-compose up"
   },
   "dependencies": {
-    "@defi-wonderland/privacy-pool-core-sdk": "0.0.0-bc6bbf37",
+    "@0xbow/privacy-pools-core-sdk": "0.1.5",
     "ajv": "8.17.1",
     "body-parser": "1.20.3",
     "express": "4.21.2",

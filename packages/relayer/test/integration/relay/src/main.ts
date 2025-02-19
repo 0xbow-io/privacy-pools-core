@@ -1,7 +1,7 @@
 import { encodeAbiParameters, getAddress, Hex } from "viem";
 import { request } from "./api-test.js";
 import { deposit, proveWithdrawal } from "./create-withdrawal.js";
-import { Hash, Withdrawal } from "@defi-wonderland/privacy-pool-core-sdk";
+import { Hash, Withdrawal } from "@0xbow/privacy-pools-core-sdk";
 
 const FeeDataAbi = [
   {

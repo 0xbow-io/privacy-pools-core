@@ -21,7 +21,7 @@ template Withdraw(maxTreeDepth) {
   signal input stateTreeDepth;                   // Current state tree depth
   signal input ASPRoot;                          // Latest ASP root
   signal input ASPTreeDepth;                     // Current ASP tree depth
-  signal input context;                          // keccak256(IPrivacyPool.Withdrawal, scope)
+  signal input context;                          // keccak256(IPrivacyPool.Withdrawal, scope) % SNARK_SCALAR_FIELD
 
   //////////////////// END OF PUBLIC SIGNALS ////////////////////
 
@@ -29,7 +29,7 @@ template Withdraw(maxTreeDepth) {
   /////////////////////// PRIVATE SIGNALS ///////////////////////
 
   // Signals to compute commitments
-  signal input label;                            // keccak256(scope, nonce)
+  signal input label;                            // keccak256(scope, nonce) % SNARK_SCALAR_FIELD
   signal input existingValue;                    // Value of the existing commitment
   signal input existingNullifier;                // Nullifier of the existing commitment
   signal input existingSecret;                   // Secret of the existing commitment

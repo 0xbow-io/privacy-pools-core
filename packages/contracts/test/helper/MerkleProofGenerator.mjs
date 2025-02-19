@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { encodeAbiParameters } from "viem";
-import { generateMerkleProof } from "@defi-wonderland/privacy-pool-core-sdk";
+import { generateMerkleProof } from "@0xbow/privacy-pools-core-sdk";
 
 // Function to temporarily redirect stdout
 function withSilentStdout(fn) {

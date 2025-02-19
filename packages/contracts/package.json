@@ -31,7 +31,7 @@
     "package.json": "sort-package-json"
   },
   "dependencies": {
-    "@defi-wonderland/privacy-pool-core-sdk": "^0.0.0-bc6bbf37",
+    "@0xbow/privacy-pools-core-sdk": "^0.1.5",
     "@openzeppelin/contracts": "5.1.0",
     "@openzeppelin/contracts-upgradeable": "5.0.2",
     "@openzeppelin/foundry-upgrades": "0.3.6",

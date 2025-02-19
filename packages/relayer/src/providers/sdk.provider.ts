@@ -11,7 +11,7 @@ import {
   WithdrawalProof,
   SDKError,
   type Hash,
-} from "@defi-wonderland/privacy-pool-core-sdk";
+} from "@0xbow/privacy-pools-core-sdk";
 import { Address } from "viem";
 import {
   CHAIN,

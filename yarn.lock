@@ -2,6 +2,18 @@
 # yarn lockfile v1
 
 
+"@0xbow/privacy-pools-core-sdk@0.1.5", "@0xbow/privacy-pools-core-sdk@^0.1.5":
+  version "0.1.5"
+  resolved "https://registry.yarnpkg.com/@0xbow/privacy-pools-core-sdk/-/privacy-pools-core-sdk-0.1.5.tgz#a574a1ade5f886c7e2c1e5d4907959cdf68e9de5"
+  integrity sha512-iWLyhvfV5z6MPB5EBXyVRtpytbn8GsMSFlKVgnJ2goPb089KNHfMzwvmcgqPh2P8+i6bgB+9bBCrxvgOnLncmA==
+  dependencies:
+    "@types/snarkjs" "0.7.9"
+    "@zk-kit/lean-imt" "2.2.2"
+    maci-crypto "2.5.0"
+    snarkjs "0.7.5"
+    typescript "^5.7.3"
+    viem "2.22.14"
+
 "@adraffy/ens-normalize@1.10.1":
   version "1.10.1"
   resolved "https://registry.yarnpkg.com/@adraffy/ens-normalize/-/ens-normalize-1.10.1.tgz#63430d04bd8c5e74f8d7d049338f1cd9d4f02069"
@@ -350,29 +362,6 @@
     fast-glob "3.3.2"
     solc-typed-ast "18.1.6"
     yargs "17.7.2"
-
-"@defi-wonderland/privacy-pool-core-sdk@0.0.0-bc6bbf37":
-  version "0.0.0-bc6bbf37"
-  resolved "https://npm.pkg.github.com/download/@defi-wonderland/privacy-pool-core-sdk/0.0.0-bc6bbf37/fab308c2ea6c43803561140f7774bfdad89a0fdd#fab308c2ea6c43803561140f7774bfdad89a0fdd"
-  integrity sha512-hjdlt7ZpR8pPsgyuhBihOLp+HBovxVOkIzn0jr00paPwbFGYr0iQBnHDW7Z3Gb4i/x5V/exPvlMyhC+KlChqWQ==
-  dependencies:
-    "@types/snarkjs" "0.7.9"
-    "@zk-kit/lean-imt" "2.2.2"
-    maci-crypto "2.5.0"
-    snarkjs "0.7.5"
-    typescript "^5.7.3"
-    viem "2.22.14"
-
-"@defi-wonderland/privacy-pool-core-sdk@^0.0.0-bc6bbf37":
-  version "0.0.0-febd6b85"
-  resolved "https://npm.pkg.github.com/download/@defi-wonderland/privacy-pool-core-sdk/0.0.0-febd6b85/a93a34744093ead2257dd8f078faccd25d050234#a93a34744093ead2257dd8f078faccd25d050234"
-  integrity sha512-aIdlOm/vrt87/TxZ/GywI1obFKLBaPc/cTmuV9lFSd1tGQb3BafgNYrryCCcmrLAlNxZ8p88xHDJVywxW0mJhA==
-  dependencies:
-    "@types/snarkjs" "0.7.9"
-    "@zk-kit/lean-imt" "2.2.2"
-    maci-crypto "2.5.0"
-    snarkjs "0.7.5"
-    viem "2.22.14"
 
 "@esbuild/aix-ppc64@0.24.2":
   version "0.24.2"
