@@ -6,76 +6,182 @@
 
 /* You can override the default Infima variables here. */
 :root {
-  --ifm-color-primary: #2e8555;
-  --ifm-color-primary-dark: #29784c;
-  --ifm-color-primary-darker: #277148;
-  --ifm-color-primary-darkest: #205d3b;
-  --ifm-color-primary-light: #33925d;
-  --ifm-color-primary-lighter: #359962;
-  --ifm-color-primary-lightest: #3cad6e;
-  --ifm-code-font-size: 95%;
+  /* Colors from the theme */
+  --ifm-color-primary: #000000;
+  --ifm-color-primary-dark: #262626;
+  --ifm-color-primary-darker: #1a1a1a;
+  --ifm-color-primary-darkest: #000000;
+  --ifm-color-primary-light: #4d4d4d;
+  --ifm-color-primary-lighter: #737373;
+  --ifm-color-primary-lightest: #999999;
+
+  /* Background and text colors */
+  --ifm-background-color: #ffffff;
+  --ifm-background-surface-color: #ffffff;
+  --ifm-font-color-base: #000000;
+
+  /* Code block colors */
+  --ifm-code-background: rgba(175, 184, 193, 0.2);
+  --ifm-code-font-size: 90%;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+
+  /* Font settings */
+  --ifm-font-family-base: "ibm_plex_mono", monospace;
+  --ifm-font-family-monospace: "ibm_plex_mono", monospace;
+
+  /* Typography scale */
+  --ifm-font-size-base: 1.4rem; /* 14px */
+  --ifm-font-size-tiny: 1rem; /* 10px */
+  --ifm-font-size-small: 1.2rem; /* 12px */
+  --ifm-font-size-medium: 1.4rem; /* 14px */
+  --ifm-font-size-large: 1.6rem; /* 16px */
+  --ifm-font-size-xl: 1.8rem; /* 18px */
+  --ifm-font-size-xxl: 2rem; /* 20px */
+
+  /* Heading sizes */
+  --ifm-h1-font-size: 2.4rem; /* 24px */
+  --ifm-h2-font-size: 2rem; /* 20px */
+  --ifm-h3-font-size: 1.8rem; /* 18px */
+  --ifm-h4-font-size: 1.6rem; /* 16px */
+  --ifm-h5-font-size: 1.4rem; /* 14px */
+  --ifm-h6-font-size: 1.2rem; /* 12px */
+
+  /* Border radius */
+  --ifm-code-border-radius: 4px;
+  --ifm-button-border-radius: 4px;
+  --ifm-card-border-radius: 0;
+
+  /* Border colors */
+  --ifm-color-emphasis-300: #b8bbbf;
+  --ifm-border-color: #000000;
 }
 
 /* For readability concerns, you should choose a lighter palette in dark mode. */
-[data-theme='dark'] {
-  --ifm-color-primary: #25c2a0;
-  --ifm-color-primary-dark: #21af90;
-  --ifm-color-primary-darker: #1fa588;
-  --ifm-color-primary-darkest: #1a8870;
-  --ifm-color-primary-light: #29d5b0;
-  --ifm-color-primary-lighter: #32d8b4;
-  --ifm-color-primary-lightest: #4fddbf;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+[data-theme="dark"] {
+  --ifm-color-primary: #ffffff;
+  --ifm-color-primary-dark: #b8bbbf;
+  --ifm-color-primary-darker: #999999;
+  --ifm-color-primary-darkest: #737373;
+  --ifm-color-primary-light: #f0f0f0;
+  --ifm-color-primary-lighter: #e6e6e6;
+  --ifm-color-primary-lightest: #ffffff;
+
+  /* Background and text colors */
+  --ifm-background-color: #000000;
+  --ifm-background-surface-color: #000000;
+  --ifm-font-color-base: #ffffff;
+
+  /* Code block colors */
+  --ifm-code-background: rgba(255, 255, 255, 0.1);
+  --docusaurus-highlighted-code-line-bg: rgba(255, 255, 255, 0.1);
+
+  /* Border colors */
+  --ifm-color-emphasis-300: #4d4d4d;
+  --ifm-border-color: #ffffff;
+}
+
+html {
+  font-size: 62.5%;
 }
 
 /* Improved code block styling */
 .theme-code-block {
-  border: 1px solid var(--ifm-color-emphasis-300);
-  border-radius: var(--ifm-code-border-radius);
-  box-shadow: var(--ifm-global-shadow-lw);
+  border: 1px solid var(--ifm-border-color);
+  border-radius: 0;
   margin: 1rem 0;
+  background-color: var(--ifm-background-color);
 }
 
 .theme-code-block pre {
   margin: 0;
-  background-color: #f6f8fa !important;
-}
-
-[data-theme='dark'] .theme-code-block pre {
-  background-color: #1e1e1e !important;
+  font-family: var(--ifm-font-family-monospace);
+  background-color: var(--ifm-background-color) !important;
 }
 
 .prism-code {
-  padding: 1rem !important;
-  background-color: #f6f8fa !important;
-  font-size: 0.9rem !important;
-}
-
-[data-theme='dark'] .prism-code {
-  background-color: #1e1e1e !important;
+  padding: 1.5rem !important;
+  background-color: var(--ifm-background-color) !important;
+  font-size: var(--ifm-code-font-size) !important;
+  border-radius: 0;
 }
 
 /* Inline code styling */
-code:not([class^='language-']) {
-  background-color: rgba(175, 184, 193, 0.2);
+code:not([class^="language-"]) {
+  background-color: rgba(175, 184, 193, 0.4);
   border: none;
-  border-radius: 0.25rem;
+  border-radius: var(--ifm-code-border-radius);
   padding: 0.2rem 0.375rem;
   font-size: 85%;
   margin: 0 0.1rem;
+  font-family: var(--ifm-font-family-monospace);
+  font-weight: 550;
 }
 
-[data-theme='dark'] code:not([class^='language-']) {
-  background-color: rgba(255, 255, 255, 0.1);
+/* Remove background from code blocks */
+.theme-code-block code {
+  background-color: transparent;
 }
 
 /* Code block title */
 .theme-code-block > div:first-child {
-  background-color: #f0f3f7 !important;
-  border-bottom: 1px solid var(--ifm-color-emphasis-300);
+  background-color: var(--ifm-background-color) !important;
+  border-bottom: 1px solid var(--ifm-border-color);
+  font-family: var(--ifm-font-family-monospace);
 }
 
-[data-theme='dark'] .theme-code-block > div:first-child {
-  background-color: #2d2d2d !important;
+/* Navbar customization */
+.navbar {
+  border-bottom: 1px solid var(--ifm-border-color);
+  background-color: var(--ifm-background-color);
+}
+
+/* Sidebar customization */
+.menu {
+  font-family: var(--ifm-font-family-base);
+  font-size: var(--ifm-font-size-base);
+  border-right: 1px solid var(--ifm-border-color);
+}
+
+/* Card customization */
+.card {
+  border: 1px solid var(--ifm-border-color);
+  border-radius: 0;
+  background-color: var(--ifm-background-color);
+}
+
+/* Button customization */
+.button {
+  border-radius: var(--ifm-button-border-radius);
+  font-weight: 500;
+  text-transform: none;
+  border: 1px solid var(--ifm-border-color);
+}
+
+/* Table customization */
+.table {
+  border: 1px solid var(--ifm-border-color);
+  border-radius: 0;
+}
+
+.table th,
+.table td {
+  border-color: var(--ifm-border-color);
+}
+
+/* Add this new section for main content styling */
+.markdown {
+  font-size: 2rem; /* 22.4px for main content */
+}
+
+.markdown p {
+  font-size: 1.24rem; /* 22.4px for paragraphs */
+}
+
+.markdown li {
+  font-size: 1.24rem; /* 22.4px for list items */
+}
+
+/* Keep code blocks at a smaller size for readability */
+.markdown code {
+  font-size: 1.16rem; /* 18px for code */
 }

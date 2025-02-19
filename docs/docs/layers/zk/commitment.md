@@ -12,7 +12,6 @@ template CommitmentHasher() {
     signal input secret;             // Secret value
 
     signal output commitment;        // Final commitment hash
-    signal output precommitmentHash; // Hash of nullifier and secret
     signal output nullifierHash;     // Hashed nullifier
 }
 ```

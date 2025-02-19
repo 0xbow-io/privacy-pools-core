@@ -38,4 +38,5 @@ Circuit constraints:
 2. Verifies label inclusion in ASP tree
 3. Ensures withdrawn amount is valid
 4. Computes new commitment for remaining value
-5. Verifies context matches on-chain data
+5. Checks the existing and new nullifier don't match
+6. Verifies context matches on-chain data
