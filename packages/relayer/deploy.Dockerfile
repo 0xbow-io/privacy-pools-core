@@ -22,7 +22,7 @@ RUN yarn build
 
 # Install root deps
 WORKDIR /build
-COPY package.json yarn.lock ./
+COPY package.json yarn.lock tsconfig.base.json ./
 RUN yarn install
 
 # Install circuits deps
@@ -37,6 +37,13 @@ RUN yarn gencontract:commitment
 RUN bash ./scripts/present.sh
 RUN mkdir -p /build/packages/relayer/node_modules/@0xbow/privacy-pools-core-sdk/dist/node
 RUN ln -s /build/packages/circuits/artifacts /build/packages/relayer/node_modules/@0xbow/privacy-pools-core-sdk/dist/node/artifacts
+
+
+WORKDIR /build
+COPY packages/sdk /build/packages/sdk
+WORKDIR /build/packages/sdk
+RUN yarn install
+RUN yarn build
 
 WORKDIR /build/packages/relayer
 
