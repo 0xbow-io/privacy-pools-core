@@ -97,8 +97,8 @@ jobs:
         id: build-image
         uses: docker/build-push-action@v5
         with:
-          context: packages/relayer
-          file: packages/relayer/Dockerfile
+          context: .
+          file: packages/relayer/deploy.Dockerfile
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max

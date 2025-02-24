@@ -10,7 +10,7 @@
         "id": "31337"
     },
     "withdraw_amounts": {
-        "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9": 100,
+        "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9": 100
     },
     "allowed_domains": [
         "http://your-domain.com",
