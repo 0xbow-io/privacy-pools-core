@@ -11,6 +11,11 @@ ingress:
     nginx.org/mergeable-ingress-type: "minion"
     #nginx.ingress.kubernetes.io/enable-cors: "true"
     #nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header "Access-Control-Allow-Origin" "$http_origin" always;
+      add_header "Access-Control-Allow-Methods" "GET, PUT, POST, OPTIONS" always;
+      add_header "Access-Control-Allow-Headers" "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization" always;
+      add_header "Access-Control-Expose-Headers" "Content-Length,Content-Range" always;
 verbosity: WARN
 
 # Shared environment variables
