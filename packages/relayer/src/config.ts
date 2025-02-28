@@ -55,6 +55,7 @@ const configSchema = z
     chain: zChain,
     sqlite_db_path: z.string().transform((p) => path.resolve(p)),
     withdraw_amounts: zWithdrawAmounts,
+    cors_allow_all: z.boolean().default(false),
     allowed_domains: z.array(z.string().url()),
   })
   .strict()
@@ -85,3 +86,4 @@ export const SQLITE_DB_PATH = config.sqlite_db_path;
 export const WITHDRAW_AMOUNTS = config.withdraw_amounts;
 export const CHAIN = config.chain;
 export const ALLOWED_DOMAINS = config.allowed_domains;
+export const CORS_ALLOW_ALL = config.cors_allow_all;

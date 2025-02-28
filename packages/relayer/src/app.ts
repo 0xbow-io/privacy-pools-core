@@ -7,7 +7,7 @@ import {
   notFoundMiddleware,
 } from "./middlewares/index.js";
 import { relayerRouter } from "./routes/index.js";
-import { ALLOWED_DOMAINS } from "./config.js";
+import { ALLOWED_DOMAINS, CORS_ALLOW_ALL  } from "./config.js";
 
 // Initialize the express app
 const app = express();
@@ -17,10 +17,11 @@ const parseJsonMiddleware = bodyParser.json();
 
 // CORS config
 const corsOptions = {
-  origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
+  origin: CORS_ALLOW_ALL ? '*' : function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
     if (!origin || ALLOWED_DOMAINS.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
+      console.log(`Request blocked by CORS middleware: ${origin}. Allowed domains: ${ALLOWED_DOMAINS}`);
       callback(new Error("Not allowed by CORS"));
     }
   },
