@@ -1,11 +1,10 @@
-import { Address } from "viem";
-import { Hash } from "./commitment.js";
+import { Address, Hash } from "./commitment.js";
 
 /**
  * Represents a deposit event from a privacy pool
  */
 export interface DepositEvent {
-  depositor: Address;
+  depositor: string;
   commitment: Hash;
   label: Hash;
   value: bigint;
@@ -29,7 +28,7 @@ export interface WithdrawalEvent {
  * Represents a ragequit event from a privacy pool
  */
 export interface RagequitEvent {
-  ragequitter: Address;
+  ragequitter: string;
   commitment: Hash;
   label: Hash;
   value: bigint;
@@ -42,10 +41,8 @@ export interface RagequitEvent {
  */
 export interface ChainConfig {
   chainId: number;
-  rpcUrl: string;
   privacyPoolAddress: Address;
   startBlock: bigint;
-  envioToken: string;
 }
 
 /**
@@ -54,7 +51,9 @@ export interface ChainConfig {
 export interface EventFilterOptions {
   fromBlock?: bigint;
   toBlock?: bigint;
-  depositor?: Address;
+  depositor?: string;
+  limit?: number;
+  skip?: number;
 }
 
 /**
