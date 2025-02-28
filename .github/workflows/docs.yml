@@ -43,7 +43,7 @@ jobs:
           vercel-token: ${{ secrets.VERCEL_TOKEN }} # Required
           vercel-org-id: ${{ secrets.ORG_ID}} # Required
           scope: ${{ secrets.ORG_ID}} # Required
-          vercel-args: ${{ github.ref_name == 'main' && '--prod' || '' }}
+          vercel-args: '--prod'
           vercel-project-id: ${{ secrets.PROJECT_ID}} # Required
 
       - name: Comment PR
