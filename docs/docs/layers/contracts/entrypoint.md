@@ -107,8 +107,8 @@ Maintains withdrawal validation data:
 
 The contract handles two types of fees:
 
-1. **Vetting Fees**: Charged on deposits, controlled by pool configuration
-2. **Relay Fees**: Optional fees for relayed withdrawals
+1. **Vetting Fees**: Charged on deposits via contract, controlled by pool configuration
+2. **Relay Fees**: Optional fees for relayed withdrawals (paid to the relayer)
 
 Fees can be withdrawn by the owner:
 
