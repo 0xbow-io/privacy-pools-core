@@ -40,7 +40,7 @@ yarn install
 
 ### Contracts
 
-The contracts package contains the Solidity smart contracts for the Privacy Pool protocol.
+The contracts package contains the Solidity smart contracts for the Privacy Pools protocol.
 
 ```bash
 cd packages/contracts

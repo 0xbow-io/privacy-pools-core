@@ -2,9 +2,9 @@
 title: Core Concepts
 ---
 
-### Zero-knowledge proofs in Privacy Pool
+### Zero-knowledge proofs in Privacy Pools
 
-Privacy Pool uses zero-knowledge proofs to demonstrate valid statements about private information without revealing that information. The protocol employs three proof types:
+Privacy Pools uses zero-knowledge proofs to demonstrate valid statements about private information without revealing that information. The protocol employs three proof types:
 
 - **Commitment Proofs**: Verify the ownership of a commitment
 - **Withdrawal Proofs**: Verify ownership and inclusion in state of a commitment

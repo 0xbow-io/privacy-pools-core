@@ -4,7 +4,7 @@ title: Smart Contracts Layer
 
 ### Contract architecture overview
 
-The Privacy Pool protocol is built on three core contracts:
+The Privacy Pools protocol is built on three core contracts:
 
 1. **Entrypoint**
    - Central access point for deposits
@@ -37,7 +37,7 @@ The Privacy Pool protocol is built on three core contracts:
 
 ### State management basics
 
-Each Privacy Pool maintains:
+Each Privacy Pools maintains:
 
 1. **Tree State**
    - Lean Incremental Merkle Tree (LeanIMT) for commitments

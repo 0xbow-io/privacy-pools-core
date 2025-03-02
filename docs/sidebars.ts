@@ -68,6 +68,8 @@ const sidebars: SidebarsConfig = {
       items: ["reference/contracts", "reference/circuits", "reference/sdk"],
     },
     "dev-guide",
+    "toc",
+    "privacy-policy",
   ],
 };
 

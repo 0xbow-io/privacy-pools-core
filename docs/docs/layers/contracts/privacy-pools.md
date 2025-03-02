@@ -2,7 +2,7 @@
 title: Privacy Pools
 ---
 
-The PrivacyPool contract is an abstract contract that implements core privacy pool functionality for both native ETH and ERC20 tokens. It:
+The PrivacyPool contract is an abstract contract that implements core privacy pools functionality for both native ETH and ERC20 tokens. It:
 
 1. Manages commitments and nullifiers
 2. Processes deposits and withdrawals

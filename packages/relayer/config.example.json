@@ -12,6 +12,7 @@
     "withdraw_amounts": {
         "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9": 100,
     },
+    "cors_allow_all": false,
     "allowed_domains": [
         "http://your-domain.com",
         "http://another-domain.com"

@@ -4,7 +4,7 @@ title: Contracts Interfaces
 
 **`IPrivacyPool`**
 
-Core interface for privacy pool smart contracts that handle deposits and withdrawals.
+Core interface for privacy pools smart contracts that handle deposits and withdrawals.
 
 ```solidity
 interface IPrivacyPool {

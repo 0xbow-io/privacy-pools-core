@@ -2,7 +2,7 @@
 title: Entrypoint
 ---
 
-The Entrypoint contract acts as the central coordinator for the Privacy Pool protocol, managing:
+The Entrypoint contract acts as the central coordinator for the Privacy Pools protocol, managing:
 
 1. Asset-specific privacy pools
 2. Deposits and withdrawal relays
@@ -49,7 +49,7 @@ The deposit process:
 
 1. Validates minimum deposit amount
 2. Calculates and deducts protocol fees
-3. Forwards remaining funds to appropriate privacy pool
+3. Forwards remaining funds to appropriate privacy pools
 4. Returns commitment hash for future withdrawals
 
 ### 2. Withdrawal Relay
@@ -107,8 +107,8 @@ Maintains withdrawal validation data:
 
 The contract handles two types of fees:
 
-1. **Vetting Fees**: Charged on deposits, controlled by pool configuration
-2. **Relay Fees**: Optional fees for relayed withdrawals
+1. **Vetting Fees**: Charged on deposits via contract, controlled by pool configuration
+2. **Relay Fees**: Optional fees for relayed withdrawals (paid to the relayer)
 
 Fees can be withdrawn by the owner:
 

@@ -2,7 +2,7 @@
 title: Withdrawal
 ---
 
-Privacy Pool supports two types of withdrawals:
+Privacy Pools supports two types of withdrawals:
 
 1. **Direct Withdrawals**: User directly interacts with pool contract
 2. **Relayed Withdrawals**: Withdrawal processed through a relayer for additional privacy

@@ -2,7 +2,7 @@
 title: Circuit Architecture Overview
 ---
 
-The Privacy Pool protocol uses three main Circom circuits:
+The Privacy Pools protocol uses three main Circom circuits:
 
 1. **CommitmentHasher Circuit**
    - Computes commitment hashes from inputs
@@ -21,7 +21,7 @@ The Privacy Pool protocol uses three main Circom circuits:
 
 ## Commitments
 
-Commitments are cryptographic primitives that allow users to commit to values while keeping them private. In Privacy Pool:
+Commitments are cryptographic primitives that allow users to commit to values while keeping them private. In Privacy Pools:
 
 1. **Components**
    - Value: The amount of assets being committed
@@ -38,7 +38,7 @@ Commitments are cryptographic primitives that allow users to commit to values wh
 
 ### Basic Proof Concepts
 
-Privacy Pool uses Groth16 proofs with the following structure:
+Privacy Pools uses Groth16 proofs with the following structure:
 
 1. **Public Inputs**
    - Values visible on-chain

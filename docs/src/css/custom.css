@@ -81,7 +81,7 @@
 }
 
 html {
-  font-size: 62.5%;
+  font-size: 65%;
 }
 
 /* Improved code block styling */
@@ -174,11 +174,11 @@ code:not([class^="language-"]) {
 }
 
 .markdown p {
-  font-size: 1.24rem; /* 22.4px for paragraphs */
+  font-size: 1.54rem; /* 27.7px for paragraphs */
 }
 
 .markdown li {
-  font-size: 1.24rem; /* 22.4px for list items */
+  font-size: 1.54rem; /* 27.7px for list items */
 }
 
 /* Keep code blocks at a smaller size for readability */
@@ -206,4 +206,20 @@ code:not([class^="language-"]) {
 
 .footer {
   background: #1a1a1a;
+}
+
+.table-of-contents {
+    font-size: 1.2rem;
+}
+
+.breadcrumbs__link {
+    font-size: 1.2rem;
+}
+
+.markdown>h3 {
+  font-size: 1.7rem;
+}
+
+.theme-doc-breadcrumbs .breadcrumbsContainer_Z_bl {
+  --ifm-breadcrumb-size-multiplier: 1.2;
 }
