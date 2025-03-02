@@ -26,8 +26,8 @@ The project is organized as a monorepo with the following packages:
 1. Clone the repository:
 
 ```bash
-git clone <https://github.com/defi-wonderland/privacy-pool-core.git>
-cd privacy-pool-core
+git clone <https://github.com/0xbow-io/privacy-pools-core.git>
+cd privacy-pools-core
 ```
 
 1. Install dependencies:
