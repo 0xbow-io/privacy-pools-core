@@ -37,6 +37,8 @@ abstract contract PrivacyPool is State, IPrivacyPool {
 
   /**
    * @notice Does a series of sanity checks on the proof public signals
+   * @param _withdrawal The withdrawal data structure containing withdrawal details
+   * @param _proof The withdrawal proof data structure containing proof details
    */
   modifier validWithdrawal(Withdrawal memory _withdrawal, ProofLib.WithdrawProof memory _proof) {
     // Check caller is the allowed processooor

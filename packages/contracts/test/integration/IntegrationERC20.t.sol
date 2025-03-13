@@ -2,6 +2,10 @@
 pragma solidity 0.8.28;
 
 import {IntegrationBase} from './IntegrationBase.sol';
+
+import {IERC20} from '@oz/interfaces/IERC20.sol';
+
+import {PrivacyPoolComplex} from 'contracts/implementations/PrivacyPoolComplex.sol';
 import {InternalLeanIMT, LeanIMTData} from 'lean-imt/InternalLeanIMT.sol';
 
 import {IPrivacyPool} from 'interfaces/IPrivacyPool.sol';
@@ -379,5 +383,32 @@ contract IntegrationERC20 is IntegrationBase {
         revertReason: IState.NullifierAlreadySpent.selector
       })
     );
+  }
+
+  /**
+   * @notice Test that `SafeERC20.forceApprove` works with USDT token
+   */
+  function test_forceApproveUSDT() public {
+    // Mainnet USDT (we're in a forked state of Ethereum mainnet)
+    IERC20 _USDT = IERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
+
+    vm.startPrank(_OWNER);
+
+    // Deploy USDT pool
+    PrivacyPoolComplex _usdtPool = new PrivacyPoolComplex(
+      address(_entrypoint), address(_withdrawalVerifier), address(_commitmentVerifier), address(_USDT)
+    );
+
+    // Make sure the token contract receives the `approve` call with the proper values
+    vm.expectCall(
+      address(_USDT), abi.encodeWithSelector(IERC20.approve.selector, address(_usdtPool), type(uint256).max)
+    );
+
+    // Register the USDT pool, triggering the allowance approval
+    _entrypoint.registerPool(_USDT, IPrivacyPool(address(_usdtPool)), 10 ether, 1000, 1000);
+
+    // Check the token allowance of the pool for the Entrypoint funds matches the max uint256
+    uint256 _allowance = _USDT.allowance(address(_entrypoint), address(_usdtPool));
+    assertEq(_allowance, type(uint256).max, 'Failed to approve USDT token');
   }
 }

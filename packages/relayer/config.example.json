@@ -12,9 +12,13 @@
     "withdraw_amounts": {
         "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9": 100,
     },
-    "cors_allow_all": false,
+    "cors_allow_all": true,
     "allowed_domains": [
-        "http://your-domain.com",
-        "http://another-domain.com"
-    ]
+      "https://testnet.privacypools.com",
+      "https://privacypools.com",
+      "https://prod-privacy-pool-ui.vercel.app",
+      "https://staging-privacy-pool-ui.vercel.app",
+      "https://dev-privacy-pool-ui.vercel.app",
+      "http://localhost:3000"
+     ]
 }

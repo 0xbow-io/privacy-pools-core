@@ -113,6 +113,7 @@ contract IntegrationBase is Test {
   // Asset parameters
   uint256 internal constant _MIN_DEPOSIT = 1;
   uint256 internal constant _VETTING_FEE_BPS = 100; // 1%
+  uint256 internal constant _MAX_RELAY_FEE_BPS = 100; // 1%
   uint256 internal constant _RELAY_FEE_BPS = 100; // 1%
 
   uint256 internal constant _DEFAULT_NULLIFIER = uint256(keccak256('NULLIFIER')) % Constants.SNARK_SCALAR_FIELD;
@@ -157,10 +158,12 @@ contract IntegrationBase is Test {
     );
 
     // Register ETH pool
-    _entrypoint.registerPool(IERC20(Constants.NATIVE_ASSET), IPrivacyPool(_ethPool), _MIN_DEPOSIT, _VETTING_FEE_BPS);
+    _entrypoint.registerPool(
+      IERC20(Constants.NATIVE_ASSET), IPrivacyPool(_ethPool), _MIN_DEPOSIT, _VETTING_FEE_BPS, _MAX_RELAY_FEE_BPS
+    );
 
     // Register DAI pool
-    _entrypoint.registerPool(_DAI, IPrivacyPool(_daiPool), _MIN_DEPOSIT, _VETTING_FEE_BPS);
+    _entrypoint.registerPool(_DAI, IPrivacyPool(_daiPool), _MIN_DEPOSIT, _VETTING_FEE_BPS, _MAX_RELAY_FEE_BPS);
 
     vm.stopPrank();
   }

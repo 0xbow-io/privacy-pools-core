@@ -51,10 +51,12 @@ contract Setup is HandlerActors, GhostStorage, FuzzUtils {
     );
 
     vm.prank(OWNER);
-    entrypoint.registerPool(IERC20(Constants.NATIVE_ASSET), IPrivacyPool(nativePool), MIN_DEPOSIT, FEE_VETTING);
+    entrypoint.registerPool(
+      IERC20(Constants.NATIVE_ASSET), IPrivacyPool(nativePool), MIN_DEPOSIT, FEE_VETTING, MAX_RELAY_FEE
+    );
 
     vm.prank(OWNER);
-    entrypoint.registerPool(token, IPrivacyPool(tokenPool), MIN_DEPOSIT, FEE_VETTING);
+    entrypoint.registerPool(token, IPrivacyPool(tokenPool), MIN_DEPOSIT, FEE_VETTING, MAX_RELAY_FEE);
 
     vm.prank(POSTMAN);
     entrypoint.updateRoot(1, 'a');

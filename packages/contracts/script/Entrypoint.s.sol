@@ -25,6 +25,8 @@ contract RegisterPool is Script {
   uint256 internal _minimumDepositAmount;
   // @notice The vetting fee in basis points
   uint256 internal _vettingFeeBPS;
+  // @notice The maximum relay fee in basis points
+  uint256 internal _maxRelayFeeBPS;
 
   function setUp() public {
     // Read the Entrypoint address from environment
@@ -43,6 +45,8 @@ contract RegisterPool is Script {
     _minimumDepositAmount = vm.parseUint(vm.prompt('Enter minimum deposit amount padded with decimals'));
     // Ask the user for the vetting fee in basis points
     _vettingFeeBPS = vm.parseUint(vm.prompt('Enter vetting fee BPS'));
+    // Ask the user for the max relay fee in basis points
+    _maxRelayFeeBPS = vm.parseUint(vm.prompt('Enter max relay fee BPS'));
   }
 
   // @dev Must be called with the `--account` flag which acts as the caller
@@ -50,7 +54,7 @@ contract RegisterPool is Script {
     vm.startBroadcast();
 
     // Register pool
-    entrypoint.registerPool(_asset, _pool, _minimumDepositAmount, _vettingFeeBPS);
+    entrypoint.registerPool(_asset, _pool, _minimumDepositAmount, _vettingFeeBPS, _maxRelayFeeBPS);
 
     vm.stopBroadcast();
   }

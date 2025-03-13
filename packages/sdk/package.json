@@ -48,7 +48,6 @@
     "test:cov": "vitest run --config vitest.config.ts --coverage"
   },
   "dependencies": {
-    "@envio-dev/hypersync-client": "0.6.3",
     "@types/snarkjs": "0.7.9",
     "@zk-kit/lean-imt": "2.2.2",
     "maci-crypto": "2.5.0",

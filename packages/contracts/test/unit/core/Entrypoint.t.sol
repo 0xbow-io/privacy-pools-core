@@ -24,6 +24,7 @@ struct PoolParams {
   address asset;
   uint256 minDeposit;
   uint256 vettingFeeBPS;
+  uint256 maxRelayFeeBPS;
 }
 
 struct RelayParams {
@@ -32,6 +33,7 @@ struct RelayParams {
   address recipient;
   address feeRecipient;
   uint256 feeBPS;
+  uint256 maxRelayFeeBPS;
   uint256 scope;
   address asset;
   uint256 amount;
@@ -81,6 +83,7 @@ contract EntrypointForTest is Entrypoint {
     _config.pool = IPrivacyPool(_params.pool);
     _config.minimumDepositAmount = _params.minDeposit;
     _config.vettingFeeBPS = _params.vettingFeeBPS;
+    _config.maxRelayFeeBPS = _params.maxRelayFeeBPS;
   }
 
   function mockScopeToPool(uint256 _scope, address _pool) external {
@@ -91,9 +94,13 @@ contract EntrypointForTest is Entrypoint {
     associationSets.push(IEntrypoint.AssociationSetData({root: _root, ipfsHash: _ipfsHash, timestamp: block.timestamp}));
   }
 
-  bytes32 public constant OWNER_ROLE = 0x6270edb7c868f86fda4adedba75108201087268ea345934db8bad688e1feb91b;
+  function mockMaxRelayFeeBPS(IERC20 _asset, uint256 _maxRelayFeeBPS) external {
+    assetConfig[_asset].maxRelayFeeBPS = _maxRelayFeeBPS;
+  }
 
-  bytes32 public constant ASP_POSTMAN = 0xfc84ade01695dae2ade01aa4226dc40bdceaf9d5dbd3bf8630b1dd5af195bbc5;
+  bytes32 public constant OWNER_ROLE = keccak256('OWNER_ROLE');
+
+  bytes32 public constant ASP_POSTMAN = keccak256('ASP_POSTMAN');
 }
 
 /**
@@ -127,6 +134,7 @@ contract UnitEntrypoint is Test {
     _assumeFuzzable(_params.pool);
     _assumeFuzzable(_params.asset);
     _params.vettingFeeBPS = bound(_params.vettingFeeBPS, 0, 10_000 - 1);
+    _params.maxRelayFeeBPS = bound(_params.maxRelayFeeBPS, 0, 10_000 - 1);
     _params.minDeposit = bound(_params.minDeposit, 1, 100);
     _entrypoint.mockPool(_params);
     _;
@@ -228,7 +236,10 @@ contract UnitRootUpdate is UnitEntrypoint {
     assertEq(_retrievedRoot, _root, 'Retrieved root should match input root');
     assertEq(_retrievedIpfsHash, _ipfsHash, 'Retrieved IPFS hash should match input hash');
     assertEq(_retrievedTimestamp, _timestamp, 'Retrieved timestamp should match block timestamp');
-    assertEq(_index, 1, 'First root update should have index 1');
+    assertEq(_index, 0, 'First root update should have index 0');
+
+    _index = _entrypoint.updateRoot(_root, _ipfsHash);
+    assertEq(_index, 1, 'Second root update should have index 1');
   }
 
   function test_UpdateRootWhenRootIsZero(bytes32 _ipfsHash) external givenCallerHasPostmanRole {
@@ -276,13 +287,19 @@ contract UnitDeposit is UnitEntrypoint {
   )
     external
     givenPoolExists(
-      PoolParams({pool: _params.pool, asset: _ETH, minDeposit: _params.minDeposit, vettingFeeBPS: _params.vettingFeeBPS})
+      PoolParams({
+        pool: _params.pool,
+        asset: _ETH,
+        minDeposit: _params.minDeposit,
+        vettingFeeBPS: _params.vettingFeeBPS,
+        maxRelayFeeBPS: 500 // Default to 5%
+      })
     )
   {
     _assumeFuzzable(_depositor);
     vm.assume(_depositor != address(_entrypoint));
 
-    (IPrivacyPool _pool, uint256 _minDeposit, uint256 _vettingFeeBPS) = _entrypoint.assetConfig(IERC20(_ETH));
+    (IPrivacyPool _pool, uint256 _minDeposit, uint256 _vettingFeeBPS,) = _entrypoint.assetConfig(IERC20(_ETH));
     // Can't be too big, otherwise overflows
     _amount = bound(_amount, _minDeposit, 1e30);
     uint256 _amountAfterFees = _deductFee(_amount, _vettingFeeBPS);
@@ -320,12 +337,18 @@ contract UnitDeposit is UnitEntrypoint {
   )
     external
     givenPoolExists(
-      PoolParams({pool: _params.pool, asset: _ETH, minDeposit: _params.minDeposit, vettingFeeBPS: _params.vettingFeeBPS})
+      PoolParams({
+        pool: _params.pool,
+        asset: _ETH,
+        minDeposit: _params.minDeposit,
+        vettingFeeBPS: _params.vettingFeeBPS,
+        maxRelayFeeBPS: 500 // Default to 5%
+      })
     )
   {
     vm.assume(_depositor != address(0));
 
-    (, uint256 _minDeposit,) = _entrypoint.assetConfig(IERC20(_ETH));
+    (, uint256 _minDeposit,,) = _entrypoint.assetConfig(IERC20(_ETH));
     _amount = bound(_amount, 0, _minDeposit - 1);
     vm.deal(_depositor, _amount);
 
@@ -384,7 +407,7 @@ contract UnitDeposit is UnitEntrypoint {
   ) external givenPoolExists(_params) {
     vm.assume(_depositor != address(0));
 
-    (, uint256 _minDeposit,) = _entrypoint.assetConfig(IERC20(_params.asset));
+    (, uint256 _minDeposit,,) = _entrypoint.assetConfig(IERC20(_params.asset));
     _amount = bound(_amount, 0, _minDeposit - 1);
 
     _mockAndExpect(
@@ -450,7 +473,8 @@ contract UnitRelay is UnitEntrypoint {
     vm.assume(_params.recipient != _params.feeRecipient);
 
     // Configure withdrawal parameters within valid bounds
-    _params.feeBPS = bound(_params.feeBPS, 0, 10_000);
+    _params.maxRelayFeeBPS = bound(_params.maxRelayFeeBPS, 0, 10_000);
+    _params.feeBPS = bound(_params.feeBPS, 0, _params.maxRelayFeeBPS);
     _params.amount = bound(_params.amount, 1, 1e30);
     _proof.pubSignals[2] = _params.amount;
 
@@ -467,6 +491,7 @@ contract UnitRelay is UnitEntrypoint {
 
     // Set up pool and mock necessary interactions
     _entrypoint.mockScopeToPool(_params.scope, _params.pool);
+    _entrypoint.mockMaxRelayFeeBPS(IERC20(_params.asset), _params.maxRelayFeeBPS);
     uint256 _amountAfterFees = _deductFee(_params.amount, _params.feeBPS);
     uint256 _feeAmount = _params.amount - _amountAfterFees;
     _mockAndExpect(_params.pool, abi.encodeWithSelector(IState.ASSET.selector), abi.encode(_params.asset));
@@ -533,7 +558,8 @@ contract UnitRelay is UnitEntrypoint {
     _params.pool = address(new PrivacyPoolETHForTest());
 
     // Set up withdrawal parameters within valid bounds
-    _params.feeBPS = bound(_params.feeBPS, 0, 10_000);
+    _params.maxRelayFeeBPS = bound(_params.maxRelayFeeBPS, 0, 10_000);
+    _params.feeBPS = bound(_params.feeBPS, 0, _params.maxRelayFeeBPS);
     _params.amount = bound(_params.amount, 1, 1e30);
     _proof.pubSignals[2] = _params.amount;
 
@@ -550,7 +576,16 @@ contract UnitRelay is UnitEntrypoint {
 
     // Setup pool and mock interactions
     _entrypoint.mockScopeToPool(_params.scope, _params.pool);
-    _entrypoint.mockPool(PoolParams(_params.pool, Constants.NATIVE_ASSET, 0, 0));
+    // Set up pool as only ETH sender
+    _entrypoint.mockPool(
+      PoolParams({
+        pool: _params.pool,
+        asset: _ETH,
+        minDeposit: 0,
+        vettingFeeBPS: 0,
+        maxRelayFeeBPS: _params.maxRelayFeeBPS
+      })
+    );
     uint256 _amountAfterFees = _deductFee(_params.amount, _params.feeBPS);
     uint256 _feeAmount = _params.amount - _amountAfterFees;
     _mockAndExpect(_params.pool, abi.encodeWithSelector(IState.ASSET.selector), abi.encode(_params.asset));
@@ -603,9 +638,12 @@ contract UnitRelay is UnitEntrypoint {
     _params.pool = address(new FaultyPrivacyPool());
 
     // Set up withdrawal parameters within valid bounds
-    _params.feeBPS = bound(_params.feeBPS, 0, 10_000);
+    _params.maxRelayFeeBPS = bound(_params.maxRelayFeeBPS, 0, 10_000);
+    _params.feeBPS = bound(_params.feeBPS, 0, _params.maxRelayFeeBPS);
     _params.amount = bound(_params.amount, 1, 1e30);
     _proof.pubSignals[2] = _params.amount;
+
+    _entrypoint.mockMaxRelayFeeBPS(IERC20(_params.asset), _params.maxRelayFeeBPS);
 
     // Construct withdrawal data with fee distribution
     bytes memory _data = abi.encode(
@@ -700,6 +738,152 @@ contract UnitRelay is UnitEntrypoint {
     vm.prank(_params.caller);
     _entrypoint.relay(_withdrawal, _proof, _params.scope);
   }
+
+  /**
+   * @notice Test that the Entrypoint reverts when the recipient is address zero for ETH relay
+   */
+  function test_RelayWhenRecipientIsZeroForETH(
+    RelayParams memory _params,
+    ProofLib.WithdrawProof memory _proof
+  ) external {
+    // Setup test with valid parameters but zero recipient
+    _assumeFuzzable(_params.feeRecipient);
+    vm.assume(_params.amount != 0);
+    _params.asset = _ETH;
+    _params.pool = address(new PrivacyPoolETHForTest());
+    _params.maxRelayFeeBPS = bound(_params.maxRelayFeeBPS, 0, 10_000);
+    _params.feeBPS = bound(_params.feeBPS, 0, _params.maxRelayFeeBPS);
+    _params.amount = bound(_params.amount, 1, 1e30);
+    _proof.pubSignals[2] = _params.amount;
+
+    // Construct withdrawal data with zero recipient
+    bytes memory _data = abi.encode(
+      IEntrypoint.RelayData({
+        recipient: address(0), // Zero address recipient
+        feeRecipient: _params.feeRecipient,
+        relayFeeBPS: _params.feeBPS
+      })
+    );
+    IPrivacyPool.Withdrawal memory _withdrawal =
+      IPrivacyPool.Withdrawal({processooor: address(_entrypoint), data: _data});
+
+    // Setup pool and mock interactions
+    _entrypoint.mockScopeToPool(_params.scope, _params.pool);
+    _entrypoint.mockPool(
+      PoolParams({
+        pool: _params.pool,
+        asset: _ETH,
+        minDeposit: 0,
+        vettingFeeBPS: 0,
+        maxRelayFeeBPS: _params.maxRelayFeeBPS
+      })
+    );
+    _mockAndExpect(_params.pool, abi.encodeWithSelector(IState.ASSET.selector), abi.encode(_params.asset));
+    deal(_params.pool, _params.amount);
+
+    // Expect revert due to zero address recipient
+    vm.expectRevert(IEntrypoint.ZeroAddress.selector);
+    vm.prank(_params.caller);
+    _entrypoint.relay(_withdrawal, _proof, _params.scope);
+  }
+
+  /**
+   * @notice Test that the Entrypoint reverts when the recipient is address zero for ERC20 relay
+   */
+  function test_RelayWhenRecipientIsZeroForERC20(
+    RelayParams memory _params,
+    ProofLib.WithdrawProof memory _proof
+  ) external {
+    // Setup test with valid parameters but zero recipient
+    _assumeFuzzable(_params.feeRecipient);
+    vm.assume(_params.amount != 0);
+
+    // Set up ERC20 token and pool
+    _params.asset = address(new ERC20forTest('Test', 'TEST'));
+    _params.pool = address(new PrivacyPoolERC20ForTest());
+    _params.maxRelayFeeBPS = bound(_params.maxRelayFeeBPS, 0, 10_000);
+    _params.feeBPS = bound(_params.feeBPS, 0, _params.maxRelayFeeBPS);
+    _params.amount = bound(_params.amount, 1, 1e30);
+    _proof.pubSignals[2] = _params.amount;
+
+    _entrypoint.mockMaxRelayFeeBPS(IERC20(_params.asset), _params.maxRelayFeeBPS);
+
+    // Construct withdrawal data with zero recipient
+    bytes memory _data = abi.encode(
+      IEntrypoint.RelayData({
+        recipient: address(0), // Zero address recipient
+        feeRecipient: _params.feeRecipient,
+        relayFeeBPS: _params.feeBPS
+      })
+    );
+    IPrivacyPool.Withdrawal memory _withdrawal =
+      IPrivacyPool.Withdrawal({processooor: address(_entrypoint), data: _data});
+
+    // Setup pool and mock interactions
+    _entrypoint.mockScopeToPool(_params.scope, _params.pool);
+    _mockAndExpect(_params.pool, abi.encodeWithSelector(IState.ASSET.selector), abi.encode(_params.asset));
+    deal(_params.asset, _params.pool, _params.amount);
+    PrivacyPoolERC20ForTest(_params.pool).setAsset(_params.asset);
+
+    // Expect revert due to zero address recipient
+    vm.expectRevert(IEntrypoint.ZeroAddress.selector);
+    vm.prank(_params.caller);
+    _entrypoint.relay(_withdrawal, _proof, _params.scope);
+  }
+
+  /**
+   * @notice Test that the Entrypoint reverts when relay fee exceeds maximum allowed
+   */
+  function test_RelayWhenFeeExceedsMaximum(RelayParams memory _params, ProofLib.WithdrawProof memory _proof) external {
+    // Setup test with valid recipients and amounts
+    _assumeFuzzable(_params.recipient);
+    _assumeFuzzable(_params.feeRecipient);
+
+    vm.assume(_params.recipient != _params.feeRecipient);
+    vm.assume(_params.amount != 0);
+
+    // Configure ETH pool and parameters
+    _params.asset = _ETH;
+    _params.pool = address(new PrivacyPoolETHForTest());
+
+    // Set up withdrawal parameters within valid bounds
+    _params.maxRelayFeeBPS = bound(_params.maxRelayFeeBPS, 0, 10_000);
+    _params.feeBPS = bound(_params.feeBPS, _params.maxRelayFeeBPS + 1, type(uint256).max);
+    _params.amount = bound(_params.amount, 1, 1e30);
+    _proof.pubSignals[2] = _params.amount;
+
+    // Construct withdrawal data with fee distribution
+    bytes memory _data = abi.encode(
+      IEntrypoint.RelayData({
+        recipient: _params.recipient,
+        feeRecipient: _params.feeRecipient,
+        relayFeeBPS: _params.feeBPS
+      })
+    );
+    IPrivacyPool.Withdrawal memory _withdrawal =
+      IPrivacyPool.Withdrawal({processooor: address(_entrypoint), data: _data});
+
+    // Setup pool and mock interactions
+    _entrypoint.mockScopeToPool(_params.scope, _params.pool);
+    // Set up pool as only ETH sender
+    _entrypoint.mockPool(
+      PoolParams({
+        pool: _params.pool,
+        asset: _ETH,
+        minDeposit: 0,
+        vettingFeeBPS: 0,
+        maxRelayFeeBPS: _params.maxRelayFeeBPS
+      })
+    );
+
+    _mockAndExpect(_params.pool, abi.encodeWithSelector(IState.ASSET.selector), abi.encode(_params.asset));
+    deal(_params.pool, _params.amount);
+
+    // Execute relay operation
+    vm.expectRevert(IEntrypoint.RelayFeeGreaterThanMax.selector);
+    vm.prank(_params.caller);
+    _entrypoint.relay(_withdrawal, _proof, _params.scope);
+  }
 }
 
 /**
@@ -722,16 +906,17 @@ contract UnitRegisterPool is UnitEntrypoint {
     uint256 _scope = uint256(keccak256(abi.encodePacked(_pool, block.chainid, _ETH)));
     _mockAndExpect(_pool, abi.encodeWithSelector(IState.SCOPE.selector), abi.encode(_scope));
     _mockAndExpect(_pool, abi.encodeWithSelector(IState.ASSET.selector), abi.encode(_ETH));
+    _mockAndExpect(_pool, abi.encodeWithSelector(IState.dead.selector), abi.encode(false));
 
     // Expect pool registration event
     vm.expectEmit(address(_entrypoint));
     emit IEntrypoint.PoolRegistered(IPrivacyPool(_pool), IERC20(_ETH), _scope);
 
     // Execute pool registration
-    _entrypoint.registerPool(IERC20(_ETH), IPrivacyPool(_pool), _minDeposit, _vettingFeeBPS);
+    _entrypoint.registerPool(IERC20(_ETH), IPrivacyPool(_pool), _minDeposit, _vettingFeeBPS, 500);
 
     // Verify pool configuration is set correctly
-    (IPrivacyPool _retrievedPool, uint256 _retrievedMinDeposit, uint256 _retrievedFeeBPS) =
+    (IPrivacyPool _retrievedPool, uint256 _retrievedMinDeposit, uint256 _retrievedFeeBPS,) =
       _entrypoint.assetConfig(IERC20(_ETH));
     assertEq(address(_retrievedPool), _pool, 'Retrieved pool should match input pool');
     assertEq(_retrievedMinDeposit, _minDeposit, 'Retrieved minimum deposit should match input');
@@ -757,6 +942,7 @@ contract UnitRegisterPool is UnitEntrypoint {
     uint256 _scope = uint256(keccak256(abi.encodePacked(_pool, block.chainid, _asset)));
     _mockAndExpect(_pool, abi.encodeWithSelector(IState.SCOPE.selector), abi.encode(_scope));
     _mockAndExpect(_pool, abi.encodeWithSelector(IState.ASSET.selector), abi.encode(_asset));
+    _mockAndExpect(_pool, abi.encodeWithSelector(IState.dead.selector), abi.encode(false));
 
     // Mock ERC20 approval for non-ETH assets
     _mockAndExpect(_asset, abi.encodeWithSelector(IERC20.approve.selector, _pool, type(uint256).max), abi.encode(true));
@@ -766,10 +952,10 @@ contract UnitRegisterPool is UnitEntrypoint {
     emit IEntrypoint.PoolRegistered(IPrivacyPool(_pool), IERC20(_asset), _scope);
 
     // Execute pool registration
-    _entrypoint.registerPool(IERC20(_asset), IPrivacyPool(_pool), _minDeposit, _vettingFeeBPS);
+    _entrypoint.registerPool(IERC20(_asset), IPrivacyPool(_pool), _minDeposit, _vettingFeeBPS, 500);
 
     // Verify pool configuration is set correctly
-    (IPrivacyPool _retrievedPool, uint256 _retrievedMinDeposit, uint256 _retrievedFeeBPS) =
+    (IPrivacyPool _retrievedPool, uint256 _retrievedMinDeposit, uint256 _retrievedFeeBPS,) =
       _entrypoint.assetConfig(IERC20(_asset));
     assertEq(address(_retrievedPool), _pool, 'Retrieved pool should match input pool');
     assertEq(_retrievedMinDeposit, _minDeposit, 'Retrieved minimum deposit should match input');
@@ -790,7 +976,11 @@ contract UnitRegisterPool is UnitEntrypoint {
     // Expect revert when trying to register pool for already registered asset
     vm.expectRevert(abi.encodeWithSelector(IEntrypoint.AssetPoolAlreadyRegistered.selector));
     _entrypoint.registerPool(
-      IERC20(_params.asset), IPrivacyPool(_params.pool), _params.minDeposit, _params.vettingFeeBPS
+      IERC20(_params.asset),
+      IPrivacyPool(_params.pool),
+      _params.minDeposit,
+      _params.vettingFeeBPS,
+      _params.maxRelayFeeBPS
     );
   }
 
@@ -812,10 +1002,11 @@ contract UnitRegisterPool is UnitEntrypoint {
     uint256 _scope = uint256(keccak256(abi.encodePacked(_pool, block.chainid, _asset)));
     _entrypoint.mockScopeToPool(_scope, _pool);
     _mockAndExpect(_pool, abi.encodeWithSelector(IState.SCOPE.selector), abi.encode(_scope));
+    _mockAndExpect(_pool, abi.encodeWithSelector(IState.dead.selector), abi.encode(false));
 
     // Expect revert when trying to register pool with existing scope
     vm.expectRevert(abi.encodeWithSelector(IEntrypoint.ScopePoolAlreadyRegistered.selector));
-    _entrypoint.registerPool(IERC20(_asset), IPrivacyPool(_pool), _minDeposit, _vettingFeeBPS);
+    _entrypoint.registerPool(IERC20(_asset), IPrivacyPool(_pool), _minDeposit, _vettingFeeBPS, 500);
   }
 
   /**
@@ -838,7 +1029,29 @@ contract UnitRegisterPool is UnitEntrypoint {
       )
     );
     vm.prank(_caller);
-    _entrypoint.registerPool(IERC20(_asset), IPrivacyPool(_pool), _minDeposit, _vettingFeeBPS);
+    _entrypoint.registerPool(IERC20(_asset), IPrivacyPool(_pool), _minDeposit, _vettingFeeBPS, 500);
+  }
+
+  /**
+   * @notice Test that the Entrypoint reverts when the pool is dead
+   */
+  function test_RegisterPoolWhenPoolIsDead(
+    address _pool,
+    address _asset,
+    uint256 _minDeposit,
+    uint256 _vettingFeeBPS
+  ) external givenCallerHasOwnerRole {
+    // Setup test with valid pool and asset addresses
+    _assumeFuzzable(_pool);
+    _assumeFuzzable(_asset);
+    _vettingFeeBPS = bound(_vettingFeeBPS, 0, 10_000 - 1);
+
+    // Mock pool being dead
+    _mockAndExpect(_pool, abi.encodeWithSelector(IState.dead.selector), abi.encode(true));
+
+    // Expect revert when trying to register a dead pool
+    vm.expectRevert(abi.encodeWithSelector(IEntrypoint.PoolIsDead.selector));
+    _entrypoint.registerPool(IERC20(_asset), IPrivacyPool(_pool), _minDeposit, _vettingFeeBPS, 500);
   }
 }
 
@@ -855,7 +1068,7 @@ contract UnitRemovePool is UnitEntrypoint {
   )
     external
     givenCallerHasOwnerRole
-    givenPoolExists(PoolParams(_params.pool, _ETH, _params.minDeposit, _params.vettingFeeBPS))
+    givenPoolExists(PoolParams(_params.pool, _ETH, _params.minDeposit, _params.vettingFeeBPS, 500))
   {
     _params.asset = _ETH;
     // Mock pool scope and interactions
@@ -869,7 +1082,7 @@ contract UnitRemovePool is UnitEntrypoint {
     _entrypoint.removePool(IERC20(_params.asset));
 
     // Verify pool configuration is reset
-    (IPrivacyPool _retrievedPool, uint256 _retrievedMinDeposit, uint256 _retrievedFeeBPS) =
+    (IPrivacyPool _retrievedPool, uint256 _retrievedMinDeposit, uint256 _retrievedFeeBPS,) =
       _entrypoint.assetConfig(IERC20(_params.asset));
     assertEq(address(_retrievedPool), address(0), 'Pool should be removed');
     assertEq(_retrievedMinDeposit, 0, 'Minimum deposit should be reset to 0');
@@ -899,7 +1112,7 @@ contract UnitRemovePool is UnitEntrypoint {
     _entrypoint.removePool(IERC20(_params.asset));
 
     // Verify pool configuration is reset
-    (IPrivacyPool _retrievedPool, uint256 _retrievedMinDeposit, uint256 _retrievedFeeBPS) =
+    (IPrivacyPool _retrievedPool, uint256 _retrievedMinDeposit, uint256 _retrievedFeeBPS,) =
       _entrypoint.assetConfig(IERC20(_params.asset));
     assertEq(address(_retrievedPool), address(0), 'Pool should be removed');
     assertEq(_retrievedMinDeposit, 0, 'Minimum deposit should be reset to 0');
@@ -946,26 +1159,36 @@ contract UnitUpdatePoolConfiguration is UnitEntrypoint {
     PoolParams memory _newParams
   ) external givenCallerHasOwnerRole givenPoolExists(_params) {
     // Verify initial pool configuration
-    (IPrivacyPool _pool, uint256 _minDeposit, uint256 _vettingFeeBPS) = _entrypoint.assetConfig(IERC20(_params.asset));
+    (IPrivacyPool _pool, uint256 _minDeposit, uint256 _vettingFeeBPS,) = _entrypoint.assetConfig(IERC20(_params.asset));
     assertEq(address(_pool), _params.pool, 'Retrieved pool should match input pool');
     assertEq(_minDeposit, _params.minDeposit, 'Retrieved minimum deposit should match input');
     assertEq(_vettingFeeBPS, _params.vettingFeeBPS, 'Retrieved vetting fee should match input');
 
     _newParams.vettingFeeBPS = bound(_newParams.vettingFeeBPS, 0, 10_000 - 1);
+    _newParams.maxRelayFeeBPS = bound(_newParams.maxRelayFeeBPS, 0, 10_000 - 1);
 
     // Expect configuration update event
     vm.expectEmit(address(_entrypoint));
     emit IEntrypoint.PoolConfigurationUpdated(
-      IPrivacyPool(_params.pool), IERC20(_params.asset), _newParams.minDeposit, _newParams.vettingFeeBPS
+      IPrivacyPool(_params.pool),
+      IERC20(_params.asset),
+      _newParams.minDeposit,
+      _newParams.vettingFeeBPS,
+      _newParams.maxRelayFeeBPS
     );
 
     // Execute configuration update
-    _entrypoint.updatePoolConfiguration(IERC20(_params.asset), _newParams.minDeposit, _newParams.vettingFeeBPS);
+    _entrypoint.updatePoolConfiguration(
+      IERC20(_params.asset), _newParams.minDeposit, _newParams.vettingFeeBPS, _newParams.maxRelayFeeBPS
+    );
 
     // Verify updated configuration
-    (, uint256 _newMinDeposit, uint256 _newVettingFeeBPS) = _entrypoint.assetConfig(IERC20(_params.asset));
-    assertEq(_newMinDeposit, _newParams.minDeposit, 'Retrieved minimum deposit should match input');
-    assertEq(_newVettingFeeBPS, _newParams.vettingFeeBPS, 'Retrieved vetting fee should match input');
+    (IPrivacyPool _retrievedPool, uint256 _retrievedMinDeposit, uint256 _retrievedFeeBPS, uint256 _retrievedMaxRelayFee)
+    = _entrypoint.assetConfig(IERC20(_params.asset));
+    assertEq(address(_retrievedPool), address(_params.pool));
+    assertEq(_retrievedMinDeposit, _newParams.minDeposit, 'Retrieved minimum deposit amount should match');
+    assertEq(_retrievedFeeBPS, _newParams.vettingFeeBPS, 'Retrieved vetting fee BPS should match');
+    assertEq(_retrievedMaxRelayFee, _newParams.maxRelayFeeBPS, 'Retrieved max relay fee BPS should match');
   }
 
   /**
@@ -979,7 +1202,7 @@ contract UnitUpdatePoolConfiguration is UnitEntrypoint {
     _vettingFeeBPS = bound(_vettingFeeBPS, 0, 10_000 - 1);
     // Expect revert when trying to update non-existent pool
     vm.expectRevert(abi.encodeWithSelector(IEntrypoint.PoolNotFound.selector));
-    _entrypoint.updatePoolConfiguration(IERC20(_asset), _minDeposit, _vettingFeeBPS);
+    _entrypoint.updatePoolConfiguration(IERC20(_asset), _minDeposit, _vettingFeeBPS, 500);
   }
 
   /**
@@ -1001,7 +1224,7 @@ contract UnitUpdatePoolConfiguration is UnitEntrypoint {
       )
     );
     vm.prank(_caller);
-    _entrypoint.updatePoolConfiguration(IERC20(_asset), _minDeposit, _vettingFeeBPS);
+    _entrypoint.updatePoolConfiguration(IERC20(_asset), _minDeposit, _vettingFeeBPS, 500);
   }
 }
 
@@ -1147,6 +1370,39 @@ contract UnitWithdrawFees is UnitEntrypoint {
     vm.prank(_caller);
     _entrypoint.withdrawFees(IERC20(_asset), _recipient);
   }
+
+  /**
+   * @notice Test that the Entrypoint reverts when the fee recipient is address zero for ETH
+   */
+  function test_WithdrawFeesWhenRecipientIsZeroForETH(uint256 _balance) external givenCallerHasOwnerRole {
+    vm.assume(_balance != 0);
+    vm.deal(address(_entrypoint), _balance);
+
+    // Expect revert when recipient is address zero
+    vm.expectRevert(IEntrypoint.ZeroAddress.selector);
+    _entrypoint.withdrawFees(IERC20(_ETH), address(0));
+  }
+
+  /**
+   * @notice Test that the Entrypoint reverts when the fee recipient is address zero for ERC20
+   */
+  function test_WithdrawFeesWhenRecipientIsZeroForERC20(
+    address _asset,
+    uint256 _balance
+  ) external givenCallerHasOwnerRole {
+    _assumeFuzzable(_asset);
+    vm.assume(_asset != _ETH);
+    vm.assume(_balance != 0);
+
+    // Expect the call fetching the Entrypoint balance
+    _mockAndExpect(
+      _asset, abi.encodeWithSelector(IERC20.balanceOf.selector, address(_entrypoint)), abi.encode(_balance)
+    );
+
+    // Expect revert when recipient is address zero
+    vm.expectRevert(IEntrypoint.ZeroAddress.selector);
+    _entrypoint.withdrawFees(IERC20(_asset), address(0));
+  }
 }
 
 /**
@@ -1216,9 +1472,20 @@ contract UnitReceive is UnitEntrypoint {
     address _caller,
     uint256 _amount,
     PoolParams memory _params
-  ) external givenPoolExists(PoolParams({pool: _params.pool, asset: _ETH, minDeposit: 0, vettingFeeBPS: 0})) {
+  )
+    external
+    givenPoolExists(
+      PoolParams({
+        pool: _params.pool,
+        asset: _ETH,
+        minDeposit: 0,
+        vettingFeeBPS: 0,
+        maxRelayFeeBPS: 500 // Default to 5%
+      })
+    )
+  {
     // Config pool
-    (IPrivacyPool _nativePool,,) = _entrypoint.assetConfig(IERC20(_ETH));
+    (IPrivacyPool _nativePool,,,) = _entrypoint.assetConfig(IERC20(_ETH));
 
     // Filter pool address
     vm.assume(_caller != address(_nativePool));
@@ -1236,9 +1503,9 @@ contract UnitReceive is UnitEntrypoint {
  * @notice Unit tests for Entrypoint's role based access configuration
  */
 contract UnitAccessControl is UnitEntrypoint {
-  bytes32 public constant OWNER_ROLE = 0x6270edb7c868f86fda4adedba75108201087268ea345934db8bad688e1feb91b;
-  bytes32 public constant ASP_POSTMAN = 0xfc84ade01695dae2ade01aa4226dc40bdceaf9d5dbd3bf8630b1dd5af195bbc5;
   bytes32 public constant DEFAULT_ADMIN_ROLE = 0x00;
+  bytes32 public constant OWNER_ROLE = keccak256('OWNER_ROLE');
+  bytes32 public constant ASP_POSTMAN = keccak256('ASP_POSTMAN');
 
   /**
    * @notice Test that the OWNER_ROLE can manage other roles
@@ -1365,7 +1632,8 @@ contract UnitReentrancy is UnitEntrypoint {
     vm.assume(_params.amount != 0);
     _params.asset = _ETH;
     _params.pool = address(new PrivacyPoolETHForTest());
-    _params.feeBPS = bound(_params.feeBPS, 0, 10_000);
+    _params.maxRelayFeeBPS = bound(_params.maxRelayFeeBPS, 0, 10_000);
+    _params.feeBPS = bound(_params.feeBPS, 0, _params.maxRelayFeeBPS);
     _params.amount = bound(_params.amount, 1, 1e30);
     _proof.pubSignals[2] = _params.amount;
     bytes memory _data = abi.encode(
@@ -1378,7 +1646,15 @@ contract UnitReentrancy is UnitEntrypoint {
     IPrivacyPool.Withdrawal memory _withdrawal =
       IPrivacyPool.Withdrawal({processooor: address(_entrypoint), data: _data});
     _entrypoint.mockScopeToPool(_params.scope, _params.pool);
-    _entrypoint.mockPool(PoolParams(_params.pool, Constants.NATIVE_ASSET, 0, 0));
+    _entrypoint.mockPool(
+      PoolParams({
+        pool: _params.pool,
+        asset: _ETH,
+        minDeposit: 0,
+        vettingFeeBPS: 0,
+        maxRelayFeeBPS: _params.maxRelayFeeBPS
+      })
+    );
     _mockAndExpect(_params.pool, abi.encodeWithSelector(IState.ASSET.selector), abi.encode(_params.asset));
     deal(_params.pool, _params.amount);
     ////////////////////////////////////////// RELAY SETUP : IGNORE ////////////////////////////////////////

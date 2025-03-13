@@ -36,6 +36,7 @@ contract PrivacyPoolSimple is PrivacyPool, IPrivacyPoolSimple {
   /**
    * @notice Handle receiving native asset asset
    * @param _amount The amount of asset receiving
+   * @inheritdoc PrivacyPool
    */
   function _pull(address, uint256 _amount) internal override(PrivacyPool) {
     // Check the amount matches the value sent
@@ -46,6 +47,7 @@ contract PrivacyPoolSimple is PrivacyPool, IPrivacyPoolSimple {
    * @notice Handle sending native asset
    * @param _recipient The address of the user receiving the asset
    * @param _amount The amount of native asset being sent
+   * @inheritdoc PrivacyPool
    */
   function _push(address _recipient, uint256 _amount) internal override(PrivacyPool) {
     /// Try to send native asset to recipient

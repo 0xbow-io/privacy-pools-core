@@ -42,6 +42,7 @@ abstract contract DeployProtocol is Script {
     IERC20 asset;
     uint256 minimumDepositAmount;
     uint256 vettingFeeBPS;
+    uint256 maxRelayFeeBPS;
   }
 
   // @notice Deployed Entrypoint
@@ -76,12 +77,17 @@ abstract contract DeployProtocol is Script {
     _deployEntrypoint();
 
     // Deploy the native asset pool
-    _deploySimplePool(_simpleConfig.symbol, _simpleConfig.minimumDepositAmount, _simpleConfig.vettingFeeBPS);
+    _deploySimplePool(
+      _simpleConfig.symbol,
+      _simpleConfig.minimumDepositAmount,
+      _simpleConfig.vettingFeeBPS,
+      _simpleConfig.maxRelayFeeBPS
+    );
 
     // Deploy the ERC20 pools
     // for (uint256 _i; _i < _poolConfigs.length; ++_i) {
     //   PoolConfig memory _config = _poolConfigs[_i];
-    //   _deployComplexPool(_config.symbol, _config.asset, _config.minimumDepositAmount, _config.vettingFeeBPS);
+    //   _deployComplexPool(_config.symbol, _config.asset, _config.minimumDepositAmount, _config.vettingFeeBPS, _config.maxRelayFeeBPS);
     // }
 
     vm.stopBroadcast();
@@ -107,14 +113,21 @@ abstract contract DeployProtocol is Script {
     console.log('Entrypoint deployed at: %s', address(entrypoint));
   }
 
-  function _deploySimplePool(string memory _symbol, uint256 _minimumDepositAmount, uint256 _vettingFeeBPS) private {
+  function _deploySimplePool(
+    string memory _symbol,
+    uint256 _minimumDepositAmount,
+    uint256 _vettingFeeBPS,
+    uint256 _maxRelayFeeBPS
+  ) private {
     // Deploy pool
     IPrivacyPool _pool = IPrivacyPool(
       address(new PrivacyPoolSimple(address(entrypoint), address(withdrawalVerifier), address(ragequitVerifier)))
     );
 
     // Register pool at entrypoint with defined configuration
-    entrypoint.registerPool(IERC20(Constants.NATIVE_ASSET), _pool, _minimumDepositAmount, _vettingFeeBPS);
+    entrypoint.registerPool(
+      IERC20(Constants.NATIVE_ASSET), _pool, _minimumDepositAmount, _vettingFeeBPS, _maxRelayFeeBPS
+    );
 
     console.log('%s Pool deployed at: %s', _symbol, address(_pool));
   }
@@ -123,7 +136,8 @@ abstract contract DeployProtocol is Script {
     string memory _symbol,
     IERC20 _asset,
     uint256 _minimumDepositAmount,
-    uint256 _vettingFeeBPS
+    uint256 _vettingFeeBPS,
+    uint256 _maxRelayFeeBPS
   ) private {
     // Deploy pool
     IPrivacyPool _pool = IPrivacyPool(
@@ -135,7 +149,7 @@ abstract contract DeployProtocol is Script {
     );
 
     // Register pool at entrypoint with defined configuration
-    entrypoint.registerPool(_asset, _pool, _minimumDepositAmount, _vettingFeeBPS);
+    entrypoint.registerPool(_asset, _pool, _minimumDepositAmount, _vettingFeeBPS, _maxRelayFeeBPS);
 
     console.log('%s Pool deployed at: %s', _symbol, address(_pool));
   }
@@ -158,7 +172,8 @@ contract EthereumSepolia is DeployProtocol {
       symbol: 'ETH',
       asset: IERC20(Constants.NATIVE_ASSET),
       minimumDepositAmount: 0.001 ether,
-      vettingFeeBPS: 100
+      vettingFeeBPS: 100,
+      maxRelayFeeBPS: 100
     });
 
     super.setUp();
@@ -192,17 +207,30 @@ contract EthereumMainnet is DeployProtocol {
       symbol: 'ETH',
       asset: IERC20(Constants.NATIVE_ASSET),
       minimumDepositAmount: 0.001 ether,
-      vettingFeeBPS: 100
+      vettingFeeBPS: 100,
+      maxRelayFeeBPS: 100
     });
 
     // USDT
     _poolConfigs.push(
-      PoolConfig({symbol: 'USDT', asset: IERC20(address(0)), minimumDepositAmount: 100 ether, vettingFeeBPS: 100}) // 1%
+      PoolConfig({
+        symbol: 'USDT',
+        asset: IERC20(address(0)),
+        minimumDepositAmount: 100 ether,
+        vettingFeeBPS: 100,
+        maxRelayFeeBPS: 100
+      })
     );
 
     // USDC
     _poolConfigs.push(
-      PoolConfig({symbol: 'USDC', asset: IERC20(address(0)), minimumDepositAmount: 100 ether, vettingFeeBPS: 100}) // 1%
+      PoolConfig({
+        symbol: 'USDC',
+        asset: IERC20(address(0)),
+        minimumDepositAmount: 100 ether,
+        vettingFeeBPS: 100,
+        maxRelayFeeBPS: 100
+      })
     );
 
     super.setUp();

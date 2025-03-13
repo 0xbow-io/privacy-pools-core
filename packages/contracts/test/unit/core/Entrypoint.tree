@@ -61,14 +61,21 @@ Entrypoint::relay
 │   │   ├── Given valid processooor
 │   │   │   ├── Given valid withdrawal and proof
 │   │   │   │   ├── Given withdrawal amount is not zero
-│   │   │   │   │   ├── It processes withdrawal
-│   │   │   │   │   ├── It transfers correct amounts
-│   │   │   │   │   ├── It maintains pool balance
-│   │   │   │   │   └── It emits WithdrawalRelayed event
+│   │   │   │   │   ├── Given relay fee within max limit
+│   │   │   │   │   │   ├── It processes withdrawal
+│   │   │   │   │   │   ├── It transfers correct amounts
+│   │   │   │   │   │   ├── It maintains pool balance
+│   │   │   │   │   │   └── It emits WithdrawalRelayed event
+│   │   │   │   │   └── When relay fee exceeds max limit
+│   │   │   │   │       └── It reverts with RelayFeeGreaterThanMax
 │   │   │   │   └── When withdrawal amount is zero
 │   │   │   │       └── It reverts with InvalidWithdrawalAmount
 │   │   │   └── When pool state is invalid
 │   │   │       └── It reverts with InvalidPoolState
+│   │   ├── When recipient is address zero
+│   │   │   └── It reverts with ZeroAddress
+│   │   ├── When fee recipient is address zero
+│   │   │   └── It reverts with ZeroAddress
 │   │   └── When invalid processooor
 │   │       └── It reverts with InvalidProcessooor
 │   └── When pool not found
@@ -143,6 +150,8 @@ Entrypoint::withdrawFees
 │   │           └── It reverts
 │   └── When reentrant call
 │       └── It reverts
+├── When recipient is address zero
+│   └── It reverts with ZeroAddress
 └── When caller lacks owner role
     └── It reverts with AccessControlUnauthorizedAccount
 

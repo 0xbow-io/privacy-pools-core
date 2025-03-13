@@ -37,10 +37,10 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
   using SafeERC20 for IERC20;
   using ProofLib for ProofLib.WithdrawProof;
 
-  // @notice keccak256('OWNER_ROLE')
-  bytes32 internal constant _OWNER_ROLE = 0x6270edb7c868f86fda4adedba75108201087268ea345934db8bad688e1feb91b;
-  // @notice keccak256('ASP_POSTMAN')
-  bytes32 internal constant _ASP_POSTMAN = 0xfc84ade01695dae2ade01aa4226dc40bdceaf9d5dbd3bf8630b1dd5af195bbc5;
+  /// @dev 0xb19546dff01e856fb3f010c267a7b1c60363cf8a4664e21cc89c26224620214e
+  bytes32 internal constant _OWNER_ROLE = keccak256('OWNER_ROLE');
+  /// @dev 0xfc84ade01695dae2ade01aa4226dc40bdceaf9d5dbd3bf8630b1dd5af195bbc5
+  bytes32 internal constant _ASP_POSTMAN = keccak256('ASP_POSTMAN');
 
   /// @inheritdoc IEntrypoint
   mapping(uint256 _scope => IPrivacyPool _pool) public scopeToPool;
@@ -94,7 +94,7 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
 
     // Push new association set and update index
     associationSets.push(AssociationSetData(_root, _ipfsHash, block.timestamp));
-    _index = associationSets.length;
+    _index = associationSets.length - 1;
 
     emit RootUpdated(_root, _ipfsHash, block.timestamp);
   }
@@ -149,21 +149,26 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
 
     // Decode relay data
     RelayData memory _data = abi.decode(_withdrawal.data, (RelayData));
+
+    if (_data.relayFeeBPS > assetConfig[_asset].maxRelayFeeBPS) revert RelayFeeGreaterThanMax();
+
     uint256 _withdrawnAmount = _proof.withdrawnValue();
 
     // Deduct fees
     uint256 _amountAfterFees = _deductFee(_withdrawnAmount, _data.relayFeeBPS);
 
+    uint256 _feeAmount = _withdrawnAmount - _amountAfterFees;
+
     // Transfer withdrawn funds to recipient
     _transfer(_asset, _data.recipient, _amountAfterFees);
     // Transfer fees to fee recipient
-    _transfer(_asset, _data.feeRecipient, _withdrawnAmount - _amountAfterFees);
+    _transfer(_asset, _data.feeRecipient, _feeAmount);
 
     // Check pool balance has not been reduced
     uint256 _balanceAfter = _assetBalance(_asset);
     if (_balanceBefore > _balanceAfter) revert InvalidPoolState();
 
-    emit WithdrawalRelayed(msg.sender, _data.recipient, _asset, _withdrawnAmount, _withdrawnAmount - _amountAfterFees);
+    emit WithdrawalRelayed(msg.sender, _data.recipient, _asset, _withdrawnAmount, _feeAmount);
   }
 
   /*///////////////////////////////////////////////////////////////
@@ -175,7 +180,8 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
     IERC20 _asset,
     IPrivacyPool _pool,
     uint256 _minimumDepositAmount,
-    uint256 _vettingFeeBPS
+    uint256 _vettingFeeBPS,
+    uint256 _maxRelayFeeBPS
   ) external onlyRole(_OWNER_ROLE) {
     // Sanity check addresses
     if (address(_asset) == address(0)) revert ZeroAddress();
@@ -184,6 +190,8 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
     // Fetch pool configuration
     AssetConfig storage _config = assetConfig[_asset];
     if (address(_config.pool) != address(0)) revert AssetPoolAlreadyRegistered();
+
+    if (_pool.dead()) revert PoolIsDead();
 
     // Fetch pool scope and validate asset
     uint256 _scope = _pool.SCOPE();
@@ -195,10 +203,10 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
     _config.pool = _pool;
 
     // Update pool configuration with validation
-    _setPoolConfiguration(_config, _minimumDepositAmount, _vettingFeeBPS);
+    _setPoolConfiguration(_config, _minimumDepositAmount, _vettingFeeBPS, _maxRelayFeeBPS);
 
     // If asset is an ERC20, approve pool to spend
-    if (address(_asset) != Constants.NATIVE_ASSET) _asset.approve(address(_pool), type(uint256).max);
+    if (address(_asset) != Constants.NATIVE_ASSET) _asset.forceApprove(address(_pool), type(uint256).max);
 
     emit PoolRegistered(_pool, _asset, _scope);
   }
@@ -213,7 +221,7 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
     uint256 _scope = _pool.SCOPE();
 
     // If asset is an ERC20, revoke pool allowance
-    if (address(_asset) != Constants.NATIVE_ASSET) _asset.approve(address(_pool), 0);
+    if (address(_asset) != Constants.NATIVE_ASSET) _asset.forceApprove(address(_pool), 0);
 
     // Remove pool configuration
     delete scopeToPool[_scope];
@@ -226,16 +234,17 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
   function updatePoolConfiguration(
     IERC20 _asset,
     uint256 _minimumDepositAmount,
-    uint256 _vettingFeeBPS
+    uint256 _vettingFeeBPS,
+    uint256 _maxRelayFeeBPS
   ) external onlyRole(_OWNER_ROLE) {
     // Fetch pool configuration
     AssetConfig storage _config = assetConfig[_asset];
     if (address(_config.pool) == address(0)) revert PoolNotFound();
 
     // Update pool configuration with validation
-    _setPoolConfiguration(_config, _minimumDepositAmount, _vettingFeeBPS);
+    _setPoolConfiguration(_config, _minimumDepositAmount, _vettingFeeBPS, _maxRelayFeeBPS);
 
-    emit PoolConfigurationUpdated(_config.pool, _asset, _minimumDepositAmount, _vettingFeeBPS);
+    emit PoolConfigurationUpdated(_config.pool, _asset, _minimumDepositAmount, _vettingFeeBPS, _maxRelayFeeBPS);
   }
 
   /// @inheritdoc IEntrypoint
@@ -290,10 +299,7 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
                         INTERNAL METHODS 
   //////////////////////////////////////////////////////////////*/
 
-  /**
-   * @notice Authorize an upgrade if the caller is `OWNER_ROLE`
-   * @dev Inherited from `UUPSUpgradeable`
-   */
+  /// @inheritdoc UUPSUpgradeable
   function _authorizeUpgrade(address) internal override onlyRole(_OWNER_ROLE) {}
 
   /**
@@ -329,6 +335,8 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
    * @param _amount The amount to send
    */
   function _transfer(IERC20 _asset, address _recipient, uint256 _amount) internal {
+    if (_recipient == address(0)) revert ZeroAddress();
+
     if (_asset == IERC20(Constants.NATIVE_ASSET)) {
       (bool _success,) = _recipient.call{value: _amount}('');
       if (!_success) revert NativeAssetTransferFailed();
@@ -354,9 +362,10 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
    * @notice Deduct fees from an amount
    * @param _amount The amount before fees
    * @param _feeBPS The fee in basis points
+   * @return _afterFees The amount after fees are deducted
    */
   function _deductFee(uint256 _amount, uint256 _feeBPS) internal pure returns (uint256 _afterFees) {
-    _afterFees = _amount - (_amount * _feeBPS / 10_000);
+    _afterFees = _amount - ((_amount * _feeBPS) / 10_000);
   }
 
   /**
@@ -365,16 +374,19 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
    * @param _config The pool configuration to update
    * @param _minimumDepositAmount The new minimum deposit amount
    * @param _vettingFeeBPS The new vetting fee in basis points
+   * @param _maxRelayFeeBPS The maximum relay fee in basis points
    */
   function _setPoolConfiguration(
     AssetConfig storage _config,
     uint256 _minimumDepositAmount,
-    uint256 _vettingFeeBPS
+    uint256 _vettingFeeBPS,
+    uint256 _maxRelayFeeBPS
   ) internal {
     // Check fee is less than 100%
-    if (_vettingFeeBPS >= 10_000) revert InvalidFeeBPS();
+    if (_vettingFeeBPS >= 10_000 || _maxRelayFeeBPS >= 10_000) revert InvalidFeeBPS();
 
     _config.minimumDepositAmount = _minimumDepositAmount;
     _config.vettingFeeBPS = _vettingFeeBPS;
+    _config.maxRelayFeeBPS = _maxRelayFeeBPS;
   }
 }

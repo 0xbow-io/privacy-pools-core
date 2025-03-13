@@ -32,6 +32,7 @@ contract IntegrationProofs is IntegrationBase {
     _context = uint256(keccak256(abi.encode(_withdrawal, _ethPool.SCOPE()))) % SNARK_SCALAR_FIELD;
   }
 
+  /// forge-config: default.allow_internal_expect_revert = true
   function test_failToGenerateProof_whenCommitmentHashMismatches() public {
     // Try to withdraw more value than commitment
     vm.expectRevert(MerkleProofGenerationFailed.selector);
@@ -50,6 +51,7 @@ contract IntegrationProofs is IntegrationBase {
     );
   }
 
+  /// forge-config: default.allow_internal_expect_revert = true
   function test_failToGenerateProof_whenInvalidWithdrawnValue() public {
     // Try to withdraw more value than commitment
     vm.expectRevert(WithdrawalProofGenerationFailed.selector);
@@ -68,6 +70,7 @@ contract IntegrationProofs is IntegrationBase {
     );
   }
 
+  /// forge-config: default.allow_internal_expect_revert = true
   function test_failToGenerateProof_whenLabelMismatches() public {
     // Try to withdraw more value than commitment
     vm.expectRevert(MerkleProofGenerationFailed.selector);
@@ -86,6 +89,7 @@ contract IntegrationProofs is IntegrationBase {
     );
   }
 
+  /// forge-config: default.allow_internal_expect_revert = true
   function test_failToGenerateProof_whenWithdrawnValueGreaterThanCommitment() public {
     // Try to witdhraw with an invalid commitment value
     vm.expectRevert(WithdrawalProofGenerationFailed.selector);
@@ -104,6 +108,7 @@ contract IntegrationProofs is IntegrationBase {
     );
   }
 
+  /// forge-config: default.allow_internal_expect_revert = true
   function test_failToGenerateProof_whenExistingNullifierMismatches() public {
     // Try to witdhraw with an invalid commitment value
     vm.expectRevert(WithdrawalProofGenerationFailed.selector);
@@ -122,6 +127,7 @@ contract IntegrationProofs is IntegrationBase {
     );
   }
 
+  /// forge-config: default.allow_internal_expect_revert = true
   function test_failToGenerateProof_whenExistingSecretMismatches() public {
     // Try to witdhraw with an invalid commitment value
     vm.expectRevert(WithdrawalProofGenerationFailed.selector);
@@ -140,6 +146,7 @@ contract IntegrationProofs is IntegrationBase {
     );
   }
 
+  /// forge-config: default.allow_internal_expect_revert = true
   function test_failToGenerateProof_whenReusingNullifier() public {
     // Try to witdhraw with an invalid commitment value
     vm.expectRevert(WithdrawalProofGenerationFailed.selector);

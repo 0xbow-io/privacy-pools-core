@@ -1,31 +1,33 @@
 import { Hash, Secret } from "./commitment.js";
-import { Address } from "viem";
+import { Address, Hex } from "viem";
 
 export interface PoolAccount {
   label: Hash;
-  deposit: Commitment;
-  children: Commitment[];
+  deposit: AccountCommitment;
+  children: AccountCommitment[];
 }
 
-export interface Commitment {
+export interface AccountCommitment {
   hash: Hash;
   value: bigint;
   label: Hash;
   nullifier: Secret;
   secret: Secret;
   blockNumber: bigint;
-  txHash: Hash;
+  timestamp: bigint;
+  txHash: Hex;
 }
 
 export interface PrivacyPoolAccount {
-  mnemonic: string;
-  masterKeys: [Secret, Secret];
-  poolAccounts: Map<bigint, PoolAccount[]>;
+  masterKeys: [masterNullifier: Secret, masterSecret: Secret];
+  poolAccounts: Map<Hash, PoolAccount[]>;
+  creationTimestamp: bigint;
+  lastUpdateTimestamp: bigint;
 }
 
 export interface PoolInfo {
   chainId: number;
-  address: Address;
+  address: string;
   scope: Hash;
   deploymentBlock: bigint;
 }

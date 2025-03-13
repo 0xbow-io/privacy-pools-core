@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 contract GhostStorage {
   uint256 constant FEE_DENOMINATOR = 10_000;
   uint256 constant FEE_VETTING = 101;
+  uint256 constant MAX_RELAY_FEE = 150;
   uint256 constant FEE_PROCESSING = 103;
   /////////////////////////////////////////////////////////////////////
   //                     Ghost deposit tracking                     //

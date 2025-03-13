@@ -45,6 +45,7 @@ contract PrivacyPoolComplex is PrivacyPool, IPrivacyPoolComplex {
    * @notice Handle pulling an ERC20 asset
    * @param _sender The address of the user transferring the asset from
    * @param _amount The amount of asset being pulled
+   * @inheritdoc PrivacyPool
    */
   function _pull(address _sender, uint256 _amount) internal override(PrivacyPool) {
     // This contract does not accept native asset
@@ -58,6 +59,7 @@ contract PrivacyPoolComplex is PrivacyPool, IPrivacyPoolComplex {
    * @notice Handle sending an ERC20 asset
    * @param _recipient The address of the user receiving the asset
    * @param _amount The amount of asset being sent
+   * @inheritdoc PrivacyPool
    */
   function _push(address _recipient, uint256 _amount) internal override(PrivacyPool) {
     // Send asset from this contract to recipient

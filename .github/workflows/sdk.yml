@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - "packages/sdk/**"
-      - ".github/workflows/**"
+      - ".github/workflows/sdk.yml"
   push:
     branches: [main, dev]
 
@@ -62,3 +62,5 @@ jobs:
 
       - name: Run tests with coverage
         run: yarn test:cov
+        env:
+          RPC_API_KEY: ${{ secrets.RPC_API_KEY }}
