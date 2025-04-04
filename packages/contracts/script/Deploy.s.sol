@@ -75,3 +75,20 @@ contract Gnosis is DeployProtocol {
     super.setUp();
   }
 }
+
+// @notice Protocol configuration for Ethereum Mainnet
+contract TaikoAlethiaMainnet is DeployProtocol {
+   function setUp() public override chainId(167_000) {
+    // Native asset pool
+    _nativePoolConfig = PoolConfig({
+      symbol: 'ETH',
+      asset: IERC20(Constants.NATIVE_ASSET),
+      minimumDepositAmount: 0.01 ether, // ~$200
+      vettingFeeBPS: 50, // 0.5%
+      maxRelayFeeBPS: 100 // 1%
+    });
+
+    super.setUp();
+  }
+}
+
