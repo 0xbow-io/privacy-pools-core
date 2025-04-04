@@ -176,6 +176,15 @@ abstract contract DeployProtocol is Script {
       abi.encodePacked(type(ERC1967Proxy).creationCode, abi.encode(_impl, _intializationData))
     );
 
+    // if MCOPY is not supported, deploy a clone
+    if (_entrypoint.code.length == 0) {
+      _entrypoint = CreateX.deployCreate2Clone(
+        DeployLib.salt(deployer, DeployLib.ENTRYPOINT_PROXY_SALT),
+        _impl,
+        _intializationData
+      );
+    }
+
     entrypoint = Entrypoint(payable(_entrypoint));
 
     // intentionally using console for deployment feedback
