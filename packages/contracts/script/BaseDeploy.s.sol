@@ -177,7 +177,7 @@ abstract contract DeployProtocol is Script {
     );
 
     // if MCOPY is not supported, deploy a clone
-    if (_entrypoint.code.length == 0) {
+    if (_entrypoint == address(0) || _entrypoint.code.length == 0) {
       _entrypoint = CreateX.deployCreate2Clone(
         DeployLib.salt(deployer, DeployLib.ENTRYPOINT_PROXY_SALT),
         _impl,
