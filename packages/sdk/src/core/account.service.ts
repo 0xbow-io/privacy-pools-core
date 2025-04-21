@@ -226,6 +226,10 @@ export class AccountService {
     secret: Secret;
     precommitment: Hash;
   } {
+    if(index && index < 0n) {
+      throw AccountError.invalidIndex(index);
+    }
+
     const accounts = this.account.poolAccounts.get(scope);
     index = index || BigInt(accounts?.length || 0);
 

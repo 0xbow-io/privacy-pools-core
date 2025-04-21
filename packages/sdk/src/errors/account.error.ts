@@ -32,4 +32,11 @@ export class AccountError extends SDKError {
       ErrorCode.OPERATION_FAILED,
     );
   }
+
+  public static invalidIndex(index: bigint): AccountError {
+    return new AccountError(
+      `Invalid index: ${index.toString()}`,
+      ErrorCode.INVALID_INPUT,
+    );
+  }
 } 
