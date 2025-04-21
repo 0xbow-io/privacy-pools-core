@@ -55,7 +55,7 @@ describe("AccountService", () => {
     } as unknown as DataService;
 
     // Initialize account service with mocked data service
-    accountService = new AccountService(dataService, testMnemonic);
+    accountService = new AccountService(dataService, {mnemonic: testMnemonic});
     masterKeys = accountService.account.masterKeys;
 
     // Generate test data
