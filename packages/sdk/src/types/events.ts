@@ -66,3 +66,18 @@ export interface PoolEvents {
   deposits: DepositEvent[];
   withdrawals: WithdrawalEvent[];
 }
+
+export interface PoolEventsSuccess {
+  depositEvents: Map<Hash, DepositEvent>;
+  withdrawalEvents: Map<Hash, WithdrawalEvent>;
+  ragequitEvents: Map<Hash, RagequitEvent>;
+}
+
+export interface PoolEventsError {
+  reason: string;
+  scope: Hash;
+}
+
+export type PoolEventsResult = Map<Hash, PoolEventsSuccess | PoolEventsError>;
+
+export type ProcessedDepositEventsResult = Map<Hash, DepositEvent>;
