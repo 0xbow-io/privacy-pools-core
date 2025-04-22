@@ -581,7 +581,7 @@ export class AccountService {
    * @param depositEvents - The map of deposit events
    * 
    */
-  private __processDepositEvents(scope: Hash, depositEvents: Map<Hash, DepositEvent>): void {
+  private _processDepositEvents(scope: Hash, depositEvents: Map<Hash, DepositEvent>): void {
     for (let index = BigInt(0); index < depositEvents.size; index++) {
       // Generate nullifier, secret, and precommitment for this index
       const nullifier = this._genDepositNullifier(scope, index);
@@ -619,7 +619,7 @@ export class AccountService {
    * @private
    * 
    */
-  private __processWithdrawalEvents(scope: Hash, withdrawalEvents: Map<Hash, WithdrawalEvent>): void {
+  private _processWithdrawalEvents(scope: Hash, withdrawalEvents: Map<Hash, WithdrawalEvent>): void {
     const accounts =  this.account.poolAccounts.get(scope);
 
     // Skip if no accounts for this scope
@@ -686,7 +686,7 @@ export class AccountService {
    * @private
    * 
    */
-  private __processRagequitEvents(scope: Hash, ragequitEvents: Map<Hash, RagequitEvent>): void {
+  private _processRagequitEvents(scope: Hash, ragequitEvents: Map<Hash, RagequitEvent>): void {
     const accounts =  this.account.poolAccounts.get(scope);
 
     if (!accounts || accounts.length === 0) {
@@ -744,13 +744,13 @@ export class AccountService {
         errors.push(result);
       } else {
         // Process deposit events an create pool accounts
-        account.__processDepositEvents(scope, result.depositEvents);
+        account._processDepositEvents(scope, result.depositEvents);
 
         // Process withdrawal events and add commitments to pool accounts
-        account.__processWithdrawalEvents(scope, result.withdrawalEvents);
+        account._processWithdrawalEvents(scope, result.withdrawalEvents);
 
         // Process ragequit events and add ragequit to pool accounts
-        account.__processRagequitEvents(scope, result.ragequitEvents);
+        account._processRagequitEvents(scope, result.ragequitEvents);
       }
     }
 
