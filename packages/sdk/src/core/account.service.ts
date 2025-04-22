@@ -9,10 +9,11 @@ import {
   PoolInfo,
   PrivacyPoolAccount,
 } from "../types/account.js";
-import { DepositEvent, RagequitEvent, WithdrawalEvent } from "../types/events.js";
+import { DepositEvent, PoolEventsError, PoolEventsResult, RagequitEvent, WithdrawalEvent } from "../types/events.js";
 import { Logger } from "../utils/logger.js";
 import { AccountError } from "../errors/account.error.js";
 import { ErrorCode } from "../errors/base.error.js";
+import { EventError } from "../errors/events.error.js";
 
 /**
  * Service responsible for managing privacy pool accounts and their associated commitments.
@@ -441,6 +442,319 @@ export class AccountService {
     );
 
     return foundAccount;
+  }
+
+  /**
+   * Fetches deposit events for a given pool and returns a map of precommitments to their events for efficient lookup
+   * 
+   * @param pool - The pool to fetch deposit events for
+   *
+   * @returns A map of precommitments to their events
+   */
+  public async getDepositEvents(pool: PoolInfo): Promise<Map<Hash, DepositEvent>> {
+    try {
+      const depositEvents = await this.dataService.getDeposits(pool);
+      
+      this.logger.info(
+        `Found deposits for pool`,
+        {
+          poolAddress: pool.address,
+          poolChainId: pool.chainId,
+          depositCount: depositEvents.length,
+        }
+      );
+
+      const depositMap = new Map<Hash, DepositEvent>();
+      for (const event of depositEvents) {
+        depositMap.set(event.precommitment, event);
+      }
+
+      return depositMap;
+    } catch (error) {
+      throw EventError.depositEventError(pool.chainId, pool.scope, error as Error);
+    }
+  }
+
+  /**
+   * Fetches withdrawal events for a given pool and returns a map of spent nullifiers to their events for efficient lookup
+   * 
+   * @param pool - The pool to fetch withdrawal events for
+   * 
+   * @returns A map of spent nullifiers to their events
+   */
+  public async getWithdrawalEvents(pool: PoolInfo): Promise<Map<Hash, WithdrawalEvent>> {
+    try {
+      const withdrawalEvents = await this.dataService.getWithdrawals(pool);
+      const withdrawalMap = new Map<Hash, WithdrawalEvent>();
+      for (const event of withdrawalEvents) {
+        withdrawalMap.set(event.spentNullifier, event);
+      }
+
+      return withdrawalMap;
+
+
+    } catch (error) { 
+      throw EventError.withdrawalEventError(pool.chainId, pool.scope, error as Error);
+    }
+  }
+
+  /**
+   * Fetches ragequit events for a given pool and returns a map of ragequit labels to their events for efficient lookup
+   * 
+   * @param pool - The pool to fetch ragequit events for
+   * 
+   * @returns A map of ragequit labels to their events
+   */
+  public async getRagequitEvents(pool: PoolInfo): Promise<Map<Hash, RagequitEvent>> {
+    try {
+      const ragequitEvents = await this.dataService.getRagequits(pool);
+      const ragequitMap = new Map<Hash, RagequitEvent>();
+      for (const event of ragequitEvents) {
+        ragequitMap.set(event.label, event);
+      }
+
+      return ragequitMap;
+    } catch (error) {
+      throw EventError.ragequitEventError(pool.chainId, pool.scope, error as Error);
+    }
+  }
+  
+  /**
+   * Fetches events for a given set of pools
+   * 
+   * @param pools - The pools to fetch events for
+   * 
+   * @returns A map of pool scopes to their events
+   */
+  public async getEvents(pools: PoolInfo[]): Promise<PoolEventsResult> {
+    const events: PoolEventsResult = new Map();
+
+    const poolEventResults = await Promise.allSettled(pools.map(async (pool) => {
+
+      this.logger.info(
+        `Fetching events for pool`,
+        {
+          poolAddress: pool.address,
+          poolChainId: pool.chainId,
+          poolDeploymentBlock: pool.deploymentBlock,
+        }
+      );
+
+      const [depositEvents, withdrawalEvents, ragequitEvents] = await Promise.all([
+        this.getDepositEvents(pool),
+        this.getWithdrawalEvents(pool),
+        this.getRagequitEvents(pool)
+      ]);
+
+      return {
+        scope: pool.scope,
+        depositEvents,
+        withdrawalEvents,
+        ragequitEvents
+      }
+    }));
+
+    for (const result of poolEventResults) {
+      if (result.status === "fulfilled") {
+        const { scope, depositEvents, withdrawalEvents, ragequitEvents } = result.value;
+        events.set(scope, {
+          depositEvents,
+          withdrawalEvents,
+          ragequitEvents
+        });
+      } else {
+        events.set(result.reason.details?.scope as Hash, {
+          reason: result.reason.message,
+          scope: result.reason.details?.scope as Hash
+        });
+      }
+    }
+
+    return events;
+  }
+
+  /**
+   * Processes deposit events for a given scope and adds them to the account
+   * Deterministically generate deposit secrets and check if they match on-chain deposits
+   * 
+   * @param scope - The scope of the pool
+   * @param depositEvents - The map of deposit events
+   * 
+   */
+  private __processDepositEvents(scope: Hash, depositEvents: Map<Hash, DepositEvent>): void {
+    for (let index = BigInt(0); index < depositEvents.size; index++) {
+      // Generate nullifier, secret, and precommitment for this index
+      const nullifier = this._genDepositNullifier(scope, index);
+      const secret = this._genDepositSecret(scope, index);
+      const precommitment = this._hashPrecommitment(nullifier, secret);
+
+      // Look for a deposit with this precommitment
+      const event = depositEvents.get(precommitment);
+
+      if (!event) {
+        break; // No more deposits found, exit the loop
+      }
+
+      // Create a new pool account for this deposit
+      this.addPoolAccount(scope, event.value, nullifier, secret, event.label, event.blockNumber, event.transactionHash);
+    }
+  }
+  
+  
+    /**
+   * Processes withdrawal events for a given scope and adds them to the account
+   * 
+   * @param scope - The scope of the pool
+   * @param withdrawalEvents - The map of withdrawal events
+   * 
+   * @remarks
+   * This method performs the following steps for each pool:
+   * 1. Identifies the earliest deposit block for each scope
+   * 2. For each account, reconstructs the withdrawal history by:
+   *    - Generating nullifiers sequentially
+   *    - Matching them against on-chain events
+   *    - Adding matched withdrawals to the account state
+   * 
+   * @throws {DataError} If event fetching fails
+   * @private
+   * 
+   */
+  private __processWithdrawalEvents(scope: Hash, withdrawalEvents: Map<Hash, WithdrawalEvent>): void {
+    const accounts =  this.account.poolAccounts.get(scope);
+
+    // Skip if no accounts for this scope
+    if (!accounts || accounts.length === 0) {
+      this.logger.info(
+        `No accounts found for pool with this scope`, {
+          scope,
+        }
+      );
+
+      return;
+    }
+
+    // Process each account in parallel for better performance
+    Promise.all(accounts.map(async (account) => {
+      let currentCommitment = account.deposit;
+      let index = BigInt(0);
+
+      // Continue processing withdrawals until no more are found secuentially
+      while (true) {
+        // Generate nullifier for this withdrawal
+        const nullifierHash = poseidon([currentCommitment.nullifier]) as Hash;
+
+        // Look for a withdrawal event with this nullifier
+        const withdrawal = withdrawalEvents.get(nullifierHash);
+        if (!withdrawal) {
+          break;
+        }
+
+        // Generate secret for this withdrawal
+        const nullifier = this._genWithdrawalNullifier(account.label, index);
+        const secret = this._genWithdrawalSecret(account.label, index);
+
+        // Add the withdrawal commitment to the account
+        const newCommitment = this.addWithdrawalCommitment(
+          currentCommitment,
+          currentCommitment.value - withdrawal.withdrawn,
+          nullifier,
+          secret,
+          withdrawal.blockNumber,
+          withdrawal.transactionHash
+        );
+
+        // Update current commitment to the newly created one
+        currentCommitment = newCommitment;
+
+        // Increment index for next potential withdrawal
+        index++;
+      }
+    }));
+  }
+
+  /**
+   * Processes ragequit events for a given scope and adds them to the account
+   * 
+   * @param scope - The scope of the pool
+   * @param ragequitEvents - The map of ragequit events
+   * 
+   * @remarks
+   * This method performs the following steps for each pool:
+   * 1. Adds ragequit events to accounts if found
+   * 
+   * @throws {DataError} If event fetching fails
+   * @private
+   * 
+   */
+  private __processRagequitEvents(scope: Hash, ragequitEvents: Map<Hash, RagequitEvent>): void {
+    const accounts =  this.account.poolAccounts.get(scope);
+
+    if (!accounts || accounts.length === 0) {
+      this.logger.info(
+        `No accounts found for pool with this scope`, {
+          scope,
+        }
+      );
+
+      return;
+    }
+    
+    for (const account of accounts) {
+      const ragequit = ragequitEvents.get(account.label);
+      if (ragequit) {
+        this.addRagequitToAccount(account.label, ragequit);
+      }
+    }
+  }
+
+  /**
+   * Initializes an AccountService instance with events for a given set of pools
+   * 
+   * @param dataService - The data service to use for fetching events
+   * @param account - The account to use as source
+   * @param mnemonic - The mnemonic to use for generating keys
+   * @param pools - The pools to fetch events for
+   * 
+   * @remarks
+   * This method performs the following steps for each pool:
+   * 1. Fetches deposit, withdrawal, and ragequit events for each pool
+   * 2. Processes deposit events and creates pool accounts
+   * 3. Processes withdrawal events and adds commitments to pool accounts
+   * 4. Processes ragequit events and adds ragequit to pool accounts
+   *
+   * @returns The initialized AccountService instance and array of errors if any pool events fetching fails
+   * 
+   * if any pool events fetching fails, the account will be initialized without the events for that pool
+   * user can then call to this method again with the same account and missing pools to fetch the missing events
+   * 
+   * @throws {AccountError} If account state reconstruction fails
+   */
+  static async initializeWithEvents(dataService: DataService, source: {mnemonic: string, account?: AccountService}, pools: PoolInfo[]): Promise<{account: AccountService, errors: PoolEventsError[]}> {
+    // Log the start of the history retrieval process
+    const logger = new Logger({ prefix: "Account" });
+    logger.info(`Fetching events for pools`, { poolLength: pools.length });
+
+    const errors: PoolEventsError[] = [];
+    const account = new AccountService(dataService, source.mnemonic, source.account?.account);
+
+    const events = await account.getEvents(pools);
+
+    for (const [scope, result] of events.entries()) {
+      if ("reason" in result) {
+        errors.push(result);
+      } else {
+        // Process deposit events an create pool accounts
+        account.__processDepositEvents(scope, result.depositEvents);
+
+        // Process withdrawal events and add commitments to pool accounts
+        account.__processWithdrawalEvents(scope, result.withdrawalEvents);
+
+        // Process ragequit events and add ragequit to pool accounts
+        account.__processRagequitEvents(scope, result.ragequitEvents);
+      }
+    }
+
+    return {account, errors};
   }
 
   /**
