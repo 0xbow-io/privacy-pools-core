@@ -45,13 +45,12 @@ export class DataService {
 
     try {
       for (const config of chainConfigs) {
-        if (!config.rpcUrl || !config.apiKey) {
-          throw new Error(`Missing RPC URL or API key for chain ${config.chainId}`);
+        if (!config.rpcUrl) {
+          throw new Error(`Missing RPC URL for chain ${config.chainId}`);
         }
 
         const client = createPublicClient({
           transport: http(config.rpcUrl),
-          key: config.apiKey,
         });
         this.clients.set(config.chainId, client);
       }

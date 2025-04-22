@@ -28,17 +28,11 @@ describe('DataService with Sepolia', () => {
   };
 
   beforeAll(() => {
-    const apiKey = process.env.RPC_API_KEY;
-    if (!apiKey) {
-      throw new Error('RPC_API_KEY environment variable is required');
-    }
-
     const config: ChainConfig = {
       chainId: SEPOLIA_CHAIN_ID,
       privacyPoolAddress: POOL_ADDRESS,
       startBlock: START_BLOCK,
       rpcUrl: 'https://sepolia.rpc.hypersync.xyz',
-      apiKey,
     };
 
     dataService = new DataService([config]);
