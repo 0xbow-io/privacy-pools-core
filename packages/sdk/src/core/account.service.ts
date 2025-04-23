@@ -634,7 +634,7 @@ export class AccountService {
     }
 
     // Process each account in parallel for better performance
-    Promise.all(accounts.map(async (account) => {
+    for (const account of accounts) {
       let currentCommitment = account.deposit;
       let index = BigInt(0);
 
@@ -669,7 +669,7 @@ export class AccountService {
         // Increment index for next potential withdrawal
         index++;
       }
-    }));
+    }
   }
 
   /**
