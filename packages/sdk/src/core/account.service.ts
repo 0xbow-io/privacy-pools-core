@@ -251,7 +251,7 @@ export class AccountService {
     }
 
     const accounts = this.account.poolAccounts.get(scope);
-    index = index || BigInt(accounts?.length || 0);
+    index = index ?? BigInt(accounts?.length || 0);
 
     const nullifier = this._genDepositNullifier(scope, index);
     const secret = this._genDepositSecret(scope, index);
