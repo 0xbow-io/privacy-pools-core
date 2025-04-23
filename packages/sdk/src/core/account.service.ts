@@ -584,9 +584,7 @@ export class AccountService {
   private _processDepositEvents(scope: Hash, depositEvents: Map<Hash, DepositEvent>): void {
     for (let index = BigInt(0); index < depositEvents.size; index++) {
       // Generate nullifier, secret, and precommitment for this index
-      const nullifier = this._genDepositNullifier(scope, index);
-      const secret = this._genDepositSecret(scope, index);
-      const precommitment = this._hashPrecommitment(nullifier, secret);
+      const { nullifier, secret, precommitment } = this.createDepositSecrets(scope, index);
 
       // Look for a deposit with this precommitment
       const event = depositEvents.get(precommitment);
