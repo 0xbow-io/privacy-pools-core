@@ -39,4 +39,11 @@ export class AccountError extends SDKError {
       ErrorCode.INVALID_INPUT,
     );
   }
+
+  public static invalidIndex(index: bigint): AccountError {
+    return new AccountError(
+      `Invalid index: ${index.toString()}`,
+      ErrorCode.INVALID_INPUT,
+    );
+  }
 } 
