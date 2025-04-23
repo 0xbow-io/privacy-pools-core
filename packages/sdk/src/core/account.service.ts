@@ -725,12 +725,21 @@ export class AccountService {
    * if any pool events fetching fails, the account will be initialized without the events for that pool
    * user can then call to this method again with the same account and missing pools to fetch the missing events
    * 
-   * @throws {AccountError} If account state reconstruction fails
+   * @throws {AccountError} If account state reconstruction fails or if duplicate pools are found
    */
   static async initializeWithEvents(dataService: DataService, source: {mnemonic: string, account?: AccountService}, pools: PoolInfo[]): Promise<{account: AccountService, errors: PoolEventsError[]}> {
     // Log the start of the history retrieval process
     const logger = new Logger({ prefix: "Account" });
     logger.info(`Fetching events for pools`, { poolLength: pools.length });
+
+    // verify that pools don't contain duplicates based on scope
+    const uniqueScopes = new Set<bigint>();
+    for (const pool of pools) {
+      if (uniqueScopes.has(pool.scope)) {
+        throw AccountError.duplicatePools(pool.scope);
+      }
+      uniqueScopes.add(pool.scope);
+    }
 
     const errors: PoolEventsError[] = [];
     const account = new AccountService(dataService, source.mnemonic, source.account?.account);

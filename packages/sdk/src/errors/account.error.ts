@@ -32,4 +32,11 @@ export class AccountError extends SDKError {
       ErrorCode.OPERATION_FAILED,
     );
   }
+
+  public static duplicatePools(scope: bigint): AccountError {
+    return new AccountError(
+      `Duplicate pools found for scope: ${scope.toString()}`,
+      ErrorCode.INVALID_INPUT,
+    );
+  }
 } 
