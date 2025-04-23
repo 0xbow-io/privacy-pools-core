@@ -53,7 +53,7 @@ export class AccountService {
     config: AccountServiceConfig
   ) {
     this.logger = new Logger({ prefix: "Account" });
-    if("mnemonic" in config) {
+    if ("mnemonic" in config) {
       this.account = this._initializeAccount(config.mnemonic);
     } else {
       this.account = config.account;
@@ -242,12 +242,12 @@ export class AccountService {
     secret: Secret;
     precommitment: Hash;
   } {
-    if(index && index < 0n) {
+    if (index && index < 0n) {
       throw AccountError.invalidIndex(index);
     }
 
     const accounts = this.account.poolAccounts.get(scope);
-    index = index || BigInt(accounts?.length || 0);
+    index = index ?? BigInt(accounts?.length || 0);
 
     const nullifier = this._genDepositNullifier(scope, index);
     const secret = this._genDepositSecret(scope, index);
