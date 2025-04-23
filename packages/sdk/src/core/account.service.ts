@@ -830,6 +830,7 @@ export class AccountService {
   }
 
   /**
+   * @deprecated Use `initializeWithEvents` for instantiating an account with history reconstruction
    * Retrieves the history of deposits and withdrawals for the given pools.
    *
    * @param pools - Array of pool configurations to sync history for
