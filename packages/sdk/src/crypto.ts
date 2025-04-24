@@ -158,7 +158,7 @@ export function generateMerkleProof(
   leaves: bigint[],
   leaf: bigint,
 ): LeanIMTMerkleProof<bigint> {
-  const tree = new LeanIMT<bigint>((a, b) => poseidon([a, b]));
+  const tree = new LeanIMT<bigint>((a: bigint, b: bigint) => poseidon([a, b]));
 
   tree.insertMany(leaves);
 
@@ -172,7 +172,16 @@ export function generateMerkleProof(
     );
   }
 
-  return tree.generateProof(leafIndex);
+  const proof = tree.generateProof(leafIndex);
+
+  if (proof.siblings.length < 32) {
+    proof.siblings = [
+      ...proof.siblings,
+      ...Array(32 - proof.siblings.length).fill(BigInt(0)),
+    ];
+  }
+
+  return proof;
 }
 
 export function bigintToHash(value: bigint): Hash {
