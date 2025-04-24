@@ -42,7 +42,9 @@ describe("AccountService", () => {
       getRagequits: vi.fn(async () => []),
     } as unknown as DataService;
 
-    accountService = new AccountService(dataService, { mnemonic: TEST_MNEMONIC });
+    accountService = new AccountService(dataService, {
+      mnemonic: TEST_MNEMONIC,
+    });
   });
 
   describe("constructor", () => {
@@ -67,9 +69,9 @@ describe("AccountService", () => {
 
     it("throw an error if account initialization fails", () => {
       // Test that error is properly caught and re-thrown
-      expect(() => new AccountService(dataService, { mnemonic: "invalid mnemonic" })).toThrow(
-        AccountError
-      );
+      expect(
+        () => new AccountService(dataService, { mnemonic: "invalid mnemonic" })
+      ).toThrow(AccountError);
     });
 
     it("initialize with provided account", () => {
@@ -145,7 +147,9 @@ describe("AccountService", () => {
     });
 
     it("throws an error if the index is negative", () => {
-      expect(() => accountService.createDepositSecrets(TEST_POOL.scope, -1n)).toThrow(AccountError);
+      expect(() =>
+        accountService.createDepositSecrets(TEST_POOL.scope, -1n)
+      ).toThrow(AccountError);
     });
   });
 
@@ -347,9 +351,9 @@ describe("AccountService", () => {
       expect(newCommitment.txHash).toBe(txHash);
 
       // Verify commitment was added to account
-      const account = accountService.account.poolAccounts.get(
-        TEST_POOL.scope
-      )!.at(0)!;
+      const account = accountService.account.poolAccounts
+        .get(TEST_POOL.scope)!
+        .at(0)!;
       expect(account.children.length).toBe(1);
       expect(account.children.at(0)!).toBe(newCommitment);
     });
@@ -403,9 +407,9 @@ describe("AccountService", () => {
       );
 
       // Verify both children were added
-      const account = accountService.account.poolAccounts.get(
-        TEST_POOL.scope
-      )!.at(0)!;
+      const account = accountService.account.poolAccounts
+        .get(TEST_POOL.scope)!
+        .at(0)!;
       expect(account.children.length).toBe(2);
       expect(account.children.at(0)!).toBe(intermediateCommitment);
       expect(account.children.at(1)!).toBe(secondChildCommitment);
@@ -476,9 +480,9 @@ describe("AccountService", () => {
       expect(updatedAccount.ragequit).toBe(ragequitEvent);
 
       // Verify it's the same account in the map
-      const accountInMap = accountService.account.poolAccounts.get(
-        TEST_POOL.scope
-      )!.at(0)!;
+      const accountInMap = accountService.account.poolAccounts
+        .get(TEST_POOL.scope)!
+        .at(0)!;
       expect(accountInMap.ragequit).toBe(ragequitEvent);
     });
 
@@ -656,6 +660,543 @@ describe("AccountService", () => {
 
       const spendableCommitments = accountService.getSpendableCommitments();
       expect(spendableCommitments.size).toBe(0);
+    });
+  });
+
+  describe("getDepositEvents", () => {
+    it("returns a map of precommitments to deposit events", async () => {
+      const depositEvent1 = {
+        depositor: "0x123",
+        commitment: BigInt("11111") as Hash,
+        label: BigInt("22222") as Hash,
+        value: 100n,
+        precommitment: BigInt("33333") as Hash,
+        blockNumber: 1000n,
+        transactionHash: mockTxHash(1),
+      };
+      const depositEvent2 = {
+        depositor: "0x456",
+        commitment: BigInt("44444") as Hash,
+        label: BigInt("55555") as Hash,
+        value: 200n,
+        precommitment: BigInt("66666") as Hash,
+        blockNumber: 1100n,
+        transactionHash: mockTxHash(2),
+      };
+
+      const mockDeposits = [depositEvent1, depositEvent2];
+      vi.spyOn(dataService, "getDeposits").mockResolvedValue(mockDeposits);
+
+      const result = await accountService.getDepositEvents(TEST_POOL);
+
+      expect(result.size).toBe(2);
+      expect(result.get(depositEvent1.precommitment)).toEqual(depositEvent1);
+      expect(result.get(depositEvent2.precommitment)).toEqual(depositEvent2);
+
+      expect(dataService.getDeposits).toHaveBeenCalledWith(TEST_POOL);
+    });
+
+    it("returns an empty map when no deposits exist", async () => {
+      vi.spyOn(dataService, "getDeposits").mockResolvedValue([]);
+
+      const result = await accountService.getDepositEvents(TEST_POOL);
+
+      expect(result).toBeInstanceOf(Map);
+      expect(result.size).toBe(0);
+
+      expect(dataService.getDeposits).toHaveBeenCalledWith(TEST_POOL);
+    });
+
+    it("throws an EventError when dataService fails", async () => {
+      const errorMessage = "API request failed";
+      vi.spyOn(dataService, "getDeposits").mockRejectedValue(
+        new Error(errorMessage)
+      );
+
+      await expect(() =>
+        accountService.getDepositEvents(TEST_POOL)
+      ).rejects.toThrow();
+
+      expect(dataService.getDeposits).toHaveBeenCalledWith(TEST_POOL);
+    });
+  });
+
+  describe("getWithdrawalEvents", () => {
+    it("returns a map of spent nullifiers to withdrawal events", async () => {
+      const withdrawalEvent1 = {
+        withdrawn: 10n,
+        spentNullifier: BigInt("11111") as Hash,
+        newCommitment: BigInt("22222") as Hash,
+        blockNumber: 1000n,
+        transactionHash: mockTxHash(1),
+      };
+
+      const withdrawalEvent2 = {
+        withdrawn: 20n,
+        spentNullifier: BigInt("33333") as Hash,
+        newCommitment: BigInt("44444") as Hash,
+        blockNumber: 1100n,
+        transactionHash: mockTxHash(2),
+      };
+
+      const mockWithdrawals = [withdrawalEvent1, withdrawalEvent2];
+      vi.spyOn(dataService, "getWithdrawals").mockResolvedValue(
+        mockWithdrawals
+      );
+
+      const result = await accountService.getWithdrawalEvents(TEST_POOL);
+
+      expect(result.size).toBe(2);
+      expect(result.get(withdrawalEvent1.spentNullifier)).toEqual(
+        withdrawalEvent1
+      );
+      expect(result.get(withdrawalEvent2.spentNullifier)).toEqual(
+        withdrawalEvent2
+      );
+
+      expect(dataService.getWithdrawals).toHaveBeenCalledWith(TEST_POOL);
+    });
+
+    it("returns an empty map when no withdrawals exist", async () => {
+      vi.spyOn(dataService, "getWithdrawals").mockResolvedValue([]);
+
+      const result = await accountService.getWithdrawalEvents(TEST_POOL);
+
+      expect(result).toBeInstanceOf(Map);
+      expect(result.size).toBe(0);
+
+      expect(dataService.getWithdrawals).toHaveBeenCalledWith(TEST_POOL);
+    });
+
+    it("throws an EventError when dataService fails", async () => {
+      const errorMessage = "API request failed";
+      vi.spyOn(dataService, "getWithdrawals").mockRejectedValue(
+        new Error(errorMessage)
+      );
+
+      await expect(
+        accountService.getWithdrawalEvents(TEST_POOL)
+      ).rejects.toThrow();
+
+      expect(dataService.getWithdrawals).toHaveBeenCalledWith(TEST_POOL);
+    });
+  });
+
+  describe("getRagequitEvents", () => {
+    it("returns a map of labels to ragequit events", async () => {
+      const ragequitEvent1 = {
+        ragequitter: "0x123",
+        commitment: BigInt("11111") as Hash,
+        label: BigInt("22222") as Hash,
+        value: 100n,
+        blockNumber: 1000n,
+        transactionHash: mockTxHash(1),
+      };
+
+      const ragequitEvent2 = {
+        ragequitter: "0x456",
+        commitment: BigInt("33333") as Hash,
+        label: BigInt("44444") as Hash,
+        value: 200n,
+        blockNumber: 1100n,
+        transactionHash: mockTxHash(2),
+      };
+
+      const mockRagequits = [ragequitEvent1, ragequitEvent2];
+      vi.spyOn(dataService, "getRagequits").mockResolvedValue(mockRagequits);
+
+      const result = await accountService.getRagequitEvents(TEST_POOL);
+
+      expect(result.size).toBe(2);
+      expect(result.get(ragequitEvent1.label)).toEqual(ragequitEvent1);
+      expect(result.get(ragequitEvent2.label)).toEqual(ragequitEvent2);
+
+      expect(dataService.getRagequits).toHaveBeenCalledWith(TEST_POOL);
+    });
+
+    it("returns an empty map when no ragequits exist", async () => {
+      vi.spyOn(dataService, "getRagequits").mockResolvedValue([]);
+
+      const result = await accountService.getRagequitEvents(TEST_POOL);
+
+      expect(result).toBeInstanceOf(Map);
+      expect(result.size).toBe(0);
+
+      expect(dataService.getRagequits).toHaveBeenCalledWith(TEST_POOL);
+    });
+
+    it("throws an EventError when dataService fails", async () => {
+      const errorMessage = "API request failed";
+      vi.spyOn(dataService, "getRagequits").mockRejectedValue(
+        new Error(errorMessage)
+      );
+
+      await expect(
+        accountService.getRagequitEvents(TEST_POOL)
+      ).rejects.toThrow();
+
+      expect(dataService.getRagequits).toHaveBeenCalledWith(TEST_POOL);
+    });
+  });
+
+  describe("getEvents", () => {
+    it("collects events for all pools and returns a map of results", async () => {
+      const pool1 = TEST_POOL;
+      const pool2: PoolInfo = {
+        chainId: 2,
+        address: "0x9876543210987654321098765432109876543210" as Address,
+        scope: BigInt("987654321") as Hash,
+        deploymentBlock: 2000n,
+      };
+
+      const depositEvent1 = {
+        depositor: "0x123",
+        commitment: BigInt("11111") as Hash,
+        label: BigInt("22222") as Hash,
+        value: 100n,
+        precommitment: BigInt("33333") as Hash,
+        blockNumber: 1000n,
+        transactionHash: mockTxHash(1),
+      };
+
+      const withdrawalEvent1 = {
+        withdrawn: 10n,
+        spentNullifier: BigInt("44444") as Hash,
+        newCommitment: BigInt("55555") as Hash,
+        blockNumber: 1100n,
+        transactionHash: mockTxHash(2),
+      };
+
+      const ragequitEvent1 = {
+        ragequitter: "0x123",
+        commitment: BigInt("66666") as Hash,
+        label: BigInt("77777") as Hash,
+        value: 100n,
+        blockNumber: 1200n,
+        transactionHash: mockTxHash(3),
+      };
+
+      vi.spyOn(dataService, "getDeposits").mockImplementation(async (pool) => {
+        if (pool.chainId === pool1.chainId) return [depositEvent1];
+        return [];
+      });
+
+      vi.spyOn(dataService, "getWithdrawals").mockImplementation(
+        async (pool) => {
+          if (pool.chainId === pool1.chainId) return [withdrawalEvent1];
+          return [];
+        }
+      );
+
+      vi.spyOn(dataService, "getRagequits").mockImplementation(async (pool) => {
+        if (pool.chainId === pool1.chainId) return [ragequitEvent1];
+        return [];
+      });
+
+      const result = await accountService.getEvents([pool1, pool2]);
+
+      expect(result.size).toBe(2);
+
+      const pool1Result = result.get(pool1.scope);
+      expect(pool1Result).toBeDefined();
+      expect("depositEvents" in pool1Result!).toBe(true);
+      expect("withdrawalEvents" in pool1Result!).toBe(true);
+      expect("ragequitEvents" in pool1Result!).toBe(true);
+
+      if ("depositEvents" in pool1Result!) {
+        expect(pool1Result.depositEvents.size).toBe(1);
+        expect(
+          pool1Result.depositEvents.get(depositEvent1.precommitment)
+        ).toEqual(depositEvent1);
+
+        expect(pool1Result.withdrawalEvents.size).toBe(1);
+        expect(
+          pool1Result.withdrawalEvents.get(withdrawalEvent1.spentNullifier)
+        ).toEqual(withdrawalEvent1);
+
+        expect(pool1Result.ragequitEvents.size).toBe(1);
+        expect(pool1Result.ragequitEvents.get(ragequitEvent1.label)).toEqual(
+          ragequitEvent1
+        );
+      }
+
+      const pool2Result = result.get(pool2.scope);
+      expect(pool2Result).toBeDefined();
+      expect("depositEvents" in pool2Result!).toBe(true);
+
+      if ("depositEvents" in pool2Result!) {
+        expect(pool2Result.depositEvents.size).toBe(0);
+        expect(pool2Result.withdrawalEvents.size).toBe(0);
+        expect(pool2Result.ragequitEvents.size).toBe(0);
+      }
+
+      expect(dataService.getDeposits).toHaveBeenCalledTimes(2);
+      expect(dataService.getWithdrawals).toHaveBeenCalledTimes(2);
+      expect(dataService.getRagequits).toHaveBeenCalledTimes(2);
+    });
+
+    it("handles errors for individual pools and continues processing", async () => {
+      const pool1 = TEST_POOL;
+      const pool2: PoolInfo = {
+        chainId: 2,
+        address: "0x9876543210987654321098765432109876543210" as Address,
+        scope: BigInt("987654321") as Hash,
+        deploymentBlock: 2000n,
+      };
+
+      vi.spyOn(dataService, "getDeposits").mockImplementation(async (pool) => {
+        if (pool.chainId === pool1.chainId)
+          throw new Error("Failed to fetch deposits");
+        return [];
+      });
+
+      vi.spyOn(dataService, "getWithdrawals").mockResolvedValue([]);
+      vi.spyOn(dataService, "getRagequits").mockResolvedValue([]);
+
+      const result = await accountService.getEvents([pool1, pool2]);
+
+      expect(result).toBeInstanceOf(Map);
+      expect(result.size).toBe(2);
+
+      const pool1Result = result.get(pool1.scope);
+      expect(pool1Result).toBeDefined();
+      expect("reason" in pool1Result!).toBe(true);
+
+      if ("reason" in pool1Result!) {
+        expect(pool1Result.reason).toContain("Failed to fetch deposits");
+        expect(pool1Result.scope).toBe(pool1.scope);
+      }
+
+      const pool2Result = result.get(pool2.scope);
+      expect(pool2Result).toBeDefined();
+      expect("depositEvents" in pool2Result!).toBe(true);
+
+      expect(dataService.getDeposits).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("initializeWithEvents", () => {
+    it("initializes a new account and processes pool events successfully", async () => {
+      const pool1 = TEST_POOL;
+      const pool2: PoolInfo = {
+        chainId: 2,
+        address: "0x9876543210987654321098765432109876543210" as Address,
+        scope: BigInt("987654321") as Hash,
+        deploymentBlock: 2000n,
+      };
+
+      // Create a temp service to generate the correct secrets
+      const tempService = new AccountService(dataService, {
+        mnemonic: TEST_MNEMONIC,
+      });
+      const { precommitment, nullifier, secret } =
+        tempService.createDepositSecrets(pool1.scope);
+
+      const depositEvent1 = {
+        depositor: "0x123",
+        commitment: BigInt("1111111") as Hash, // Value doesn't matter, will be recalculated
+        label: BigInt("2222222") as Hash,
+        value: 100n,
+        precommitment, // Use actual precommitment that matches the secret generation
+        blockNumber: 1000n,
+        transactionHash: mockTxHash(1),
+      };
+
+      // Calculate the expected spent nullifier hash for the withdrawal event
+      const spentNullifierHash = poseidon([nullifier]) as Hash;
+
+      const withdrawalEvent1 = {
+        withdrawn: 10n,
+        spentNullifier: spentNullifierHash, // Use the HASHED nullifier
+        newCommitment: BigInt("5555555") as Hash,
+        blockNumber: 1100n,
+        transactionHash: mockTxHash(2),
+      };
+
+      vi.spyOn(dataService, "getDeposits").mockImplementation(async (pool) => {
+        if (pool.scope === pool1.scope) return [depositEvent1];
+        if (pool.scope === pool2.scope) return [];
+        return [];
+      });
+      vi.spyOn(dataService, "getWithdrawals").mockImplementation(
+        async (pool) => {
+          if (pool.scope === pool1.scope) return [withdrawalEvent1];
+          if (pool.scope === pool2.scope) return [];
+          return [];
+        }
+      );
+      vi.spyOn(dataService, "getRagequits").mockResolvedValue([]);
+
+      const { account, errors } = await AccountService.initializeWithEvents(
+        dataService,
+        { mnemonic: TEST_MNEMONIC },
+        [pool1, pool2]
+      );
+
+      expect(account).toBeInstanceOf(AccountService);
+      expect(errors).toEqual([]);
+
+      expect(account.account.poolAccounts.has(pool1.scope)).toBe(true);
+      expect(account.account.poolAccounts.has(pool2.scope)).toBe(false); // No events for pool2
+      expect(account.account.poolAccounts.get(pool1.scope)?.length).toBe(1);
+
+      const pool1Account = account.account.poolAccounts.get(pool1.scope)?.at(0);
+      expect(pool1Account).toBeDefined();
+      expect(pool1Account?.deposit.nullifier).toBe(nullifier);
+      expect(pool1Account?.deposit.secret).toBe(secret); // Also check secret for completeness
+      expect(pool1Account?.deposit.label).toBe(depositEvent1.label);
+      expect(pool1Account?.deposit.value).toBe(depositEvent1.value);
+
+      expect(pool1Account?.children.length).toBe(1);
+      const childCommitment = pool1Account?.children.at(0);
+      expect(childCommitment).toBeDefined();
+      expect(childCommitment?.value).toBe(
+        depositEvent1.value - withdrawalEvent1.withdrawn
+      ); // Check remaining value
+      expect(childCommitment?.blockNumber).toBe(withdrawalEvent1.blockNumber);
+      expect(childCommitment?.txHash).toBe(withdrawalEvent1.transactionHash);
+    });
+
+    it("handles errors from individual pools and continues processing", async () => {
+      const pool1 = TEST_POOL;
+      const pool2: PoolInfo = {
+        chainId: 2,
+        address: "0x9876543210987654321098765432109876543210" as Address,
+        scope: BigInt("987654321") as Hash,
+        deploymentBlock: 2000n,
+      };
+
+      const tempService = new AccountService(dataService, {
+        mnemonic: TEST_MNEMONIC,
+      });
+      const { precommitment, nullifier, secret } =
+        tempService.createDepositSecrets(pool2.scope);
+
+      const depositEvent2 = {
+        depositor: "0x123",
+        commitment: BigInt("1111111") as Hash,
+        label: BigInt("2222222") as Hash,
+        value: 100n,
+        precommitment,
+        blockNumber: 1000n,
+        transactionHash: mockTxHash(1),
+      };
+
+      vi.spyOn(dataService, "getDeposits").mockImplementation(async (pool) => {
+        if (pool.scope === pool1.scope) {
+          throw new Error("Simulated deposit fetch failure");
+        }
+        if (pool.scope === pool2.scope) {
+          return [depositEvent2];
+        }
+        return [];
+      });
+      vi.spyOn(dataService, "getWithdrawals").mockResolvedValue([]);
+      vi.spyOn(dataService, "getRagequits").mockResolvedValue([]);
+
+      const { account, errors } = await AccountService.initializeWithEvents(
+        dataService,
+        { mnemonic: TEST_MNEMONIC },
+        [pool1, pool2]
+      );
+
+      expect(account).toBeInstanceOf(AccountService);
+
+      // Verify errors are collected for pool1
+      expect(errors.length).toBe(1);
+      expect(errors[0]?.scope).toBe(pool1.scope);
+      expect(errors[0]?.reason).toContain("Simulated deposit fetch failure");
+
+      // Verify pool accounts map has only pool2 data
+      expect(account.account.poolAccounts.has(pool2.scope)).toBe(true);
+      expect(account.account.poolAccounts.has(pool1.scope)).toBe(false); // pool1 errored
+
+      // Verify pool2 account was processed correctly
+      const pool2Account = account.account.poolAccounts.get(pool2.scope)?.at(0);
+      expect(pool2Account).toBeDefined();
+      expect(pool2Account?.deposit.nullifier).toBe(nullifier);
+      expect(pool2Account?.deposit.secret).toBe(secret);
+      expect(pool2Account?.deposit.label).toBe(depositEvent2.label);
+      expect(pool2Account?.deposit.value).toBe(depositEvent2.value);
+      expect(pool2Account?.children.length).toBe(0); // No withdrawals for pool2
+    });
+
+    it("throws an error when duplicate pool scopes are provided", async () => {
+      const pool1 = TEST_POOL;
+      const pool2 = { ...TEST_POOL, chainId: 2 };
+
+      await expect(
+        AccountService.initializeWithEvents(
+          dataService,
+          { mnemonic: TEST_MNEMONIC },
+          [pool1, pool2]
+        )
+      ).rejects.toThrow();
+    });
+
+    it("initializes from an existing service instance", async () => {
+      const sourceService = new AccountService(dataService, {
+        mnemonic: TEST_MNEMONIC,
+      });
+
+      const existingScope = BigInt("555555") as Hash;
+      const deposit = {
+        hash: BigInt("666666") as Hash,
+        value: 100n,
+        label: BigInt("777777") as Hash,
+        nullifier: BigInt("888888") as Secret,
+        secret: BigInt("999999") as Secret,
+        blockNumber: 500n,
+        txHash: mockTxHash(10),
+      };
+
+      sourceService.account.poolAccounts.set(existingScope, [
+        {
+          label: deposit.label,
+          deposit,
+          children: [],
+        },
+      ]);
+
+      const newPool: PoolInfo = {
+        chainId: 3,
+        address: "0x1234567890123456789012345678901234567890" as Address,
+        scope: BigInt("111111") as Hash,
+        deploymentBlock: 3000n,
+      };
+
+      vi.spyOn(dataService, "getDeposits").mockImplementation(async (pool) => {
+        if (pool.scope === newPool.scope) return [];
+        return []; // Default empty
+      });
+      vi.spyOn(dataService, "getWithdrawals").mockImplementation(
+        async (pool) => {
+          if (pool.scope === newPool.scope) return [];
+          return []; // Default empty
+        }
+      );
+      vi.spyOn(dataService, "getRagequits").mockImplementation(async (pool) => {
+        if (pool.scope === newPool.scope) return [];
+        return []; // Default empty
+      });
+
+      // Call the static method with source service and the new pool
+      const { account, errors } = await AccountService.initializeWithEvents(
+        dataService,
+        { service: sourceService }, // Initialize from existing service
+        [newPool] // Provide the new pool to fetch events for
+      );
+
+      // Verify the new account contains the existing accounts from sourceService
+      expect(account).toBeInstanceOf(AccountService);
+      expect(errors).toEqual([]); // No errors expected as newPool had no events
+      expect(account.account.poolAccounts.has(existingScope)).toBe(true);
+      expect(
+        account.account.poolAccounts.get(existingScope)?.[0]?.deposit.hash
+      ).toBe(deposit.hash);
+
+      // Verify no new accounts were added for newPool (since no events were returned)
+      expect(account.account.poolAccounts.has(newPool.scope)).toBe(false);
     });
   });
 });
