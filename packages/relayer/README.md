@@ -74,6 +74,7 @@ Each entry in the `chains` array configures support for a specific blockchain:
 | `fee_receiver_address` | Address (optional) | Chain-specific fee receiver address (overrides defaults) |
 | `signer_private_key` | Private Key (optional) | Chain-specific signer private key (overrides defaults) |
 | `entrypoint_address` | Address (optional) | Chain-specific entrypoint address (overrides defaults) |
+| `max_gas_price` | String/Number (optional) | Max gas price for accepting relay operations, in WEI |
 | `native_currency` | Object | Information about the chain's native currency |
 | `supported_assets` | Array | List of supported assets on this chain |
 

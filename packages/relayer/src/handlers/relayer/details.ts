@@ -60,6 +60,7 @@ export function relayerDetailsHandler(
         feeBPS: assetConfig.fee_bps,
         feeReceiverAddress: getAddress(feeReceiverAddress),
         chainId,
+        maxGasPrice: chainConfig.max_gas_price,
         assetAddress: normalizedAssetAddress as Address,
         minWithdrawAmount: assetConfig.min_withdraw_amount
       })
