@@ -5,6 +5,7 @@ import * as snarkjs from "snarkjs";
 import { Commitment, Hash, Secret } from "../../src/types/commitment.js";
 import { LeanIMTMerkleProof } from "@zk-kit/lean-imt";
 import { ProofError } from "../../src/errors/base.error.js";
+import { AccountCommitment } from "../../src/types/account.js";
 
 vi.mock("snarkjs");
 vi.mock("viem", async (importOriginal) => {
@@ -55,7 +56,7 @@ describe("PrivacyPoolSDK", () => {
         BigInt(1),
         BigInt(2),
         BigInt(3) as Secret,
-        BigInt(4) as Secret,
+        BigInt(4) as Secret
       );
       expect(result).toStrictEqual({
         proof: "PROOF",
@@ -65,7 +66,7 @@ describe("PrivacyPoolSDK", () => {
       expect(snarkjs.groth16.fullProve).toHaveBeenCalledWith(
         inputSignals,
         binariesMock.commitment.wasm,
-        binariesMock.commitment.zkey,
+        binariesMock.commitment.zkey
       );
     });
 
@@ -81,7 +82,7 @@ describe("PrivacyPoolSDK", () => {
         sdk.verifyCommitment({
           proof: {} as snarkjs.Groth16Proof,
           publicSignals: [],
-        }),
+        })
       ).rejects.toThrowError(ProofError);
     });
 
@@ -158,6 +159,63 @@ describe("PrivacyPoolSDK", () => {
       expect(downloadArtifactsSpy).toHaveBeenCalledOnce();
     });
 
+    it("can prove withdrawal with account commitment", async () => {
+      const mockAccountCommitment: AccountCommitment = {
+        hash: BigInt(1) as Hash,
+        value: BigInt(1000),
+        label: BigInt(3) as Hash,
+        nullifier: BigInt(2) as Secret,
+        secret: BigInt(4) as Secret,
+        blockNumber: BigInt(5),
+        txHash: "0x1234",
+      };
+
+      snarkjs.groth16.fullProve = vi.fn().mockResolvedValue({
+        proof: "mockProof",
+        publicSignals: "mockPublicSignals",
+      });
+
+      const stateMerkleProof: LeanIMTMerkleProof<bigint> = {
+        root: BigInt(5),
+        leaf: mockCommitment.hash,
+        index: 1,
+        siblings: [BigInt(6), BigInt(7)],
+      };
+
+      const aspMerkleProof: LeanIMTMerkleProof<bigint> = {
+        root: BigInt(8),
+        leaf: BigInt(3),
+        index: 2,
+        siblings: [BigInt(9), BigInt(10)],
+      };
+
+      const withdrawalInput = {
+        withdrawalAmount: BigInt(500),
+        stateMerkleProof,
+        aspMerkleProof,
+        stateRoot: BigInt(5) as Hash,
+        aspRoot: BigInt(8) as Hash,
+        newNullifier: BigInt(12) as Secret,
+        newSecret: BigInt(13) as Secret,
+        context: BigInt(1),
+        stateTreeDepth: BigInt(32),
+        aspTreeDepth: BigInt(32),
+      };
+
+      const downloadArtifactsSpy = vi
+        .spyOn(circuits, "downloadArtifacts")
+        .mockResolvedValue(binariesMock);
+
+      const result = await sdk.proveWithdrawal(
+        mockAccountCommitment,
+        withdrawalInput
+      );
+
+      expect(result).toHaveProperty("proof", "mockProof");
+      expect(result).toHaveProperty("publicSignals", "mockPublicSignals");
+      expect(downloadArtifactsSpy).toHaveBeenCalledOnce();
+    });
+
     it("should throw error on proof generation failure", async () => {
       snarkjs.groth16.fullProve = vi
         .fn()
@@ -191,7 +249,7 @@ describe("PrivacyPoolSDK", () => {
       };
 
       await expect(
-        sdk.proveWithdrawal(mockCommitment, withdrawalInput),
+        sdk.proveWithdrawal(mockCommitment, withdrawalInput)
       ).rejects.toThrow(ProofError);
     });
 
@@ -207,7 +265,7 @@ describe("PrivacyPoolSDK", () => {
         sdk.verifyWithdrawal({
           proof: {} as snarkjs.Groth16Proof,
           publicSignals: [],
-        }),
+        })
       ).rejects.toThrow(ProofError);
     });
 

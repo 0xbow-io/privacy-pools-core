@@ -4,8 +4,8 @@ import {
   CircuitName,
   CircuitsInterface,
 } from "../interfaces/circuits.interface.js";
-import { Commitment } from "../types/commitment.js";
 import { WithdrawalProof, WithdrawalProofInput } from "../types/withdrawal.js";
+import { AccountCommitment, Commitment } from "../index.js";
 
 /**
  * Service responsible for handling withdrawal-related operations.
@@ -23,8 +23,8 @@ export class WithdrawalService {
    * @throws {ProofError} If proof generation fails
    */
   public async proveWithdrawal(
-    commitment: Commitment,
-    input: WithdrawalProofInput,
+    commitment: Commitment | AccountCommitment,
+    input: WithdrawalProofInput
   ): Promise<WithdrawalProof> {
     try {
       const inputSignals = this.prepareInputSignals(commitment, input);
@@ -80,9 +80,25 @@ export class WithdrawalService {
    * Prepares input signals for the withdrawal circuit.
    */
   private prepareInputSignals(
-    commitment: Commitment,
-    input: WithdrawalProofInput,
+    commitment: Commitment | AccountCommitment,
+    input: WithdrawalProofInput
   ): Record<string, bigint | bigint[] | string> {
+    let existingValue: bigint;
+    let existingNullifier: bigint;
+    let existingSecret: bigint;
+    let label: bigint;
+    if ("preimage" in commitment) {
+      existingValue = commitment.preimage.value;
+      existingNullifier = commitment.preimage.precommitment.nullifier;
+      existingSecret = commitment.preimage.precommitment.secret;
+      label = commitment.preimage.label;
+    } else {
+      existingValue = commitment.value;
+      existingNullifier = commitment.nullifier;
+      existingSecret = commitment.secret;
+      label = commitment.label;
+    }
+
     return {
       // Public signals
       withdrawnValue: input.withdrawalAmount,
@@ -93,10 +109,10 @@ export class WithdrawalService {
       context: input.context,
 
       // Private signals
-      label: commitment.preimage.label,
-      existingValue: commitment.preimage.value,
-      existingNullifier: commitment.preimage.precommitment.nullifier,
-      existingSecret: commitment.preimage.precommitment.secret,
+      label,
+      existingValue,
+      existingNullifier,
+      existingSecret,
       newNullifier: input.newNullifier,
       newSecret: input.newSecret,
 

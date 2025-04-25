@@ -5,6 +5,7 @@ import { Commitment, CommitmentProof } from "../types/commitment.js";
 import { WithdrawalProof, WithdrawalProofInput } from "../types/withdrawal.js";
 import { ContractInteractionsService } from "./contracts.service.js";
 import { Hex, Address, Chain } from "viem";
+import { AccountCommitment } from "../types/account.js";
 
 /**
  * Main SDK class providing access to all privacy pool functionality.
@@ -72,7 +73,7 @@ export class PrivacyPoolSDK {
    * @param withdrawal - Withdrawal details
    */
   public async proveWithdrawal(
-    commitment: Commitment,
+    commitment: Commitment | AccountCommitment ,
     input: WithdrawalProofInput,
   ): Promise<WithdrawalProof> {
     return await this.withdrawalService.proveWithdrawal(commitment, input);
