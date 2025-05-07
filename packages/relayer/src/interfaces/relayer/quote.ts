@@ -9,6 +9,8 @@ export interface QuotetBody {
   asset: string;
   /** Asset address */
   recipient?: string;
+  /** Extra gas flag */
+  extraGas: boolean;
 }
 
 export interface QuoteResponse {

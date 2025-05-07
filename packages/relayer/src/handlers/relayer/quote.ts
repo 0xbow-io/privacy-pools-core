@@ -19,12 +19,18 @@ export async function relayQuoteHandler(
   const amountIn = BigInt(req.body.amount!.toString());
   const assetAddress = getAddress(req.body.asset!.toString())
 
+  const extraGas = Boolean(req.body.extra_gas);
+
+  // TODO: set native gas units amount on config
+  // TODO: check if the units are ok
+  const extraGasUnits = extraGas ? 500_000n : 0n;
+
   const config = getAssetConfig(chainId, assetAddress);
   if (config === undefined)
     return next(QuoterError.assetNotSupported(`Asset ${assetAddress} for chain ${chainId} is not supported`));
 
   const feeBPS = await quoteService.quoteFeeBPSNative({
-    chainId, amountIn, assetAddress, baseFeeBPS: config.fee_bps, value: 0n
+    chainId, amountIn, assetAddress, baseFeeBPS: config.fee_bps, extraGas: extraGas
   });
 
   const recipient = req.body.recipient ? getAddress(req.body.recipient.toString()) : undefined
@@ -42,9 +48,9 @@ export async function relayQuoteHandler(
       relayFeeBPS: feeBPS
     })
     const expiration = Number(new Date()) + TIME_20_SECS
-    const relayerCommitment = { withdrawalData, expiration };
+    const relayerCommitment = { withdrawalData, expiration, extraGas };
     const signedRelayerCommitment = await web3Provider.signRelayerCommitment(chainId, relayerCommitment);
-    quoteResponse.addFeeCommitment({ expiration, withdrawalData, signedRelayerCommitment })
+    quoteResponse.addFeeCommitment({ expiration, withdrawalData, signedRelayerCommitment, extraGas })
   }
 
   res
