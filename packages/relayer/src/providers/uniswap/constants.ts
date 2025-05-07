@@ -28,3 +28,12 @@ export const WRAPPED_NATIVE_TOKEN_ADDRESS: Record<string, Address> = {
   "42161": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",     // Arbitrum (WETH)
   "11155111": "0xfff9976782d46cc05630d1f6ebab18b2324d6b14",  // sepolia (WETH)
 }
+
+export const UNIVERSAL_ROUTER_ADDRESS: Record<string, Address> = {
+  "1": "0x66a9893cc07d91d95644aedd05d03f95e1dba8af",
+  "10": "0x851116d9223fabed8e56c0e6b8ad0c31d98b3507",
+  "137": "0x1095692a6237d83c6a72f3f5efedb9a670c49223",
+  "42161": "0xa51afafe0263b40edaef0df8781ea9aa03e381a3",
+  "11155111": "0x3a9d48ab9751398bbfa63ad67599bb04e4bdf98b"
+}
+
