@@ -104,8 +104,12 @@ export async function relayRequestHandler(
 ) {
   try {
     const { payload: withdrawalPayload, chainId } = parseWithdrawal(req.body);
+
+    // TODO: do i need this here?
+    const extraGas = Boolean(withdrawalPayload.feeCommitment?.extraGas);
     const maxGasPrice = getChainConfig(chainId)?.max_gas_price;
     const currentGasPrice = await web3Provider.getGasPrice(chainId);
+
     if (maxGasPrice !== undefined && currentGasPrice > maxGasPrice) {
       throw ConfigError.maxGasPrice(`Current gas price ${currentGasPrice} is higher than max price ${maxGasPrice}`)
     }

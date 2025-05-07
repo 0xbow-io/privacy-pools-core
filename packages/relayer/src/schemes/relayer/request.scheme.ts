@@ -47,7 +47,8 @@ const relayRequestSchema: JSONSchemaType<RelayRequestBody> = {
       properties: {
         expiration: { type: "number" },
         withdrawalData: { type: "string", pattern: "0x[0-9a-fA-F]+" },
-        signedRelayerCommitment: { type: "string", pattern: "0x[0-9a-fA-F]+" }
+        signedRelayerCommitment: { type: "string", pattern: "0x[0-9a-fA-F]+" },
+        extraGas: { type: "boolean" }
       },
       nullable: true,
       required: ["expiration", "signedRelayerCommitment"]
