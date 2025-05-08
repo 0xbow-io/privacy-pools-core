@@ -1,6 +1,6 @@
 import { Token } from '@uniswap/sdk-core'
 import { FeeAmount } from '@uniswap/v3-sdk'
-import { Address, getContract, createWalletClient, http, Abi, encodeAbiParameters } from 'viem'
+import { Address, getContract, createWalletClient, http, encodeAbiParameters } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts';
 import { writeContract } from 'viem/actions';
 
@@ -167,5 +167,38 @@ export class UniswapProvider {
     });
 
     return hash;
+  }
+
+  async sendNativeToken(
+    chainId: number,
+    to: Address,
+    amount: bigint
+  ): Promise<void> {
+    const config = getChainConfig(chainId);
+    const privateKey = getSignerPrivateKey(chainId);
+    const account = privateKeyToAccount(privateKey as `0x${string}`);
+
+    const client = createWalletClient({
+      chain: {
+        id: config.chain_id,
+        name: config.chain_name,
+        rpcUrls: { default: { http: [config.rpc_url] } },
+        nativeCurrency: config.native_currency!,
+      },
+      transport: http(config.rpc_url),
+      account,
+    });
+
+    await client.sendTransaction({
+      chain: {
+        id: config.chain_id,
+        name: config.chain_name,
+        rpcUrls: { default: { http: [config.rpc_url] } },
+        nativeCurrency: config.native_currency!,
+      },
+      account,
+      to,
+      value: amount,
+    });
   }
 }
