@@ -1,7 +1,7 @@
 /**
  * Handles withdrawal requests within the Privacy Pool relayer.
  */
-import { getAddress } from "viem";
+import { Address, getAddress } from "viem";
 import {
   getAssetConfig,
   getEntrypointAddress,
@@ -17,13 +17,15 @@ import {
   RelayerResponse,
   WithdrawalPayload,
 } from "../interfaces/relayer/request.js";
-import { db, SdkProvider, web3Provider } from "../providers/index.js";
+import { db, SdkProvider, UniswapProvider, web3Provider } from "../providers/index.js";
 import { RelayerDatabase } from "../types/db.types.js";
 import { SdkProviderInterface } from "../types/sdk.types.js";
 import { decodeWithdrawalData, isViemError, parseSignals } from "../utils.js";
 import { quoteService } from "./index.js";
 import { Web3Provider } from "../providers/web3.provider.js";
 import { FeeCommitment } from "../interfaces/relayer/common.js";
+import { uniswapProvider } from "../providers/index.js";
+import { WRAPPED_NATIVE_TOKEN_ADDRESS } from "../providers/uniswap/constants.js";
 
 /**
  * Class representing the Privacy Pool Relayer, responsible for processing withdrawal requests.
@@ -35,6 +37,7 @@ export class PrivacyPoolRelayer {
   protected sdkProvider: SdkProviderInterface;
   /** Web3 provider for handling blockchain interactions. */
   protected web3Provider: Web3Provider;
+  protected uniswapProvider: UniswapProvider;
 
   /**
    * Initializes a new instance of the Privacy Pool Relayer.
@@ -43,6 +46,7 @@ export class PrivacyPoolRelayer {
     this.db = db;
     this.sdkProvider = new SdkProvider();
     this.web3Provider = web3Provider;
+    this.uniswapProvider = new UniswapProvider();
   }
 
   /**
@@ -60,12 +64,50 @@ export class PrivacyPoolRelayer {
       await this.db.createNewRequest(requestId, timestamp, req);
       await this.validateWithdrawal(req, chainId);
 
+      const extraGas = req.feeCommitment?.extraGas ?? false;
+
       const isValidWithdrawalProof = await this.verifyProof(req.proof);
       if (!isValidWithdrawalProof) {
         throw ZkError.invalidProof();
       }
 
       const response = await this.broadcastWithdrawal(req, chainId);
+
+      if (extraGas) {
+        const { assetAddress } = await this.sdkProvider.scopeData(req.scope, chainId);
+        const feeReceiver = getFeeReceiverAddress(chainId) as Address;
+        const { recipient, relayFeeBPS } = decodeWithdrawalData(req.withdrawal.data);
+        const withdrawnValue = parseSignals(req.proof.publicSignals).withdrawnValue;
+        const relayerFeeAmount = withdrawnValue * BigInt(relayFeeBPS) / 10_000n;
+
+        const quote = await this.uniswapProvider.quoteNativeToken(chainId, assetAddress, relayerFeeAmount);
+
+        const slippageBps = 10n; // 0.1%
+
+        const wrappedNative = WRAPPED_NATIVE_TOKEN_ADDRESS[chainId.toString()];
+        if (!wrappedNative) throw RelayerError.unknown(`Missing wrapped native token for chain ${chainId}`);
+
+        const swapTxHash = await this.uniswapProvider.swapExactInputSingle({
+          chainId,
+          amountIn: relayerFeeAmount,
+          quotedAmountOut: quote.out.amount,
+          slippageBps,
+          assetIn: assetAddress,
+          assetOut: wrappedNative as Address,
+          recipient: feeReceiver,
+        });
+
+        console.log(`[relayer] swap tx: ${swapTxHash}`);
+
+        await this.uniswapProvider.sendNativeToken(
+          chainId,
+          recipient as Address,
+          quote.out.amount,
+        );
+
+        console.log(`[relayer] sent extra gas to ${recipient}`);
+      }
+
       await this.db.updateBroadcastedRequest(requestId, response.hash);
 
       return {
@@ -163,6 +205,8 @@ export class PrivacyPoolRelayer {
     const entrypointAddress = getEntrypointAddress(chainId);
     const feeReceiverAddress = getFeeReceiverAddress(chainId);
 
+    const extraGas = wp.feeCommitment?.extraGas ?? false;
+
     const { feeRecipient, relayFeeBPS } = decodeWithdrawalData(
       wp.withdrawal.data,
     );
@@ -217,7 +261,7 @@ export class PrivacyPoolRelayer {
     } else {
 
       const currentFeeBPS = await quoteService.quoteFeeBPSNative({
-        chainId, amountIn: proofSignals.withdrawnValue, assetAddress, baseFeeBPS: assetConfig.fee_bps, value: 0n
+        chainId, amountIn: proofSignals.withdrawnValue, assetAddress, baseFeeBPS: assetConfig.fee_bps, extraGas
       });
 
       if (relayFeeBPS < currentFeeBPS) {
