@@ -10,7 +10,7 @@ sort_imports = true
 
 [profile.default]
 solc_version = '0.8.28'
-libs = ['../../node_modules', 'lib']
+libs = ['../../node_modules', 'node_modules', 'lib']
 optimizer_runs = 10_000
 bytecode_hash = "none"
 cbor_metadata = false
