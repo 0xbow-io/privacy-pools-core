@@ -33,8 +33,10 @@ Entrypoint::deposit (ETH)
 │   │   │   ├── It forwards ETH to pool
 │   │   │   ├── It maintains contract balance
 │   │   │   └── It emits Deposited event
-│   │   └── When value below minimum
-│   │       └── It reverts with MinimumDepositAmount
+│   │   ├── When value below minimum
+│   │   │   └── It reverts with MinimumDepositAmount
+│   │   └── When precommitment already used
+│   │       └── It reverts with PrecommitmentAlreadyUsed
 │   └── When pool not found
 │       └── It reverts with PoolNotFound
 └── When reentrant call
@@ -48,8 +50,10 @@ Entrypoint::deposit (ERC20)
 │   │   │   ├── It deducts correct fees
 │   │   │   ├── It deposits to pool
 │   │   │   └── It emits Deposited event
-│   │   └── When value below minimum
-│   │       └── It reverts with MinimumDepositAmount
+│   │   ├── When value below minimum
+│   │   │   └── It reverts with MinimumDepositAmount
+│   │   └── When precommitment already used
+│   │       └── It reverts with PrecommitmentAlreadyUsed
 │   └── When pool not found
 │       └── It reverts with PoolNotFound
 └── When reentrant call

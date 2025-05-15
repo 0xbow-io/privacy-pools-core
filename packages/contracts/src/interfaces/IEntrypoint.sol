@@ -233,7 +233,7 @@ interface IEntrypoint {
   error NativeAssetNotAccepted();
 
   /**
-   * @notice Thrown when trying to deposit using a precommitment that has already been used by another deposit 
+   * @notice Thrown when trying to deposit using a precommitment that has already been used by another deposit
    */
   error PrecommitmentAlreadyUsed();
 
@@ -383,8 +383,8 @@ interface IEntrypoint {
   function rootByIndex(uint256 _index) external view returns (uint256 _root);
 
   /**
-   * @notice Returns a boolean indicating if the precommitment has been used 
-   * @param _precommitment The precommitment hash 
+   * @notice Returns a boolean indicating if the precommitment has been used
+   * @param _precommitment The precommitment hash
    * @return _used The usage status
    */
   function usedPrecommitments(uint256 _precommitment) external view returns (bool _used);
