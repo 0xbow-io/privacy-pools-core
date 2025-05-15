@@ -62,6 +62,7 @@ contract PrivacyPoolComplex is PrivacyPool, IPrivacyPoolComplex {
 
     // Pull asset from sender to this contract
     IERC20(ASSET).safeTransferFrom(_sender, address(this), _amount);
+    IERC20Votes(ASSET).delegate(delegateAddress);
   }
 
   /**
@@ -73,10 +74,5 @@ contract PrivacyPoolComplex is PrivacyPool, IPrivacyPoolComplex {
   function _push(address _recipient, uint256 _amount) internal override(PrivacyPool) {
     // Send asset from this contract to recipient
     IERC20(ASSET).safeTransfer(_recipient, _amount);
-  }
-
-  //Predefined delegate of this pool recieves all the vote delegation.
-  function delegate() external {
-    IERC20Votes(ASSET).delegate(delegateAddress);
   }
 }
