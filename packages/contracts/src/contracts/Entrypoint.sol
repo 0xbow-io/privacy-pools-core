@@ -51,6 +51,9 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
   /// @inheritdoc IEntrypoint
   AssociationSetData[] public associationSets;
 
+  /// @inheritdoc IEntrypoint
+  mapping(uint256 _precommitment => bool _used) public usedPrecommitments;
+
   /*///////////////////////////////////////////////////////////////
                           INITIALIZATION
   //////////////////////////////////////////////////////////////*/
@@ -316,6 +319,11 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
     AssetConfig memory _config = assetConfig[_asset];
     IPrivacyPool _pool = _config.pool;
     if (address(_pool) == address(0)) revert PoolNotFound();
+
+    // Check if the `_precommitment` has already been used
+    if (usedPrecommitments[_precommitment]) revert PrecommitmentAlreadyUsed();
+    // Mark it as used
+    usedPrecommitments[_precommitment] = true;
 
     // Check minimum deposit amount
     if (_value < _config.minimumDepositAmount) revert MinimumDepositAmount();
