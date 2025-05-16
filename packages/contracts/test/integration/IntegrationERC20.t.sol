@@ -22,7 +22,14 @@ contract IntegrationERC20 is IntegrationBase {
   function test_fullDirectWithdrawal() public {
     // Alice deposits 5000 DAI
     _commitment = _deposit(
-      DepositParams({depositor: _ALICE, asset: _DAI, amount: 5000 ether, nullifier: 'nullifier_1', secret: 'secret_1'})
+      DepositParams({
+        depositor: _ALICE,
+        beneficiary: _ALICE,
+        asset: _DAI,
+        amount: 5000 ether,
+        nullifier: 'nullifier_1',
+        secret: 'secret_1'
+      })
     );
 
     // Push ASP root with label included
@@ -48,7 +55,14 @@ contract IntegrationERC20 is IntegrationBase {
   function test_fullRelayedWithdrawal() public {
     // Alice deposits 5000 DAI
     _commitment = _deposit(
-      DepositParams({depositor: _ALICE, asset: _DAI, amount: 5000 ether, nullifier: 'nullifier_1', secret: 'secret_1'})
+      DepositParams({
+        depositor: _ALICE,
+        beneficiary: _ALICE,
+        asset: _DAI,
+        amount: 5000 ether,
+        nullifier: 'nullifier_1',
+        secret: 'secret_1'
+      })
     );
 
     // Push ASP root with label included
@@ -74,7 +88,14 @@ contract IntegrationERC20 is IntegrationBase {
   function test_partialDirectWithdrawal() public {
     // Alice deposits 5000 DAI
     _commitment = _deposit(
-      DepositParams({depositor: _ALICE, asset: _DAI, amount: 5000 ether, nullifier: 'nullifier_1', secret: 'secret_1'})
+      DepositParams({
+        depositor: _ALICE,
+        beneficiary: _ALICE,
+        asset: _DAI,
+        amount: 5000 ether,
+        nullifier: 'nullifier_1',
+        secret: 'secret_1'
+      })
     );
 
     // Push ASP root with label included
@@ -100,7 +121,14 @@ contract IntegrationERC20 is IntegrationBase {
   function test_multiplePartialDirectWithdrawals() public {
     // Alice deposits 5000 DAI
     _commitment = _deposit(
-      DepositParams({depositor: _ALICE, asset: _DAI, amount: 5000 ether, nullifier: 'nullifier_1', secret: 'secret_1'})
+      DepositParams({
+        depositor: _ALICE,
+        beneficiary: _ALICE,
+        asset: _DAI,
+        amount: 5000 ether,
+        nullifier: 'nullifier_1',
+        secret: 'secret_1'
+      })
     );
 
     // Push ASP root with label included
@@ -162,7 +190,14 @@ contract IntegrationERC20 is IntegrationBase {
   function test_partialRelayedWithdrawal() public {
     // Alice deposits 5000 DAI
     _commitment = _deposit(
-      DepositParams({depositor: _ALICE, asset: _DAI, amount: 5000 ether, nullifier: 'nullifier_1', secret: 'secret_1'})
+      DepositParams({
+        depositor: _ALICE,
+        beneficiary: _ALICE,
+        asset: _DAI,
+        amount: 5000 ether,
+        nullifier: 'nullifier_1',
+        secret: 'secret_1'
+      })
     );
 
     // Push ASP root with label included
@@ -188,7 +223,14 @@ contract IntegrationERC20 is IntegrationBase {
   function test_multiplePartialRelayedWithdrawals() public {
     // Alice deposits 5000 DAI
     _commitment = _deposit(
-      DepositParams({depositor: _ALICE, asset: _DAI, amount: 5000 ether, nullifier: 'nullifier_1', secret: 'secret_1'})
+      DepositParams({
+        depositor: _ALICE,
+        beneficiary: _ALICE,
+        asset: _DAI,
+        amount: 5000 ether,
+        nullifier: 'nullifier_1',
+        secret: 'secret_1'
+      })
     );
 
     // Push ASP root with label included
@@ -250,7 +292,14 @@ contract IntegrationERC20 is IntegrationBase {
   function test_ragequit() public {
     // Alice deposits 5000 DAI
     _commitment = _deposit(
-      DepositParams({depositor: _ALICE, asset: _DAI, amount: 5000 ether, nullifier: 'nullifier_1', secret: 'secret_1'})
+      DepositParams({
+        depositor: _ALICE,
+        beneficiary: _ALICE,
+        asset: _DAI,
+        amount: 5000 ether,
+        nullifier: 'nullifier_1',
+        secret: 'secret_1'
+      })
     );
 
     // Push ASP root without label
@@ -281,7 +330,14 @@ contract IntegrationERC20 is IntegrationBase {
   function test_aspRemoval() public {
     // Alice deposits 5000 DAI
     _commitment = _deposit(
-      DepositParams({depositor: _ALICE, asset: _DAI, amount: 5000 ether, nullifier: 'nullifier_1', secret: 'secret_1'})
+      DepositParams({
+        depositor: _ALICE,
+        beneficiary: _ALICE,
+        asset: _DAI,
+        amount: 5000 ether,
+        nullifier: 'nullifier_1',
+        secret: 'secret_1'
+      })
     );
 
     // Push ASP root with label included
@@ -328,7 +384,14 @@ contract IntegrationERC20 is IntegrationBase {
   function test_failWhenCommitmentAlreadySpent() public {
     // Alice deposits 5000 DAI
     _commitment = _deposit(
-      DepositParams({depositor: _ALICE, asset: _DAI, amount: 5000 ether, nullifier: 'nullifier_1', secret: 'secret_1'})
+      DepositParams({
+        depositor: _ALICE,
+        beneficiary: _ALICE,
+        asset: _DAI,
+        amount: 5000 ether,
+        nullifier: 'nullifier_1',
+        secret: 'secret_1'
+      })
     );
 
     // Push ASP root with label included
@@ -366,7 +429,14 @@ contract IntegrationERC20 is IntegrationBase {
   function test_failWhenTryingToSpendRagequitCommitment() public {
     // Alice deposits 5000 DAI
     _commitment = _deposit(
-      DepositParams({depositor: _ALICE, asset: _DAI, amount: 5000 ether, nullifier: 'nullifier_1', secret: 'secret_1'})
+      DepositParams({
+        depositor: _ALICE,
+        beneficiary: _ALICE,
+        asset: _DAI,
+        amount: 5000 ether,
+        nullifier: 'nullifier_1',
+        secret: 'secret_1'
+      })
     );
 
     // Ragequit full amount

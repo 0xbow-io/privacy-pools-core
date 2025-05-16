@@ -69,11 +69,18 @@ interface IEntrypoint {
   /**
    * @notice Emitted when pushing a new root to the association root set
    * @param _depositor The address of the depositor
+   * @param _beneficiary The address of the deposit beneficiary
    * @param _pool The Privacy Pool contract
    * @param _commitment The commitment hash for the deposit
    * @param _amount The amount of asset deposited
    */
-  event Deposited(address indexed _depositor, IPrivacyPool indexed _pool, uint256 _commitment, uint256 _amount);
+  event Deposited(
+    address indexed _depositor,
+    address indexed _beneficiary,
+    IPrivacyPool indexed _pool,
+    uint256 _commitment,
+    uint256 _amount
+  );
 
   /**
    * @notice Emitted when processing a withdrawal through the Entrypoint
@@ -258,19 +265,26 @@ interface IEntrypoint {
 
   /**
    * @notice Make a native asset deposit into the Privacy Pool
+   * @param _beneficiary The address to deposit in favor of
    * @param _precommitment The precommitment for the deposit
    * @return _commitment The deposit commitment hash
    */
-  function deposit(uint256 _precommitment) external payable returns (uint256 _commitment);
+  function deposit(address _beneficiary, uint256 _precommitment) external payable returns (uint256 _commitment);
 
   /**
    * @notice Make an ERC20 deposit into the Privacy Pool
+   * @param _beneficiary The address to deposit in favor of
    * @param _asset The asset to deposit
    * @param _value The amount of asset to deposit
    * @param _precommitment The precommitment for the deposit
    * @return _commitment The deposit commitment hash
    */
-  function deposit(IERC20 _asset, uint256 _value, uint256 _precommitment) external returns (uint256 _commitment);
+  function deposit(
+    address _beneficiary,
+    IERC20 _asset,
+    uint256 _value,
+    uint256 _precommitment
+  ) external returns (uint256 _commitment);
 
   /**
    * @notice Process a withdrawal

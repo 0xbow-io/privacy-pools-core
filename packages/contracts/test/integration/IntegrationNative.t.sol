@@ -18,7 +18,14 @@ contract IntegrationNative is IntegrationBase {
   function test_fullDirectWithdrawal() public {
     // Alice deposits 100 ETH
     _commitment = _deposit(
-      DepositParams({depositor: _ALICE, asset: _ETH, amount: 100 ether, nullifier: 'nullifier_1', secret: 'secret_1'})
+      DepositParams({
+        depositor: _ALICE,
+        beneficiary: _ALICE,
+        asset: _ETH,
+        amount: 100 ether,
+        nullifier: 'nullifier_1',
+        secret: 'secret_1'
+      })
     );
 
     // Push ASP root with label included
@@ -44,7 +51,14 @@ contract IntegrationNative is IntegrationBase {
   function test_fullRelayedWithdrawal() public {
     // Alice deposits 100 ETH
     _commitment = _deposit(
-      DepositParams({depositor: _ALICE, asset: _ETH, amount: 100 ether, nullifier: 'nullifier_1', secret: 'secret_1'})
+      DepositParams({
+        depositor: _ALICE,
+        beneficiary: _ALICE,
+        asset: _ETH,
+        amount: 100 ether,
+        nullifier: 'nullifier_1',
+        secret: 'secret_1'
+      })
     );
 
     // Push ASP root with label included
@@ -70,7 +84,14 @@ contract IntegrationNative is IntegrationBase {
   function test_partialDirectWithdrawal() public {
     // Alice deposits 100 ETH
     _commitment = _deposit(
-      DepositParams({depositor: _ALICE, asset: _ETH, amount: 100 ether, nullifier: 'nullifier_1', secret: 'secret_1'})
+      DepositParams({
+        depositor: _ALICE,
+        beneficiary: _ALICE,
+        asset: _ETH,
+        amount: 100 ether,
+        nullifier: 'nullifier_1',
+        secret: 'secret_1'
+      })
     );
 
     // Push ASP root with label included
@@ -96,7 +117,14 @@ contract IntegrationNative is IntegrationBase {
   function test_multiplePartialDirectWithdrawals() public {
     // Alice deposits 100 ETH
     _commitment = _deposit(
-      DepositParams({depositor: _ALICE, asset: _ETH, amount: 100 ether, nullifier: 'nullifier_1', secret: 'secret_1'})
+      DepositParams({
+        depositor: _ALICE,
+        beneficiary: _ALICE,
+        asset: _ETH,
+        amount: 100 ether,
+        nullifier: 'nullifier_1',
+        secret: 'secret_1'
+      })
     );
 
     // Push ASP root with label included
@@ -170,7 +198,14 @@ contract IntegrationNative is IntegrationBase {
   function test_partialRelayedWithdrawal() public {
     // Alice deposits 100 ETH
     _commitment = _deposit(
-      DepositParams({depositor: _ALICE, asset: _ETH, amount: 100 ether, nullifier: 'nullifier_1', secret: 'secret_1'})
+      DepositParams({
+        depositor: _ALICE,
+        beneficiary: _ALICE,
+        asset: _ETH,
+        amount: 100 ether,
+        nullifier: 'nullifier_1',
+        secret: 'secret_1'
+      })
     );
 
     // Push ASP root with label included
@@ -196,7 +231,14 @@ contract IntegrationNative is IntegrationBase {
   function test_multiplePartialRelayedWithdrawals() public {
     // Alice deposits 100 ETH
     _commitment = _deposit(
-      DepositParams({depositor: _ALICE, asset: _ETH, amount: 100 ether, nullifier: 'nullifier_1', secret: 'secret_1'})
+      DepositParams({
+        depositor: _ALICE,
+        beneficiary: _ALICE,
+        asset: _ETH,
+        amount: 100 ether,
+        nullifier: 'nullifier_1',
+        secret: 'secret_1'
+      })
     );
 
     // Push ASP root with label included
@@ -270,7 +312,14 @@ contract IntegrationNative is IntegrationBase {
   function test_ragequit() public {
     // Alice deposits 100 ETH
     _commitment = _deposit(
-      DepositParams({depositor: _ALICE, asset: _ETH, amount: 100 ether, nullifier: 'nullifier_1', secret: 'secret_1'})
+      DepositParams({
+        depositor: _ALICE,
+        beneficiary: _ALICE,
+        asset: _ETH,
+        amount: 100 ether,
+        nullifier: 'nullifier_1',
+        secret: 'secret_1'
+      })
     );
 
     // Push ASP root without label
@@ -301,7 +350,14 @@ contract IntegrationNative is IntegrationBase {
   function test_aspRemoval() public {
     // Alice deposits 100 ETH
     _commitment = _deposit(
-      DepositParams({depositor: _ALICE, asset: _ETH, amount: 100 ether, nullifier: 'nullifier_1', secret: 'secret_1'})
+      DepositParams({
+        depositor: _ALICE,
+        beneficiary: _ALICE,
+        asset: _ETH,
+        amount: 100 ether,
+        nullifier: 'nullifier_1',
+        secret: 'secret_1'
+      })
     );
 
     // Push ASP root with label included
@@ -348,7 +404,14 @@ contract IntegrationNative is IntegrationBase {
   function test_failWhenCommitmentAlreadySpent() public {
     // Alice deposits 100 ETH
     _commitment = _deposit(
-      DepositParams({depositor: _ALICE, asset: _ETH, amount: 100 ether, nullifier: 'nullifier_1', secret: 'secret_1'})
+      DepositParams({
+        depositor: _ALICE,
+        beneficiary: _ALICE,
+        asset: _ETH,
+        amount: 100 ether,
+        nullifier: 'nullifier_1',
+        secret: 'secret_1'
+      })
     );
 
     // Push ASP root with label included
@@ -386,7 +449,14 @@ contract IntegrationNative is IntegrationBase {
   function test_failWhenTryingToSpendRagequitCommitment() public {
     // Alice deposits 100 ETH
     _commitment = _deposit(
-      DepositParams({depositor: _ALICE, asset: _ETH, amount: 100 ether, nullifier: 'nullifier_1', secret: 'secret_1'})
+      DepositParams({
+        depositor: _ALICE,
+        beneficiary: _ALICE,
+        asset: _ETH,
+        amount: 100 ether,
+        nullifier: 'nullifier_1',
+        secret: 'secret_1'
+      })
     );
 
     // Ragequit full amount

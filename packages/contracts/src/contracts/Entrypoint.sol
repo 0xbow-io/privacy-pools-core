@@ -108,13 +108,17 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
   //////////////////////////////////////////////////////////////*/
 
   /// @inheritdoc IEntrypoint
-  function deposit(uint256 _precommitment) external payable nonReentrant returns (uint256 _commitment) {
+  function deposit(
+    address _beneficiary,
+    uint256 _precommitment
+  ) external payable nonReentrant returns (uint256 _commitment) {
     // Handle deposit as native asset
-    _commitment = _handleDeposit(IERC20(Constants.NATIVE_ASSET), msg.value, _precommitment);
+    _commitment = _handleDeposit(IERC20(Constants.NATIVE_ASSET), msg.value, _precommitment, _beneficiary);
   }
 
   /// @inheritdoc IEntrypoint
   function deposit(
+    address _beneficiary,
     IERC20 _asset,
     uint256 _value,
     uint256 _precommitment
@@ -122,7 +126,7 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
     // Pull funds from user
     _asset.safeTransferFrom(msg.sender, address(this), _value);
     // Handle deposit as ERC20
-    _commitment = _handleDeposit(_asset, _value, _precommitment);
+    _commitment = _handleDeposit(_asset, _value, _precommitment, _beneficiary);
   }
 
   /*///////////////////////////////////////////////////////////////
@@ -314,7 +318,12 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
    * @param _precommitment The precommitment for the deposit
    * @return _commitment The deposit commitment hash
    */
-  function _handleDeposit(IERC20 _asset, uint256 _value, uint256 _precommitment) internal returns (uint256 _commitment) {
+  function _handleDeposit(
+    IERC20 _asset,
+    uint256 _value,
+    uint256 _precommitment,
+    address _beneficiary
+  ) internal returns (uint256 _commitment) {
     // Fetch pool by asset
     AssetConfig memory _config = assetConfig[_asset];
     IPrivacyPool _pool = _config.pool;
@@ -333,9 +342,9 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
 
     // Deposit commitment into pool (forwarding native asset if applicable)
     uint256 _nativeAssetValue = address(_asset) == Constants.NATIVE_ASSET ? _amountAfterFees : 0;
-    _commitment = _pool.deposit{value: _nativeAssetValue}(msg.sender, _amountAfterFees, _precommitment);
+    _commitment = _pool.deposit{value: _nativeAssetValue}(_beneficiary, _amountAfterFees, _precommitment);
 
-    emit Deposited(msg.sender, _pool, _commitment, _amountAfterFees);
+    emit Deposited(msg.sender, _beneficiary, _pool, _commitment, _amountAfterFees);
   }
 
   /**

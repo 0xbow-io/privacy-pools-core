@@ -51,6 +51,7 @@ contract IntegrationBase is Test {
 
   struct DepositParams {
     address depositor;
+    address beneficiary;
     IERC20 asset;
     uint256 amount;
     string nullifier;
@@ -254,14 +255,14 @@ contract IntegrationBase is Test {
 
     // Expect Entrypoint event emission
     vm.expectEmit(address(_entrypoint));
-    emit IEntrypoint.Deposited(_params.depositor, _pool, _commitment.hash, _commitment.value);
+    emit IEntrypoint.Deposited(_params.depositor, _params.beneficiary, _pool, _commitment.hash, _commitment.value);
 
     // Deposit
     vm.prank(_params.depositor);
     if (_params.asset == IERC20(Constants.NATIVE_ASSET)) {
-      _entrypoint.deposit{value: _params.amount}(_commitment.precommitment);
+      _entrypoint.deposit{value: _params.amount}(_params.beneficiary, _commitment.precommitment);
     } else {
-      _entrypoint.deposit(_params.asset, _params.amount, _commitment.precommitment);
+      _entrypoint.deposit(_params.beneficiary, _params.asset, _params.amount, _commitment.precommitment);
     }
 
     // Check balance changes
