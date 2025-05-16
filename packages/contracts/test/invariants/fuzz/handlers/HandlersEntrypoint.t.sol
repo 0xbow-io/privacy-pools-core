@@ -12,9 +12,15 @@ contract HandlersEntrypoint is Setup {
     uint256 _poolBalanceBefore = token.balanceOf(address(tokenPool));
     uint256 _entrypointBalanceBefore = token.balanceOf(address(entrypoint));
 
+    uint256 _pseudoUniquePrecommitment = uint256(keccak256(abi.encodePacked(_amount, block.timestamp)));
+
     token.transfer(address(currentActor()), _amount);
     (bool success, bytes memory result) = currentActor().call(
-      address(entrypoint), 0, abi.encodeWithSignature('deposit(address,uint256,uint256)', token, _amount, 1)
+      address(entrypoint),
+      0,
+      abi.encodeWithSignature(
+        'deposit(address,address,uint256,uint256)', currentActor(), token, _amount, _pseudoUniquePrecommitment
+      )
     );
 
     if (success) {
