@@ -1795,7 +1795,8 @@ contract UnitReentrancy is UnitEntrypoint {
 
     // Expect the Attacker contract calling deposit on the Entrypoint
     vm.expectCall(
-      address(_entrypoint), abi.encodeWithSignature('deposit(uint256)', uint256(keccak256('precommitment')))
+      address(_entrypoint),
+      abi.encodeWithSignature('deposit(address,uint256)', address(0), uint256(keccak256('precommitment')))
     );
 
     // Revert when trying to relay

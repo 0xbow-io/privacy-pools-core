@@ -316,6 +316,7 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
    * @param _asset The asset being deposited
    * @param _value The amount being deposited
    * @param _precommitment The precommitment for the deposit
+   * @param _beneficiary The address to deposit in favor of
    * @return _commitment The deposit commitment hash
    */
   function _handleDeposit(
