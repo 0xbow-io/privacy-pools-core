@@ -512,7 +512,7 @@ contract UnitDeposit is UnitEntrypoint {
     vm.assume(_depositor != address(_entrypoint));
     vm.assume(_for != address(_entrypoint));
 
-    (IPrivacyPool _pool, uint256 _minDeposit,,) = _entrypoint.assetConfig(IERC20(_ETH));
+    (, uint256 _minDeposit,,) = _entrypoint.assetConfig(IERC20(_ETH));
     _amount = bound(_amount, _minDeposit, 1e30);
     deal(_depositor, _amount);
 
@@ -551,6 +551,62 @@ contract UnitDeposit is UnitEntrypoint {
     vm.expectRevert(abi.encodeWithSelector(IEntrypoint.PrecommitmentAlreadyUsed.selector));
     vm.prank(_depositor);
     _entrypoint.deposit(_for, IERC20(_params.asset), _amount, _precommitment);
+  }
+
+  /**
+   * @notice Test that the Entrypoint reverts when the beneficiary address is the address zero for ETH deposits
+   */
+  function test_DepositETHWhenBeneficiaryIsAddressZero(
+    address _depositor,
+    uint256 _amount,
+    uint256 _precommitment,
+    PoolParams memory _params
+  )
+    external
+    givenPoolExists(
+      PoolParams({
+        pool: _params.pool,
+        asset: _ETH,
+        minDeposit: _params.minDeposit,
+        vettingFeeBPS: _params.vettingFeeBPS,
+        maxRelayFeeBPS: 500 // Default to 5%
+      })
+    )
+  {
+    _assumeFuzzable(_depositor);
+    vm.assume(_depositor != address(_entrypoint));
+
+    (, uint256 _minDeposit,,) = _entrypoint.assetConfig(IERC20(_ETH));
+    _amount = bound(_amount, _minDeposit, 1e30);
+    deal(_depositor, _amount);
+
+    vm.expectRevert(abi.encodeWithSelector(IEntrypoint.ZeroAddress.selector));
+    vm.prank(_depositor);
+    _entrypoint.deposit{value: _amount}(address(0), _precommitment);
+  }
+
+  /**
+   * @notice Test that the Entrypoint reverts when the beneficiary address is the address zero for ERC20 deposits
+   */
+  function test_DepositERC20WhenBeneficiaryIsAddressZero(
+    address _depositor,
+    uint256 _amount,
+    uint256 _precommitment,
+    PoolParams memory _params
+  ) external givenPoolExists(_params) {
+    vm.assume(_depositor != address(0));
+
+    _amount = bound(_amount, _params.minDeposit, 1e30);
+
+    _mockAndExpect(
+      _params.asset,
+      abi.encodeWithSignature('transferFrom(address,address,uint256)', _depositor, address(_entrypoint), _amount),
+      abi.encode(true)
+    );
+
+    vm.expectRevert(abi.encodeWithSelector(IEntrypoint.ZeroAddress.selector));
+    vm.prank(_depositor);
+    _entrypoint.deposit(address(0), IERC20(_params.asset), _amount, _precommitment);
   }
 }
 
