@@ -113,7 +113,7 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
     uint256 _precommitment
   ) external payable nonReentrant returns (uint256 _commitment) {
     // Handle deposit as native asset
-    _commitment = _handleDeposit(IERC20(Constants.NATIVE_ASSET), msg.value, _precommitment, _beneficiary);
+    _commitment = _handleDeposit(_beneficiary, IERC20(Constants.NATIVE_ASSET), msg.value, _precommitment);
   }
 
   /// @inheritdoc IEntrypoint
@@ -126,7 +126,7 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
     // Pull funds from user
     _asset.safeTransferFrom(msg.sender, address(this), _value);
     // Handle deposit as ERC20
-    _commitment = _handleDeposit(_asset, _value, _precommitment, _beneficiary);
+    _commitment = _handleDeposit(_beneficiary, _asset, _value, _precommitment);
   }
 
   /*///////////////////////////////////////////////////////////////
@@ -313,17 +313,17 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
 
   /**
    * @notice Handle deposit logic for both native asset and ERC20 deposits
+   * @param _beneficiary The address to deposit in favor of
    * @param _asset The asset being deposited
    * @param _value The amount being deposited
    * @param _precommitment The precommitment for the deposit
-   * @param _beneficiary The address to deposit in favor of
    * @return _commitment The deposit commitment hash
    */
   function _handleDeposit(
+    address _beneficiary,
     IERC20 _asset,
     uint256 _value,
-    uint256 _precommitment,
-    address _beneficiary
+    uint256 _precommitment
   ) internal returns (uint256 _commitment) {
     // Fetch pool by asset
     AssetConfig memory _config = assetConfig[_asset];
@@ -334,6 +334,8 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
     if (usedPrecommitments[_precommitment]) revert PrecommitmentAlreadyUsed();
     // Mark it as used
     usedPrecommitments[_precommitment] = true;
+
+    if (_beneficiary == address(0)) revert ZeroAddress();
 
     // Check minimum deposit amount
     if (_value < _config.minimumDepositAmount) revert MinimumDepositAmount();
