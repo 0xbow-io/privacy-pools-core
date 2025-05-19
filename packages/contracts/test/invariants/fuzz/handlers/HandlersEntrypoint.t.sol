@@ -18,9 +18,7 @@ contract HandlersEntrypoint is Setup {
     (bool success, bytes memory result) = currentActor().call(
       address(entrypoint),
       0,
-      abi.encodeWithSignature(
-        'deposit(address,uint256,uint256)', token, _amount, _precommitment
-      )
+      abi.encodeWithSignature('deposit(address,uint256,uint256)', token, _amount, _precommitment)
     );
 
     if (success) {
