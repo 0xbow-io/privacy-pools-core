@@ -19,7 +19,7 @@ contract HandlersEntrypoint is Setup {
       address(entrypoint),
       0,
       abi.encodeWithSignature(
-        'deposit(address,address,uint256,uint256)', currentActor(), token, _amount, _precommitment
+        'deposit(address,uint256,uint256)', token, _amount, _precommitment
       )
     );
 
