@@ -15,6 +15,7 @@ import {WithdrawalVerifier} from 'contracts/verifiers/WithdrawalVerifier.sol';
 import {ERC1967Proxy} from '@oz/proxy/ERC1967/ERC1967Proxy.sol';
 import {UnsafeUpgrades} from '@upgrades/Upgrades.sol';
 
+import {IntegrationUtils} from './Utils.sol';
 import {IERC20} from '@oz/interfaces/IERC20.sol';
 import {Test} from 'forge-std/Test.sol';
 
@@ -28,7 +29,7 @@ import {PoseidonT4} from 'poseidon/PoseidonT4.sol';
 import {ICreateX} from 'interfaces/external/ICreateX.sol';
 import {Constants} from 'test/helper/Constants.sol';
 
-contract IntegrationBase is Test {
+contract IntegrationBase is Test, IntegrationUtils {
   using InternalLeanIMT for LeanIMTData;
 
   error WithdrawalProofGenerationFailed();
@@ -51,7 +52,6 @@ contract IntegrationBase is Test {
 
   struct DepositParams {
     address depositor;
-    address beneficiary;
     IERC20 asset;
     uint256 amount;
     string nullifier;
@@ -255,14 +255,14 @@ contract IntegrationBase is Test {
 
     // Expect Entrypoint event emission
     vm.expectEmit(address(_entrypoint));
-    emit IEntrypoint.Deposited(_params.depositor, _params.beneficiary, _pool, _commitment.hash, _commitment.value);
+    emit IEntrypoint.Deposited(_params.depositor, _pool, _commitment.hash, _commitment.value);
 
     // Deposit
     vm.prank(_params.depositor);
     if (_params.asset == IERC20(Constants.NATIVE_ASSET)) {
-      _entrypoint.deposit{value: _params.amount}(_params.beneficiary, _commitment.precommitment);
+      _entrypoint.deposit{value: _params.amount}(_commitment.precommitment);
     } else {
-      _entrypoint.deposit(_params.beneficiary, _params.asset, _params.amount, _commitment.precommitment);
+      _entrypoint.deposit(_params.asset, _params.amount, _commitment.precommitment);
     }
 
     // Check balance changes
@@ -536,25 +536,6 @@ contract IntegrationBase is Test {
                              UTILS 
   //////////////////////////////////////////////////////////////*/
 
-  function _concat(string[] memory _arr1, string[] memory _arr2) internal pure returns (string[] memory) {
-    string[] memory returnArr = new string[](_arr1.length + _arr2.length);
-    uint256 i;
-    for (; i < _arr1.length;) {
-      returnArr[i] = _arr1[i];
-      unchecked {
-        ++i;
-      }
-    }
-    uint256 j;
-    for (; j < _arr2.length;) {
-      returnArr[i + j] = _arr2[j];
-      unchecked {
-        ++j;
-      }
-    }
-    return returnArr;
-  }
-
   function _deal(address _account, IERC20 _asset, uint256 _amount) private {
     if (_asset == IERC20(Constants.NATIVE_ASSET)) {
       deal(_account, _amount);
@@ -569,29 +550,5 @@ contract IntegrationBase is Test {
     } else {
       _bal = _asset.balanceOf(_account);
     }
-  }
-
-  function _deductFee(uint256 _amount, uint256 _feeBps) private pure returns (uint256 _amountAfterFee) {
-    _amountAfterFee = _amount - (_amount * _feeBps) / 10_000;
-  }
-
-  function _hashNullifier(uint256 _nullifier) private pure returns (uint256 _nullifierHash) {
-    _nullifierHash = PoseidonT2.hash([_nullifier]);
-  }
-
-  function _hashPrecommitment(uint256 _nullifier, uint256 _secret) private pure returns (uint256 _precommitment) {
-    _precommitment = PoseidonT3.hash([_nullifier, _secret]);
-  }
-
-  function _hashCommitment(
-    uint256 _amount,
-    uint256 _label,
-    uint256 _precommitment
-  ) private pure returns (uint256 _commitmentHash) {
-    _commitmentHash = PoseidonT4.hash([_amount, _label, _precommitment]);
-  }
-
-  function _genSecretBySeed(string memory _seed) internal pure returns (uint256 _secret) {
-    _secret = uint256(keccak256(bytes(_seed))) % Constants.SNARK_SCALAR_FIELD;
   }
 }

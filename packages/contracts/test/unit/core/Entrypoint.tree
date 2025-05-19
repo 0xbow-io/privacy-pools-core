@@ -35,8 +35,6 @@ Entrypoint::deposit (ETH)
 │   │   │   └── It emits Deposited event
 │   │   ├── When value below minimum
 │   │   │   └── It reverts with MinimumDepositAmount
-│   │   ├── When beneficiary is address zero
-│   │   │   └── It reverts with ZeroAddress
 │   │   └── When precommitment already used
 │   │       └── It reverts with PrecommitmentAlreadyUsed
 │   └── When pool not found
@@ -54,8 +52,6 @@ Entrypoint::deposit (ERC20)
 │   │   │   └── It emits Deposited event
 │   │   ├── When value below minimum
 │   │   │   └── It reverts with MinimumDepositAmount
-│   │   ├── When beneficiary is address zero
-│   │   │   └── It reverts with ZeroAddress
 │   │   └── When precommitment already used
 │   │       └── It reverts with PrecommitmentAlreadyUsed
 │   └── When pool not found

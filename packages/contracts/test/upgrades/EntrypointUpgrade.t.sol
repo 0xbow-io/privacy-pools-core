@@ -1,38 +1,34 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.28;
 
-import {UUPSUpgradeable} from '@oz-upgradeable/proxy/utils/UUPSUpgradeable.sol';
+import {IntegrationUtils} from '../integration/Utils.sol';
 import {IERC1967} from '@oz/interfaces/IERC1967.sol';
 import {Test} from 'forge-std/Test.sol';
 
 import {IERC20} from '@oz/interfaces/IERC20.sol';
 import {Constants} from 'contracts/lib/Constants.sol';
 
-import {Entrypoint, IEntrypoint} from 'contracts/Entrypoint.sol';
+import {Entrypoint} from 'contracts/Entrypoint.sol';
 import {PrivacyPoolComplex} from 'contracts/implementations/PrivacyPoolComplex.sol';
 import {ProofLib} from 'contracts/lib/ProofLib.sol';
 import {IPrivacyPool} from 'interfaces/IPrivacyPool.sol';
 
-import {PoseidonT2} from 'poseidon/PoseidonT2.sol';
-import {PoseidonT3} from 'poseidon/PoseidonT3.sol';
-import {PoseidonT4} from 'poseidon/PoseidonT4.sol';
-
 contract MainnetEnvironment {
   /// @notice Current implementation address
-  address internal implementationV1 = 0xdD8aA0560a08E39C0b3A84BBa356Bc025AfbD4C1;
+  address public implementationV1 = 0xdD8aA0560a08E39C0b3A84BBa356Bc025AfbD4C1;
   /// @notice Entrypoint ERC1967Proxy address
-  Entrypoint internal proxy = Entrypoint(payable(0x6818809EefCe719E480a7526D76bD3e561526b46));
+  Entrypoint public proxy = Entrypoint(payable(0x6818809EefCe719E480a7526D76bD3e561526b46));
 
   /// @notice ETH Privacy Pool address
-  IPrivacyPool public constant ethPool = IPrivacyPool(0xF241d57C6DebAe225c0F2e6eA1529373C9A9C9fB);
+  IPrivacyPool public ethPool = IPrivacyPool(0xF241d57C6DebAe225c0F2e6eA1529373C9A9C9fB);
 
   /// @notice Owner address (SAFE multisig)
-  address public constant owner = 0xAd7f9A19E2598b6eFE0A25C84FB1c87F81eB7159;
+  address public owner = 0xAd7f9A19E2598b6eFE0A25C84FB1c87F81eB7159;
   /// @notice Postman address
-  address public constant postman = 0x1f4Fe25Cf802a0605229e0Dc497aAf653E86E187;
+  address public postman = 0x1f4Fe25Cf802a0605229e0Dc497aAf653E86E187;
 
   /// @notice Association set index at fork block
-  uint256 internal constant _associationSetIndex = 20;
+  uint256 internal _associationSetIndex = 20;
 
   /// @notice Ethereum Mainnet fork block
   uint256 internal constant _FORK_BLOCK = 22_495_337;
@@ -44,7 +40,7 @@ contract MainnetEnvironment {
  * @dev This test suite verifies the upgrade process of the Entrypoint contract using UUPS proxy pattern
  * @dev Tests are run against a forked mainnet environment to ensure compatibility with production state
  */
-contract EntrypointUpgradeIntegration is Test, MainnetEnvironment {
+contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironment {
   /// @notice Entrypoint owner role
   bytes32 internal constant _OWNER_ROLE = keccak256('OWNER_ROLE');
   /// @notice Entrypoint postman role
@@ -66,6 +62,7 @@ contract EntrypointUpgradeIntegration is Test, MainnetEnvironment {
 
   address internal _user = makeAddr('user');
   address internal _relayer = makeAddr('relayer');
+  address internal _recipient = makeAddr('recipient');
 
   function setUp() public {
     // Fork from specific block since that's the tree state we're using
@@ -100,6 +97,9 @@ contract EntrypointUpgradeIntegration is Test, MainnetEnvironment {
     );
   }
 
+  /**
+   * @notice Test that the Entrypoint state and configuration is kept the same
+   */
   function test_StateIsKept() public view {
     // Check owner has kept his role
     assertTrue(proxy.hasRole(_OWNER_ROLE, owner), 'Owner address must have the owner role');
@@ -127,28 +127,9 @@ contract EntrypointUpgradeIntegration is Test, MainnetEnvironment {
     assertEq(proxy.rootByIndex(_associationSetIndex), _latestASPRoot, 'Index must have not changed');
   }
 
-  // NOTE: not sure this test adds any value (yet)
-  function test_CurrentRootMatches() public {
-    // Command to execute the script
-    string[] memory inputs = new string[](3);
-    inputs[0] = 'node';
-    // Path to the script, assuming 'forge test' is run from the workspace root
-    inputs[1] = 'test/helper/CalculateRoot.mjs';
-    inputs[2] = 'test/upgrades/leaves_and_roots.csv';
-
-    // Execute the script using ffi
-    bytes memory result = vm.ffi(inputs);
-
-    // Decode the ABI-encoded uint256 output from the script
-    uint256 localCalculatedRoot = abi.decode(result, (uint256));
-
-    // Get the current root from the forked environment
-    uint256 onChainRoot = ethPool.currentRoot();
-
-    // Assert that the locally calculated root matches the on-chain root
-    assertEq(localCalculatedRoot, onChainRoot, 'Local root does not match on-chain root');
-  }
-
+  /**
+   * @notice Test that the Postman can still post roots and they get properly udpated
+   */
   function test_UpdateRoot() public {
     uint256 _newRoot = uint256(keccak256('some_root'));
 
@@ -161,6 +142,9 @@ contract EntrypointUpgradeIntegration is Test, MainnetEnvironment {
     assertEq(proxy.rootByIndex(_associationSetIndex + 1), _newRoot, 'ASP root index must have been updated');
   }
 
+  /**
+   * @notice Test that users can deposit and the balances get updated accordingly
+   */
   function test_ETHDeposit() public {
     uint256 _depositAmount = 10 ether;
 
@@ -184,13 +168,16 @@ contract EntrypointUpgradeIntegration is Test, MainnetEnvironment {
 
     // Deposit
     vm.prank(_user);
-    proxy.deposit{value: _depositAmount}(_user, uint256(keccak256('precommitment')));
+    proxy.deposit{value: _depositAmount}(uint256(keccak256('precommitment')));
 
     // Check balances were updated correctly
     assertEq(_entrypointBalanceBefore + _fees, address(proxy).balance, 'Entrypoint balance mismatch');
     assertEq(_poolBalanceBefore + _afterFees, address(ethPool).balance, 'Pool balance mismatch');
   }
 
+  /**
+   * @notice Test that the owner can register a new pool and wind it down
+   */
   function test_RegisterNewPool() public {
     address _raiToken = 0x03ab458634910AaD20eF5f1C8ee96F1D6ac54919;
 
@@ -226,6 +213,9 @@ contract EntrypointUpgradeIntegration is Test, MainnetEnvironment {
     assertTrue(_raiPool.dead(), 'Pool must be dead');
   }
 
+  /**
+   * @notice Test that the owner can wind down a pool and completely remove its configuration from the Entrypoint
+   */
   function test_WindDownAndRemovePool() public {
     // Check pool is active
     assertFalse(ethPool.dead(), 'Pool must be alive');
@@ -252,6 +242,9 @@ contract EntrypointUpgradeIntegration is Test, MainnetEnvironment {
     assertEq(_maxRelayFeeBPSFromConfig, 0, 'Max relay fee must be zero');
   }
 
+  /**
+   * @notice Test that the owner can withdraw the collected fees from the Entrypoint
+   */
   function test_WithdrawFees() public {
     // Fetch previous balances
     uint256 _ownerBalanceBefore = owner.balance;
@@ -266,30 +259,9 @@ contract EntrypointUpgradeIntegration is Test, MainnetEnvironment {
     assertEq(address(proxy).balance, 0, 'Entrypoint balance should be zero');
   }
 
-  function _deductFee(uint256 _amount, uint256 _feeBPS) internal pure returns (uint256 _afterFees) {
-    _afterFees = _amount - ((_amount * _feeBPS) / 10_000);
-  }
-
-  function _hashNullifier(uint256 _nullifier) private pure returns (uint256 _nullifierHash) {
-    _nullifierHash = PoseidonT2.hash([_nullifier]);
-  }
-
-  function _hashPrecommitment(uint256 _nullifier, uint256 _secret) private pure returns (uint256 _precommitment) {
-    _precommitment = PoseidonT3.hash([_nullifier, _secret]);
-  }
-
-  function _hashCommitment(
-    uint256 _amount,
-    uint256 _label,
-    uint256 _precommitment
-  ) private pure returns (uint256 _commitmentHash) {
-    _commitmentHash = PoseidonT4.hash([_amount, _label, _precommitment]);
-  }
-
-  function _genSecretBySeed(string memory _seed) internal pure returns (uint256 _secret) {
-    _secret = uint256(keccak256(bytes(_seed))) % Constants.SNARK_SCALAR_FIELD;
-  }
-
+  /**
+   * @notice Test that a user can deposit and partially withdraw through a relayer
+   */
   function test_DepositAndWithdrawThroughRelayer() public {
     uint256 _depositAmount = 10 ether;
 
@@ -308,7 +280,7 @@ contract EntrypointUpgradeIntegration is Test, MainnetEnvironment {
 
     // Deposit
     vm.prank(_user);
-    uint256 _commitmentHash = proxy.deposit{value: _depositAmount}(_user, _precommitment);
+    uint256 _commitmentHash = proxy.deposit{value: _depositAmount}(_precommitment);
 
     string[] memory _stateMerkleProofInputs = new string[](4);
     _stateMerkleProofInputs[0] = 'node';
@@ -320,7 +292,7 @@ contract EntrypointUpgradeIntegration is Test, MainnetEnvironment {
 
     uint256[] memory _leaves = new uint256[](1);
     _leaves[0] = _label;
-    bytes memory _aspMerkleProof = _generateMerkleProof(_leaves, _label);
+    bytes memory _aspMerkleProof = _generateMerkleProofMemory(_leaves, _label);
 
     (uint256 _aspRoot,,) = abi.decode(_aspMerkleProof, (uint256, uint256, uint256[]));
 
@@ -328,7 +300,7 @@ contract EntrypointUpgradeIntegration is Test, MainnetEnvironment {
     proxy.updateRoot(_aspRoot, 'ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid');
 
     IPrivacyPool.Withdrawal memory _withdrawal =
-      IPrivacyPool.Withdrawal({processooor: address(proxy), data: abi.encode(makeAddr('recipient'), _relayer, 100)});
+      IPrivacyPool.Withdrawal({processooor: address(proxy), data: abi.encode(_recipient, _relayer, 100)});
 
     uint256 _context = uint256(keccak256(abi.encode(_withdrawal, ethPool.SCOPE()))) % Constants.SNARK_SCALAR_FIELD;
 
@@ -354,30 +326,92 @@ contract EntrypointUpgradeIntegration is Test, MainnetEnvironment {
 
     ProofLib.WithdrawProof memory _proof = abi.decode(_proofData, (ProofLib.WithdrawProof));
 
+    uint256 _recipientBalanceBefore = _recipient.balance;
+
     vm.prank(_relayer);
     proxy.relay(_withdrawal, _proof, ethPool.SCOPE());
+
+    uint256 _withdrawnAmount = _deductFee(5 ether, _maxRelayFeeBPSFromConfig);
+
+    assertEq(_recipientBalanceBefore + _withdrawnAmount, _recipient.balance);
   }
 
-  function _concat(string[] memory _arr1, string[] memory _arr2) internal pure returns (string[] memory) {
-    string[] memory returnArr = new string[](_arr1.length + _arr2.length);
-    uint256 i;
-    for (; i < _arr1.length;) {
-      returnArr[i] = _arr1[i];
-      unchecked {
-        ++i;
-      }
-    }
-    uint256 j;
-    for (; j < _arr2.length;) {
-      returnArr[i + j] = _arr2[j];
-      unchecked {
-        ++j;
-      }
-    }
-    return returnArr;
+  /**
+   * @notice Test that a user can deposit and partially withdraw directly
+   */
+  function test_DepositAndWithdrawDirectly() public {
+    uint256 _depositAmount = 10 ether;
+
+    // Calculate deposited amount after configured fees
+    uint256 _afterFees = _deductFee(_depositAmount, _vettingFeeBPSFromConfig);
+
+    // Deal user
+    vm.deal(_user, _depositAmount);
+
+    uint256 _precommitment = _hashPrecommitment(_genSecretBySeed('nullifier'), _genSecretBySeed('secret'));
+
+    uint256 _currentNonce = ethPool.nonce();
+
+    uint256 _label =
+      uint256(keccak256(abi.encodePacked(ethPool.SCOPE(), ++_currentNonce))) % Constants.SNARK_SCALAR_FIELD;
+
+    // Deposit
+    vm.prank(_user);
+    uint256 _commitmentHash = proxy.deposit{value: _depositAmount}(_precommitment);
+
+    string[] memory _stateMerkleProofInputs = new string[](4);
+    _stateMerkleProofInputs[0] = 'node';
+    _stateMerkleProofInputs[1] = 'test/helper/MerkleProofFromFile.mjs';
+    _stateMerkleProofInputs[2] = 'test/upgrades/leaves_and_roots.csv';
+    _stateMerkleProofInputs[3] = vm.toString(_commitmentHash);
+
+    bytes memory _stateMerkleProof = vm.ffi(_stateMerkleProofInputs);
+
+    uint256[] memory _leaves = new uint256[](1);
+    _leaves[0] = _label;
+    bytes memory _aspMerkleProof = _generateMerkleProofMemory(_leaves, _label);
+
+    (uint256 _aspRoot,,) = abi.decode(_aspMerkleProof, (uint256, uint256, uint256[]));
+
+    vm.prank(postman);
+    proxy.updateRoot(_aspRoot, 'ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid');
+
+    IPrivacyPool.Withdrawal memory _withdrawal =
+      IPrivacyPool.Withdrawal({processooor: _recipient, data: abi.encode('')});
+
+    uint256 _context = uint256(keccak256(abi.encode(_withdrawal, ethPool.SCOPE()))) % Constants.SNARK_SCALAR_FIELD;
+
+    string[] memory _inputs = new string[](12);
+    _inputs[0] = vm.toString(_afterFees);
+    _inputs[1] = vm.toString(_label);
+    _inputs[2] = vm.toString(_genSecretBySeed('nullifier'));
+    _inputs[3] = vm.toString(_genSecretBySeed('secret'));
+    _inputs[4] = vm.toString(_genSecretBySeed('nullifier_2'));
+    _inputs[5] = vm.toString(_genSecretBySeed('secret_2'));
+    _inputs[6] = vm.toString(uint256(5 ether)); // <--- withdrawn value
+    _inputs[7] = vm.toString(_context);
+    _inputs[8] = vm.toString(_stateMerkleProof);
+    _inputs[9] = vm.toString(uint256(11));
+    _inputs[10] = vm.toString(_aspMerkleProof);
+    _inputs[11] = vm.toString(uint256(11));
+
+    // Call the ProofGenerator script using node
+    string[] memory _scriptArgs = new string[](2);
+    _scriptArgs[0] = 'node';
+    _scriptArgs[1] = 'test/helper/WithdrawalProofGenerator.mjs';
+    bytes memory _proofData = vm.ffi(_concat(_scriptArgs, _inputs));
+
+    ProofLib.WithdrawProof memory _proof = abi.decode(_proofData, (ProofLib.WithdrawProof));
+
+    uint256 _recipientBalanceBefore = _recipient.balance;
+
+    vm.prank(_recipient);
+    ethPool.withdraw(_withdrawal, _proof);
+
+    assertEq(_recipientBalanceBefore + 5 ether, _recipient.balance);
   }
 
-  function _generateMerkleProof(uint256[] memory _leaves, uint256 _leaf) internal returns (bytes memory _proof) {
+  function _generateMerkleProofMemory(uint256[] memory _leaves, uint256 _leaf) internal returns (bytes memory _proof) {
     uint256 _leavesAmt = _leaves.length;
     string[] memory inputs = new string[](_leavesAmt + 1);
     inputs[0] = vm.toString(_leaf);

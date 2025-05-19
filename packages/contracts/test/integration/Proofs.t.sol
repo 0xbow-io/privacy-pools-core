@@ -20,14 +20,7 @@ contract IntegrationProofs is IntegrationBase {
 
     // Alice deposits 100 ETH
     _commitment = _deposit(
-      DepositParams({
-        depositor: _ALICE,
-        beneficiary: _ALICE,
-        asset: _ETH,
-        amount: 100 ether,
-        nullifier: 'nullifier_1',
-        secret: 'secret_1'
-      })
+      DepositParams({depositor: _ALICE, asset: _ETH, amount: 100 ether, nullifier: 'nullifier_1', secret: 'secret_1'})
     );
 
     // Push ASP root with label included

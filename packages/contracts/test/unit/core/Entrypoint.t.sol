@@ -301,7 +301,6 @@ contract UnitRootUpdate is UnitEntrypoint {
 contract UnitDeposit is UnitEntrypoint {
   function test_DepositETHGivenValueMeetsMinimum(
     address _depositor,
-    address _for,
     uint256 _amount,
     uint256 _precommitment,
     uint256 _commitment,
@@ -319,9 +318,7 @@ contract UnitDeposit is UnitEntrypoint {
     )
   {
     _assumeFuzzable(_depositor);
-    _assumeFuzzable(_for);
     vm.assume(_depositor != address(_entrypoint));
-    vm.assume(_for != address(_entrypoint));
 
     (IPrivacyPool _pool, uint256 _minDeposit, uint256 _vettingFeeBPS,) = _entrypoint.assetConfig(IERC20(_ETH));
     // Can't be too big, otherwise overflows
@@ -332,17 +329,17 @@ contract UnitDeposit is UnitEntrypoint {
     _mockAndExpect(
       address(_pool),
       _amountAfterFees,
-      abi.encodeWithSignature('deposit(address,uint256,uint256)', _for, _amountAfterFees, _precommitment),
+      abi.encodeWithSignature('deposit(address,uint256,uint256)', _depositor, _amountAfterFees, _precommitment),
       abi.encode(_commitment)
     );
 
     uint256 _depositorBalanceBefore = _depositor.balance;
 
     vm.expectEmit(address(_entrypoint));
-    emit IEntrypoint.Deposited(_depositor, _for, IPrivacyPool(_params.pool), _commitment, _amountAfterFees);
+    emit IEntrypoint.Deposited(_depositor, IPrivacyPool(_params.pool), _commitment, _amountAfterFees);
 
     vm.prank(_depositor);
-    _entrypoint.deposit{value: _amount}(_for, _precommitment);
+    _entrypoint.deposit{value: _amount}(_precommitment);
 
     assertEq(
       _depositor.balance, _depositorBalanceBefore - _amount, 'Depositor balance should decrease by deposit amount'
@@ -355,7 +352,6 @@ contract UnitDeposit is UnitEntrypoint {
    */
   function test_DepositETHWhenValueBelowMinimum(
     address _depositor,
-    address _for,
     uint256 _amount,
     uint256 _precommitment,
     PoolParams memory _params
@@ -372,7 +368,6 @@ contract UnitDeposit is UnitEntrypoint {
     )
   {
     vm.assume(_depositor != address(0));
-    vm.assume(_for != address(0));
 
     (, uint256 _minDeposit,,) = _entrypoint.assetConfig(IERC20(_ETH));
     _amount = bound(_amount, 0, _minDeposit - 1);
@@ -380,21 +375,15 @@ contract UnitDeposit is UnitEntrypoint {
 
     vm.expectRevert(abi.encodeWithSelector(IEntrypoint.MinimumDepositAmount.selector));
     vm.prank(_depositor);
-    _entrypoint.deposit{value: _amount}(_for, _precommitment);
+    _entrypoint.deposit{value: _amount}(_precommitment);
   }
 
-  function test_DepositETHWhenPoolNotFound(
-    address _depositor,
-    address _for,
-    uint256 _amount,
-    uint256 _precommitment
-  ) external {
+  function test_DepositETHWhenPoolNotFound(address _depositor, uint256 _amount, uint256 _precommitment) external {
     vm.assume(_depositor != address(0));
-    vm.assume(_for != address(0));
     vm.deal(_depositor, _amount);
     vm.expectRevert(abi.encodeWithSelector(IEntrypoint.PoolNotFound.selector));
     vm.prank(_depositor);
-    _entrypoint.deposit{value: _amount}(_for, _precommitment);
+    _entrypoint.deposit{value: _amount}(_precommitment);
   }
 
   /**
@@ -402,16 +391,13 @@ contract UnitDeposit is UnitEntrypoint {
    */
   function test_DepositERC20GivenValueMeetsMinimum(
     address _depositor,
-    address _for,
     uint256 _amount,
     uint256 _precommitment,
     uint256 _commitment,
     PoolParams memory _params
   ) external givenPoolExists(_params) {
     _assumeFuzzable(_depositor);
-    _assumeFuzzable(_for);
     vm.assume(_depositor != address(0));
-    vm.assume(_for != address(0));
 
     // Can't be too big, otherwise overflows
     _amount = bound(_amount, _params.minDeposit, 1e30);
@@ -425,26 +411,24 @@ contract UnitDeposit is UnitEntrypoint {
 
     _mockAndExpect(
       _params.pool,
-      abi.encodeWithSignature('deposit(address,uint256,uint256)', _for, _amountAfterFees, _precommitment),
+      abi.encodeWithSignature('deposit(address,uint256,uint256)', _depositor, _amountAfterFees, _precommitment),
       abi.encode(_commitment)
     );
 
     vm.expectEmit(address(_entrypoint));
-    emit IEntrypoint.Deposited(_depositor, _for, IPrivacyPool(_params.pool), _commitment, _amountAfterFees);
+    emit IEntrypoint.Deposited(_depositor, IPrivacyPool(_params.pool), _commitment, _amountAfterFees);
 
     vm.prank(_depositor);
-    _entrypoint.deposit(_for, IERC20(_params.asset), _amount, _precommitment);
+    _entrypoint.deposit(IERC20(_params.asset), _amount, _precommitment);
   }
 
   function test_DepositERC20WhenValueBelowMinimum(
     address _depositor,
-    address _for,
     uint256 _amount,
     uint256 _precommitment,
     PoolParams memory _params
   ) external givenPoolExists(_params) {
     vm.assume(_depositor != address(0));
-    vm.assume(_for != address(0));
 
     (, uint256 _minDeposit,,) = _entrypoint.assetConfig(IERC20(_params.asset));
     _amount = bound(_amount, 0, _minDeposit - 1);
@@ -457,7 +441,7 @@ contract UnitDeposit is UnitEntrypoint {
 
     vm.expectRevert(abi.encodeWithSelector(IEntrypoint.MinimumDepositAmount.selector));
     vm.prank(_depositor);
-    _entrypoint.deposit(_for, IERC20(_params.asset), _amount, _precommitment);
+    _entrypoint.deposit(IERC20(_params.asset), _amount, _precommitment);
   }
 
   /**
@@ -465,14 +449,12 @@ contract UnitDeposit is UnitEntrypoint {
    */
   function test_DepositERC20WhenPoolNotFound(
     address _depositor,
-    address _for,
     address _asset,
     uint256 _amount,
     uint256 _precommitment
   ) external {
     _assumeFuzzable(_asset);
     vm.assume(_depositor != address(0));
-    vm.assume(_for != address(0));
     vm.assume(_asset != _ETH);
 
     _mockAndExpect(
@@ -483,7 +465,7 @@ contract UnitDeposit is UnitEntrypoint {
 
     vm.expectRevert(abi.encodeWithSelector(IEntrypoint.PoolNotFound.selector));
     vm.prank(_depositor);
-    _entrypoint.deposit(_for, IERC20(_asset), _amount, _precommitment);
+    _entrypoint.deposit(IERC20(_asset), _amount, _precommitment);
   }
 
   /**
@@ -491,7 +473,6 @@ contract UnitDeposit is UnitEntrypoint {
    */
   function test_DepositETHWhenPrecommitmentAlreadyUsed(
     address _depositor,
-    address _for,
     uint256 _amount,
     uint256 _precommitment,
     PoolParams memory _params
@@ -508,9 +489,7 @@ contract UnitDeposit is UnitEntrypoint {
     )
   {
     _assumeFuzzable(_depositor);
-    _assumeFuzzable(_for);
     vm.assume(_depositor != address(_entrypoint));
-    vm.assume(_for != address(_entrypoint));
 
     (, uint256 _minDeposit,,) = _entrypoint.assetConfig(IERC20(_ETH));
     _amount = bound(_amount, _minDeposit, 1e30);
@@ -521,7 +500,7 @@ contract UnitDeposit is UnitEntrypoint {
 
     vm.expectRevert(abi.encodeWithSelector(IEntrypoint.PrecommitmentAlreadyUsed.selector));
     vm.prank(_depositor);
-    _entrypoint.deposit{value: _amount}(_for, _precommitment);
+    _entrypoint.deposit{value: _amount}(_precommitment);
   }
 
   /**
@@ -529,13 +508,11 @@ contract UnitDeposit is UnitEntrypoint {
    */
   function test_DepositERC20WhenPrecommitmentAlreadyUsed(
     address _depositor,
-    address _for,
     uint256 _amount,
     uint256 _precommitment,
     PoolParams memory _params
   ) external givenPoolExists(_params) {
     vm.assume(_depositor != address(0));
-    vm.assume(_for != address(0));
 
     _amount = bound(_amount, _params.minDeposit, 1e30);
 
@@ -550,63 +527,7 @@ contract UnitDeposit is UnitEntrypoint {
 
     vm.expectRevert(abi.encodeWithSelector(IEntrypoint.PrecommitmentAlreadyUsed.selector));
     vm.prank(_depositor);
-    _entrypoint.deposit(_for, IERC20(_params.asset), _amount, _precommitment);
-  }
-
-  /**
-   * @notice Test that the Entrypoint reverts when the beneficiary address is the address zero for ETH deposits
-   */
-  function test_DepositETHWhenBeneficiaryIsAddressZero(
-    address _depositor,
-    uint256 _amount,
-    uint256 _precommitment,
-    PoolParams memory _params
-  )
-    external
-    givenPoolExists(
-      PoolParams({
-        pool: _params.pool,
-        asset: _ETH,
-        minDeposit: _params.minDeposit,
-        vettingFeeBPS: _params.vettingFeeBPS,
-        maxRelayFeeBPS: 500 // Default to 5%
-      })
-    )
-  {
-    _assumeFuzzable(_depositor);
-    vm.assume(_depositor != address(_entrypoint));
-
-    (, uint256 _minDeposit,,) = _entrypoint.assetConfig(IERC20(_ETH));
-    _amount = bound(_amount, _minDeposit, 1e30);
-    deal(_depositor, _amount);
-
-    vm.expectRevert(abi.encodeWithSelector(IEntrypoint.ZeroAddress.selector));
-    vm.prank(_depositor);
-    _entrypoint.deposit{value: _amount}(address(0), _precommitment);
-  }
-
-  /**
-   * @notice Test that the Entrypoint reverts when the beneficiary address is the address zero for ERC20 deposits
-   */
-  function test_DepositERC20WhenBeneficiaryIsAddressZero(
-    address _depositor,
-    uint256 _amount,
-    uint256 _precommitment,
-    PoolParams memory _params
-  ) external givenPoolExists(_params) {
-    vm.assume(_depositor != address(0));
-
-    _amount = bound(_amount, _params.minDeposit, 1e30);
-
-    _mockAndExpect(
-      _params.asset,
-      abi.encodeWithSignature('transferFrom(address,address,uint256)', _depositor, address(_entrypoint), _amount),
-      abi.encode(true)
-    );
-
-    vm.expectRevert(abi.encodeWithSelector(IEntrypoint.ZeroAddress.selector));
-    vm.prank(_depositor);
-    _entrypoint.deposit(address(0), IERC20(_params.asset), _amount, _precommitment);
+    _entrypoint.deposit(IERC20(_params.asset), _amount, _precommitment);
   }
 }
 
@@ -1851,8 +1772,7 @@ contract UnitReentrancy is UnitEntrypoint {
 
     // Expect the Attacker contract calling deposit on the Entrypoint
     vm.expectCall(
-      address(_entrypoint),
-      abi.encodeWithSignature('deposit(address,uint256)', address(0), uint256(keccak256('precommitment')))
+      address(_entrypoint), abi.encodeWithSignature('deposit(uint256)', uint256(keccak256('precommitment')))
     );
 
     // Revert when trying to relay
@@ -1867,6 +1787,6 @@ contract UnitReentrancy is UnitEntrypoint {
  */
 contract Attacker {
   fallback() external payable {
-    Entrypoint(payable(msg.sender)).deposit(address(0), uint256(keccak256('precommitment')));
+    Entrypoint(payable(msg.sender)).deposit(uint256(keccak256('precommitment')));
   }
 }
