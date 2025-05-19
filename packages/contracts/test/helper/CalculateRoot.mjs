@@ -9,8 +9,18 @@ import { encodeAbiParameters } from "viem";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Get CSV file path from command-line argument
+const args = process.argv.slice(2);
+if (args.length < 1) {
+  console.error("Usage: CalculateRoot.mjs <csvFilePath>");
+  process.exit(1);
+}
+
+// Resolve CSV file path relative to project root
+const projectRoot = resolve(__dirname, '../..');
+const csvFilePath = resolve(projectRoot, args[0]);
+
 // Read and parse the CSV data
-const csvFilePath = resolve(__dirname, 'leaves_and_roots.csv');
 const csvData = fs.readFileSync(csvFilePath, "utf8")
   .split("\n")
   .slice(1) // Skip header row
@@ -44,6 +54,8 @@ if (csvData.length === 0) {
 // Initialize LeanIMT
 const tree = new LeanIMT((a, b) => poseidon([a, b]));
 
+
+let errorsFound = 0;
 for (let i = 0; i < csvData.length; i++) {
   const record = csvData[i];
 

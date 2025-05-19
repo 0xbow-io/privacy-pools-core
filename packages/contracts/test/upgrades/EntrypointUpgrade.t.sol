@@ -8,9 +8,14 @@ import {Test} from 'forge-std/Test.sol';
 import {IERC20} from '@oz/interfaces/IERC20.sol';
 import {Constants} from 'contracts/lib/Constants.sol';
 
+import {Entrypoint, IEntrypoint} from 'contracts/Entrypoint.sol';
 import {PrivacyPoolComplex} from 'contracts/implementations/PrivacyPoolComplex.sol';
+import {ProofLib} from 'contracts/lib/ProofLib.sol';
 import {IPrivacyPool} from 'interfaces/IPrivacyPool.sol';
-import {Entrypoint, IEntrypoint} from 'src/contracts/Entrypoint.sol';
+
+import {PoseidonT2} from 'poseidon/PoseidonT2.sol';
+import {PoseidonT3} from 'poseidon/PoseidonT3.sol';
+import {PoseidonT4} from 'poseidon/PoseidonT4.sol';
 
 contract MainnetEnvironment {
   /// @notice Current implementation address
@@ -60,6 +65,7 @@ contract EntrypointUpgradeIntegration is Test, MainnetEnvironment {
   uint256 internal _latestRootByIndex;
 
   address internal _user = makeAddr('user');
+  address internal _relayer = makeAddr('relayer');
 
   function setUp() public {
     // Fork from specific block since that's the tree state we're using
@@ -124,10 +130,11 @@ contract EntrypointUpgradeIntegration is Test, MainnetEnvironment {
   // NOTE: not sure this test adds any value (yet)
   function test_CurrentRootMatches() public {
     // Command to execute the script
-    string[] memory inputs = new string[](2);
+    string[] memory inputs = new string[](3);
     inputs[0] = 'node';
     // Path to the script, assuming 'forge test' is run from the workspace root
-    inputs[1] = 'test/upgrades/calculateRoot.mjs';
+    inputs[1] = 'test/helper/CalculateRoot.mjs';
+    inputs[2] = 'test/upgrades/leaves_and_roots.csv';
 
     // Execute the script using ffi
     bytes memory result = vm.ffi(inputs);
@@ -262,5 +269,127 @@ contract EntrypointUpgradeIntegration is Test, MainnetEnvironment {
   function _deductFee(uint256 _amount, uint256 _feeBPS) internal pure returns (uint256 _afterFees) {
     _afterFees = _amount - ((_amount * _feeBPS) / 10_000);
   }
-}
 
+  function _hashNullifier(uint256 _nullifier) private pure returns (uint256 _nullifierHash) {
+    _nullifierHash = PoseidonT2.hash([_nullifier]);
+  }
+
+  function _hashPrecommitment(uint256 _nullifier, uint256 _secret) private pure returns (uint256 _precommitment) {
+    _precommitment = PoseidonT3.hash([_nullifier, _secret]);
+  }
+
+  function _hashCommitment(
+    uint256 _amount,
+    uint256 _label,
+    uint256 _precommitment
+  ) private pure returns (uint256 _commitmentHash) {
+    _commitmentHash = PoseidonT4.hash([_amount, _label, _precommitment]);
+  }
+
+  function _genSecretBySeed(string memory _seed) internal pure returns (uint256 _secret) {
+    _secret = uint256(keccak256(bytes(_seed))) % Constants.SNARK_SCALAR_FIELD;
+  }
+
+  function test_DepositAndWithdrawThroughRelayer() public {
+    uint256 _depositAmount = 10 ether;
+
+    // Calculate deposited amount after configured fees
+    uint256 _afterFees = _deductFee(_depositAmount, _vettingFeeBPSFromConfig);
+
+    // Deal user
+    vm.deal(_user, _depositAmount);
+
+    uint256 _precommitment = _hashPrecommitment(_genSecretBySeed('nullifier'), _genSecretBySeed('secret'));
+
+    uint256 _currentNonce = ethPool.nonce();
+
+    uint256 _label =
+      uint256(keccak256(abi.encodePacked(ethPool.SCOPE(), ++_currentNonce))) % Constants.SNARK_SCALAR_FIELD;
+
+    // Deposit
+    vm.prank(_user);
+    uint256 _commitmentHash = proxy.deposit{value: _depositAmount}(_user, _precommitment);
+
+    string[] memory _stateMerkleProofInputs = new string[](4);
+    _stateMerkleProofInputs[0] = 'node';
+    _stateMerkleProofInputs[1] = 'test/helper/MerkleProofFromFile.mjs';
+    _stateMerkleProofInputs[2] = 'test/upgrades/leaves_and_roots.csv';
+    _stateMerkleProofInputs[3] = vm.toString(_commitmentHash);
+
+    bytes memory _stateMerkleProof = vm.ffi(_stateMerkleProofInputs);
+
+    uint256[] memory _leaves = new uint256[](1);
+    _leaves[0] = _label;
+    bytes memory _aspMerkleProof = _generateMerkleProof(_leaves, _label);
+
+    (uint256 _aspRoot,,) = abi.decode(_aspMerkleProof, (uint256, uint256, uint256[]));
+
+    vm.prank(postman);
+    proxy.updateRoot(_aspRoot, 'ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid');
+
+    IPrivacyPool.Withdrawal memory _withdrawal =
+      IPrivacyPool.Withdrawal({processooor: address(proxy), data: abi.encode(makeAddr('recipient'), _relayer, 100)});
+
+    uint256 _context = uint256(keccak256(abi.encode(_withdrawal, ethPool.SCOPE()))) % Constants.SNARK_SCALAR_FIELD;
+
+    string[] memory _inputs = new string[](12);
+    _inputs[0] = vm.toString(_afterFees);
+    _inputs[1] = vm.toString(_label);
+    _inputs[2] = vm.toString(_genSecretBySeed('nullifier'));
+    _inputs[3] = vm.toString(_genSecretBySeed('secret'));
+    _inputs[4] = vm.toString(_genSecretBySeed('nullifier_2'));
+    _inputs[5] = vm.toString(_genSecretBySeed('secret_2'));
+    _inputs[6] = vm.toString(uint256(5 ether)); // <--- withdrawn value
+    _inputs[7] = vm.toString(_context);
+    _inputs[8] = vm.toString(_stateMerkleProof);
+    _inputs[9] = vm.toString(uint256(11));
+    _inputs[10] = vm.toString(_aspMerkleProof);
+    _inputs[11] = vm.toString(uint256(11));
+
+    // Call the ProofGenerator script using node
+    string[] memory _scriptArgs = new string[](2);
+    _scriptArgs[0] = 'node';
+    _scriptArgs[1] = 'test/helper/WithdrawalProofGenerator.mjs';
+    bytes memory _proofData = vm.ffi(_concat(_scriptArgs, _inputs));
+
+    ProofLib.WithdrawProof memory _proof = abi.decode(_proofData, (ProofLib.WithdrawProof));
+
+    vm.prank(_relayer);
+    proxy.relay(_withdrawal, _proof, ethPool.SCOPE());
+  }
+
+  function _concat(string[] memory _arr1, string[] memory _arr2) internal pure returns (string[] memory) {
+    string[] memory returnArr = new string[](_arr1.length + _arr2.length);
+    uint256 i;
+    for (; i < _arr1.length;) {
+      returnArr[i] = _arr1[i];
+      unchecked {
+        ++i;
+      }
+    }
+    uint256 j;
+    for (; j < _arr2.length;) {
+      returnArr[i + j] = _arr2[j];
+      unchecked {
+        ++j;
+      }
+    }
+    return returnArr;
+  }
+
+  function _generateMerkleProof(uint256[] memory _leaves, uint256 _leaf) internal returns (bytes memory _proof) {
+    uint256 _leavesAmt = _leaves.length;
+    string[] memory inputs = new string[](_leavesAmt + 1);
+    inputs[0] = vm.toString(_leaf);
+
+    for (uint256 i = 0; i < _leavesAmt; i++) {
+      inputs[i + 1] = vm.toString(_leaves[i]);
+    }
+
+    // Call the ProofGenerator script using node
+    string[] memory scriptArgs = new string[](2);
+    scriptArgs[0] = 'node';
+    scriptArgs[1] = 'test/helper/MerkleProofGenerator.mjs';
+    _proof = vm.ffi(_concat(scriptArgs, inputs));
+  }
+}
