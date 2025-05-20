@@ -9,7 +9,7 @@ import {IERC20} from '@oz/interfaces/IERC20.sol';
 import {Initializable} from '@oz/proxy/utils/Initializable.sol';
 import {Constants} from 'contracts/lib/Constants.sol';
 
-import {Entrypoint} from 'contracts/Entrypoint.sol';
+import {Entrypoint, IEntrypoint} from 'contracts/Entrypoint.sol';
 import {PrivacyPoolComplex} from 'contracts/implementations/PrivacyPoolComplex.sol';
 import {ProofLib} from 'contracts/lib/ProofLib.sol';
 import {IPrivacyPool} from 'interfaces/IPrivacyPool.sol';
@@ -77,7 +77,7 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
   ProofLib.WithdrawProof internal _withdrawProof;
   ProofLib.RagequitProof internal _ragequitProof;
 
-  function setUp() public {
+  function setUp() public virtual {
     // Fork from specific block since that's the tree state we're using
     vm.createSelectFork(vm.rpcUrl('mainnet'), _FORK_BLOCK);
 
@@ -196,6 +196,13 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
     // Check balances were updated correctly
     assertEq(_entrypointBalanceBefore + _fees, address(proxy).balance, 'Entrypoint balance mismatch');
     assertEq(_poolBalanceBefore + _value, address(ethPool).balance, 'Pool balance mismatch');
+
+    // Can't reuse same precommitment
+    vm.deal(_user, _depositAmount);
+
+    vm.expectRevert(IEntrypoint.PrecommitmentAlreadyUsed.selector);
+    vm.prank(_user);
+    proxy.deposit{value: _depositAmount}(uint256(keccak256('precommitment')));
   }
 
   /**
@@ -601,5 +608,117 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
     scriptArgs[0] = 'node';
     scriptArgs[1] = 'test/helper/MerkleProofGenerator.mjs';
     _proof = vm.ffi(_concat(scriptArgs, inputs));
+  }
+}
+
+/**
+ * @dev Testing a deposit+withdrawal with the upgrade in between
+ */
+contract EntrypointBeforeAndAfterIntegration is EntrypointUpgradeIntegration {
+  function setUp() public override {
+    // Fork mainnet without upgrading
+    vm.createSelectFork(vm.rpcUrl('mainnet'), _FORK_BLOCK);
+
+    // Fetch vetting fee for value calculation
+    (,, _vettingFeeBPSFromConfig,) = proxy.assetConfig(IERC20(Constants.NATIVE_ASSET));
+  }
+
+  function test_DepositAndWithdrawMidUpgrade() public {
+    uint256 _depositAmount = 2 ether;
+
+    // Calculate deposited amount after configured fees
+    _value = _deductFee(_depositAmount, _vettingFeeBPSFromConfig);
+
+    // Deal user
+    vm.deal(_user, _depositAmount);
+
+    // Compute precommitment
+    _nullifier = _genSecretBySeed('nullifier');
+    _secret = _genSecretBySeed('secret');
+    _precommitment = _hashPrecommitment(_nullifier, _secret);
+
+    // Precalculate label
+    uint256 _currentNonce = ethPool.nonce();
+    _label = uint256(keccak256(abi.encodePacked(ethPool.SCOPE(), ++_currentNonce))) % Constants.SNARK_SCALAR_FIELD;
+
+    // Deposit
+    vm.prank(_user);
+    uint256 _commitmentHash = proxy.deposit{value: _depositAmount}(_precommitment);
+
+    //////////////////////////////////////// CONTRACT UPRGADE : START ////////////////////////////////////////
+
+    // Deploy new implementation
+    Entrypoint _newImplementation = new Entrypoint();
+
+    // Upgrade Entrypoint
+    vm.prank(owner);
+    proxy.upgradeToAndCall(address(_newImplementation), '');
+
+    // Check the implementation was successfully updated in the proxy storage
+    bytes32 _implementationAddressRaw = vm.load(address(proxy), _IMPLEMENTATION_SLOT);
+    assertEq(
+      address(uint160(uint256(_implementationAddressRaw))),
+      address(_newImplementation),
+      "Implementation addresses don't match"
+    );
+
+    ////////////////////////////////////// CONTRACT UPRGADE : END ////////////////////////////////////////
+
+    // Generate the state merkle proof with the fork state tree and the new leaf (commitment hash)
+    string[] memory _stateMerkleProofInputs = new string[](4);
+    _stateMerkleProofInputs[0] = 'node';
+    _stateMerkleProofInputs[1] = 'test/helper/MerkleProofFromFile.mjs';
+    _stateMerkleProofInputs[2] = 'test/upgrades/leaves_and_roots.csv';
+    _stateMerkleProofInputs[3] = vm.toString(_commitmentHash);
+
+    bytes memory _stateMerkleProof = vm.ffi(_stateMerkleProofInputs);
+
+    // Create a single-leaf ASP tree with only our label
+    uint256[] memory _leaves = new uint256[](1);
+    _leaves[0] = _label;
+    bytes memory _aspMerkleProof = _generateMerkleProofMemory(_leaves, _label);
+
+    (uint256 _aspRoot,,) = abi.decode(_aspMerkleProof, (uint256, uint256, uint256[]));
+
+    // Push the new root including our label
+    vm.prank(postman);
+    proxy.updateRoot(_aspRoot, 'ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid');
+
+    // Prepare withdrawal without fee data and `recipient` as processooor
+    IPrivacyPool.Withdrawal memory _withdrawal =
+      IPrivacyPool.Withdrawal({processooor: _recipient, data: abi.encode('')});
+
+    // Calculate context for proof gen
+    _context = uint256(keccak256(abi.encode(_withdrawal, ethPool.SCOPE()))) % Constants.SNARK_SCALAR_FIELD;
+
+    string[] memory _inputs = new string[](12);
+    _inputs[0] = vm.toString(_value);
+    _inputs[1] = vm.toString(_label);
+    _inputs[2] = vm.toString(_genSecretBySeed('nullifier'));
+    _inputs[3] = vm.toString(_genSecretBySeed('secret'));
+    _inputs[4] = vm.toString(_genSecretBySeed('nullifier_2'));
+    _inputs[5] = vm.toString(_genSecretBySeed('secret_2'));
+    _inputs[6] = vm.toString(uint256(1 ether)); // <--- withdrawn value
+    _inputs[7] = vm.toString(_context);
+    _inputs[8] = vm.toString(_stateMerkleProof);
+    _inputs[9] = vm.toString(uint256(11));
+    _inputs[10] = vm.toString(_aspMerkleProof);
+    _inputs[11] = vm.toString(uint256(11));
+
+    // Call the ProofGenerator script using node
+    string[] memory _scriptArgs = new string[](2);
+    _scriptArgs[0] = 'node';
+    _scriptArgs[1] = 'test/helper/WithdrawalProofGenerator.mjs';
+    bytes memory _proofData = vm.ffi(_concat(_scriptArgs, _inputs));
+
+    ProofLib.WithdrawProof memory _proof = abi.decode(_proofData, (ProofLib.WithdrawProof));
+
+    uint256 _recipientBalanceBefore = _recipient.balance;
+
+    // Successfully withdraw after upgrade
+    vm.prank(_recipient);
+    ethPool.withdraw(_withdrawal, _proof);
+
+    assertEq(_recipientBalanceBefore + 1 ether, _recipient.balance);
   }
 }
