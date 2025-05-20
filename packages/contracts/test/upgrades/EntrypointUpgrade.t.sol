@@ -573,9 +573,6 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
 
     // Don't approve anything ASP-wise
 
-    // Warp 2 days (not needed at all)
-    vm.warp(block.timestamp + 2 days);
-
     // Generate ragequit proof
     ProofLib.RagequitProof memory _proof = _generateRagequitProof(_value, _label, _nullifier, _secret);
 
