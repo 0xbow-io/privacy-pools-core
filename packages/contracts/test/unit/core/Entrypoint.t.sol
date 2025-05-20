@@ -231,6 +231,8 @@ contract UnitRootUpdate is UnitEntrypoint {
     uint256 _length = bytes(_ipfsCID).length;
     vm.assume(_length >= 32 && _length <= 64);
 
+    _timestamp = bound(_timestamp, 1, type(uint64).max - 1);
+
     vm.warp(_timestamp);
 
     vm.expectEmit(address(_entrypoint));
