@@ -294,38 +294,44 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
     // Deal user
     vm.deal(_user, _depositAmount);
 
+    // Compute precommitment
     _precommitment = _hashPrecommitment(_genSecretBySeed('nullifier'), _genSecretBySeed('secret'));
 
+    // Precalculate label
     uint256 _currentNonce = ethPool.nonce();
-
     _label = uint256(keccak256(abi.encodePacked(ethPool.SCOPE(), ++_currentNonce))) % Constants.SNARK_SCALAR_FIELD;
 
     // Deposit
     vm.prank(_user);
     uint256 _commitmentHash = proxy.deposit{value: _depositAmount}(_precommitment);
 
+    // Generate the state merkle proof with the fork state tree and the new leaf (commitment hash)
     string[] memory _stateMerkleProofInputs = new string[](4);
     _stateMerkleProofInputs[0] = 'node';
     _stateMerkleProofInputs[1] = 'test/helper/MerkleProofFromFile.mjs';
     _stateMerkleProofInputs[2] = 'test/upgrades/leaves_and_roots.csv';
     _stateMerkleProofInputs[3] = vm.toString(_commitmentHash);
-
     bytes memory _stateMerkleProof = vm.ffi(_stateMerkleProofInputs);
 
+    // Create a single-leaf ASP tree with only our label
     uint256[] memory _leaves = new uint256[](1);
     _leaves[0] = _label;
     bytes memory _aspMerkleProof = _generateMerkleProofMemory(_leaves, _label);
 
     (uint256 _aspRoot,,) = abi.decode(_aspMerkleProof, (uint256, uint256, uint256[]));
 
+    // Push the new root including our label
     vm.prank(postman);
     proxy.updateRoot(_aspRoot, 'ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid');
 
+    // Prepare withdrawal for relayer with encoded relay fees data
     IPrivacyPool.Withdrawal memory _withdrawal =
       IPrivacyPool.Withdrawal({processooor: address(proxy), data: abi.encode(_recipient, _relayer, 100)});
 
+    // Compute context for proof gen
     _context = uint256(keccak256(abi.encode(_withdrawal, ethPool.SCOPE()))) % Constants.SNARK_SCALAR_FIELD;
 
+    // Generate Withdrawal proof
     string[] memory _inputs = new string[](12);
     _inputs[0] = vm.toString(_value);
     _inputs[1] = vm.toString(_label);
@@ -340,7 +346,6 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
     _inputs[10] = vm.toString(_aspMerkleProof);
     _inputs[11] = vm.toString(uint256(11));
 
-    // Call the ProofGenerator script using node
     string[] memory _scriptArgs = new string[](2);
     _scriptArgs[0] = 'node';
     _scriptArgs[1] = 'test/helper/WithdrawalProofGenerator.mjs';
@@ -348,13 +353,15 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
 
     ProofLib.WithdrawProof memory _proof = abi.decode(_proofData, (ProofLib.WithdrawProof));
 
+    // Fetch recipient balance before
     uint256 _recipientBalanceBefore = _recipient.balance;
 
+    // Relay withdrawal as relayer
     vm.prank(_relayer);
     proxy.relay(_withdrawal, _proof, ethPool.SCOPE());
 
+    // Check the balance has correctly changed
     uint256 _withdrawnAmount = _deductFee(5 ether, _maxRelayFeeBPSFromConfig);
-
     assertEq(_recipientBalanceBefore + _withdrawnAmount, _recipient.balance);
   }
 
@@ -370,16 +377,20 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
     // Deal user
     vm.deal(_user, _depositAmount);
 
-    _precommitment = _hashPrecommitment(_genSecretBySeed('nullifier'), _genSecretBySeed('secret'));
+    // Compute precommitment
+    _nullifier = _genSecretBySeed('nullifier');
+    _secret = _genSecretBySeed('secret');
+    _precommitment = _hashPrecommitment(_nullifier, _secret);
 
+    // Precalculate label
     uint256 _currentNonce = ethPool.nonce();
-
     _label = uint256(keccak256(abi.encodePacked(ethPool.SCOPE(), ++_currentNonce))) % Constants.SNARK_SCALAR_FIELD;
 
     // Deposit
     vm.prank(_user);
     uint256 _commitmentHash = proxy.deposit{value: _depositAmount}(_precommitment);
 
+    // Generate the state merkle proof with the fork state tree and the new leaf (commitment hash)
     string[] memory _stateMerkleProofInputs = new string[](4);
     _stateMerkleProofInputs[0] = 'node';
     _stateMerkleProofInputs[1] = 'test/helper/MerkleProofFromFile.mjs';
@@ -388,18 +399,22 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
 
     bytes memory _stateMerkleProof = vm.ffi(_stateMerkleProofInputs);
 
+    // Create a single-leaf ASP tree with only our label
     uint256[] memory _leaves = new uint256[](1);
     _leaves[0] = _label;
     bytes memory _aspMerkleProof = _generateMerkleProofMemory(_leaves, _label);
 
     (uint256 _aspRoot,,) = abi.decode(_aspMerkleProof, (uint256, uint256, uint256[]));
 
+    // Push the new root including our label
     vm.prank(postman);
     proxy.updateRoot(_aspRoot, 'ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid');
 
+    // Prepare withdrawal without fee data and `recipient` as processooor
     IPrivacyPool.Withdrawal memory _withdrawal =
       IPrivacyPool.Withdrawal({processooor: _recipient, data: abi.encode('')});
 
+    // Calculate context for proof gen
     _context = uint256(keccak256(abi.encode(_withdrawal, ethPool.SCOPE()))) % Constants.SNARK_SCALAR_FIELD;
 
     string[] memory _inputs = new string[](12);
@@ -444,17 +459,20 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
     // Deal user
     vm.deal(_user, _depositAmount);
 
-    uint256 _currentNonce = ethPool.nonce();
-    _label = uint256(keccak256(abi.encodePacked(ethPool.SCOPE(), ++_currentNonce))) % Constants.SNARK_SCALAR_FIELD;
-
-    // Deposit
+    // Compute precommitment
     _nullifier = _genSecretBySeed('nullifier');
     _secret = _genSecretBySeed('secret');
     _precommitment = _hashPrecommitment(_nullifier, _secret);
 
+    // Precalculate label
+    uint256 _currentNonce = ethPool.nonce();
+    _label = uint256(keccak256(abi.encodePacked(ethPool.SCOPE(), ++_currentNonce))) % Constants.SNARK_SCALAR_FIELD;
+
+    // Deposit
     vm.prank(_user);
     uint256 _commitmentHash = proxy.deposit{value: _depositAmount}(_precommitment);
 
+    // Generate the state merkle proof with the fork state tree and the new leaf (commitment hash)
     string[] memory _stateMerkleProofInputs = new string[](4);
     _stateMerkleProofInputs[0] = 'node';
     _stateMerkleProofInputs[1] = 'test/helper/MerkleProofFromFile.mjs';
@@ -463,20 +481,24 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
 
     bytes memory _stateMerkleProof = vm.ffi(_stateMerkleProofInputs);
 
+    // Create a single-leaf ASP tree with only our label
     uint256[] memory _leaves = new uint256[](1);
     _leaves[0] = _label;
     bytes memory _aspMerkleProof = _generateMerkleProofMemory(_leaves, _label);
-
     (uint256 _aspRoot,,) = abi.decode(_aspMerkleProof, (uint256, uint256, uint256[]));
 
+    // Push new root with our label
     vm.prank(postman);
     proxy.updateRoot(_aspRoot, 'ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid');
 
+    // Prepare direct withdrawal
     IPrivacyPool.Withdrawal memory _withdrawal =
       IPrivacyPool.Withdrawal({processooor: _recipient, data: abi.encode('')});
 
+    // Compute context for proof gen
     _context = uint256(keccak256(abi.encode(_withdrawal, ethPool.SCOPE()))) % Constants.SNARK_SCALAR_FIELD;
 
+    // Generate Withdrawal proof
     string[] memory _inputs = new string[](12);
     _inputs[0] = vm.toString(_value);
     _inputs[1] = vm.toString(_label);
@@ -491,7 +513,6 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
     _inputs[10] = vm.toString(_aspMerkleProof);
     _inputs[11] = vm.toString(uint256(11));
 
-    // Call the ProofGenerator script using node
     string[] memory _scriptArgs = new string[](2);
     _scriptArgs[0] = 'node';
     _scriptArgs[1] = 'test/helper/WithdrawalProofGenerator.mjs';
@@ -499,18 +520,30 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
 
     _withdrawProof = abi.decode(_proofData, (ProofLib.WithdrawProof));
 
+    // Fetch recipient balance before withdrawal
     uint256 _recipientBalanceBefore = _recipient.balance;
 
+    // Successfully withdraw
     vm.prank(_recipient);
     ethPool.withdraw(_withdrawal, _withdrawProof);
 
-    assertEq(_recipientBalanceBefore + 2 ether, _recipient.balance);
+    // Check balance was correctly updated
+    assertEq(_recipientBalanceBefore + 2 ether, _recipient.balance, 'Recipient balance mismatch');
+    _value -= 2 ether;
 
+    // Generate ragequit proof
     _ragequitProof =
-      _generateRagequitProof(_value - 2 ether, _label, _genSecretBySeed('nullifier_2'), _genSecretBySeed('secret_2'));
+      _generateRagequitProof(_value, _label, _genSecretBySeed('nullifier_2'), _genSecretBySeed('secret_2'));
 
+    // Fetch user balance before ragequitting
+    uint256 _userBalanceBefore = _user.balance;
+
+    // Call `ragequit` as original depositor
     vm.prank(_user);
     ethPool.ragequit(_ragequitProof);
+
+    // Check balance was correctly updated
+    assertEq(_userBalanceBefore + _value, _user.balance, 'User balance mismatch');
   }
 
   /**
@@ -525,26 +558,36 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
     // Deal user
     vm.deal(_user, _depositAmount);
 
+    // Compute precommitment
     _nullifier = _genSecretBySeed('nullifier');
     _secret = _genSecretBySeed('secret');
-
     _precommitment = _hashPrecommitment(_nullifier, _secret);
 
+    // Precompute label
     uint256 _currentNonce = ethPool.nonce();
-
     _label = uint256(keccak256(abi.encodePacked(ethPool.SCOPE(), ++_currentNonce))) % Constants.SNARK_SCALAR_FIELD;
 
     // Deposit
     vm.prank(_user);
     proxy.deposit{value: _depositAmount}(_precommitment);
 
+    // Don't approve anything ASP-wise
+
+    // Warp 2 days (not needed at all)
     vm.warp(block.timestamp + 2 days);
 
+    // Generate ragequit proof
     ProofLib.RagequitProof memory _proof = _generateRagequitProof(_value, _label, _nullifier, _secret);
+
+    // Fetch user balance before ragequitting
+    uint256 _userBalanceBefore = _user.balance;
 
     // Ragequit full commitment as the original depositor
     vm.prank(_user);
     ethPool.ragequit(_proof);
+
+    // Check the balance was correctly updated
+    assertEq(_userBalanceBefore + _value, _user.balance, 'User balance mismatch');
   }
 
   function _generateMerkleProofMemory(uint256[] memory _leaves, uint256 _leaf) internal returns (bytes memory _proof) {
