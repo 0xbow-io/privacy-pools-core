@@ -6,6 +6,7 @@ import {IERC1967} from '@oz/interfaces/IERC1967.sol';
 import {Test} from 'forge-std/Test.sol';
 
 import {IERC20} from '@oz/interfaces/IERC20.sol';
+import {Initializable} from '@oz/proxy/utils/Initializable.sol';
 import {Constants} from 'contracts/lib/Constants.sol';
 
 import {Entrypoint} from 'contracts/Entrypoint.sol';
@@ -48,6 +49,8 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
   /// @notice Storage slot where the implementation address is located for ERC1967 Proxies
   bytes32 internal constant _IMPLEMENTATION_SLOT = 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
 
+  bytes32 private constant _INITIALIZABLE_SLOT = 0xf0c57e16840df040f15088dc2f81fe391c3923bec73e23a9662efc9c229c6a00;
+
   /// @notice Pool configuration tracking
   IPrivacyPool internal _poolAddressFromConfig;
   uint256 internal _minimumDepositAmountFromConfig;
@@ -63,6 +66,16 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
   address internal _user = makeAddr('user');
   address internal _relayer = makeAddr('relayer');
   address internal _recipient = makeAddr('recipient');
+
+  /// @notice Variables for testing flows, trying to avoid stack-too-deep
+  uint256 internal _value;
+  uint256 internal _label;
+  uint256 internal _precommitment;
+  uint256 internal _nullifier;
+  uint256 internal _secret;
+  uint256 internal _context;
+  ProofLib.WithdrawProof internal _withdrawProof;
+  ProofLib.RagequitProof internal _ragequitProof;
 
   function setUp() public {
     // Fork from specific block since that's the tree state we're using
@@ -100,7 +113,17 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
   /**
    * @notice Test that the Entrypoint state and configuration is kept the same
    */
-  function test_StateIsKept() public view {
+  function test_StateIsKept() public {
+    // Check initialization status
+    bytes32 _initializableStorage = vm.load(address(proxy), _INITIALIZABLE_SLOT);
+    uint64 _initializedVersion = uint64(uint256(_initializableStorage));
+    assertEq(_initializedVersion, 1, 'Proxy must be already initialized');
+
+    // Check can't be initialized again
+    vm.expectRevert(Initializable.InvalidInitialization.selector);
+    vm.prank(owner);
+    proxy.initialize(owner, postman);
+
     // Check owner has kept his role
     assertTrue(proxy.hasRole(_OWNER_ROLE, owner), 'Owner address must have the owner role');
     assertTrue(proxy.hasRole(_ASP_POSTMAN, postman), 'Postman address must have the postman role');
@@ -149,8 +172,8 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
     uint256 _depositAmount = 10 ether;
 
     // Calculate deposited amount after configured fees
-    uint256 _afterFees = _deductFee(_depositAmount, _vettingFeeBPSFromConfig);
-    uint256 _fees = _depositAmount - _afterFees;
+    _value = _deductFee(_depositAmount, _vettingFeeBPSFromConfig);
+    uint256 _fees = _depositAmount - _value;
 
     // Deal user
     vm.deal(_user, _depositAmount);
@@ -162,8 +185,8 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
     // Expect `deposit` call to ETH pool
     vm.expectCall(
       address(ethPool),
-      _afterFees,
-      abi.encodeWithSelector(IPrivacyPool.deposit.selector, _user, _afterFees, uint256(keccak256('precommitment')))
+      _value,
+      abi.encodeWithSelector(IPrivacyPool.deposit.selector, _user, _value, uint256(keccak256('precommitment')))
     );
 
     // Deposit
@@ -172,7 +195,7 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
 
     // Check balances were updated correctly
     assertEq(_entrypointBalanceBefore + _fees, address(proxy).balance, 'Entrypoint balance mismatch');
-    assertEq(_poolBalanceBefore + _afterFees, address(ethPool).balance, 'Pool balance mismatch');
+    assertEq(_poolBalanceBefore + _value, address(ethPool).balance, 'Pool balance mismatch');
   }
 
   /**
@@ -266,17 +289,16 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
     uint256 _depositAmount = 10 ether;
 
     // Calculate deposited amount after configured fees
-    uint256 _afterFees = _deductFee(_depositAmount, _vettingFeeBPSFromConfig);
+    _value = _deductFee(_depositAmount, _vettingFeeBPSFromConfig);
 
     // Deal user
     vm.deal(_user, _depositAmount);
 
-    uint256 _precommitment = _hashPrecommitment(_genSecretBySeed('nullifier'), _genSecretBySeed('secret'));
+    _precommitment = _hashPrecommitment(_genSecretBySeed('nullifier'), _genSecretBySeed('secret'));
 
     uint256 _currentNonce = ethPool.nonce();
 
-    uint256 _label =
-      uint256(keccak256(abi.encodePacked(ethPool.SCOPE(), ++_currentNonce))) % Constants.SNARK_SCALAR_FIELD;
+    _label = uint256(keccak256(abi.encodePacked(ethPool.SCOPE(), ++_currentNonce))) % Constants.SNARK_SCALAR_FIELD;
 
     // Deposit
     vm.prank(_user);
@@ -302,10 +324,10 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
     IPrivacyPool.Withdrawal memory _withdrawal =
       IPrivacyPool.Withdrawal({processooor: address(proxy), data: abi.encode(_recipient, _relayer, 100)});
 
-    uint256 _context = uint256(keccak256(abi.encode(_withdrawal, ethPool.SCOPE()))) % Constants.SNARK_SCALAR_FIELD;
+    _context = uint256(keccak256(abi.encode(_withdrawal, ethPool.SCOPE()))) % Constants.SNARK_SCALAR_FIELD;
 
     string[] memory _inputs = new string[](12);
-    _inputs[0] = vm.toString(_afterFees);
+    _inputs[0] = vm.toString(_value);
     _inputs[1] = vm.toString(_label);
     _inputs[2] = vm.toString(_genSecretBySeed('nullifier'));
     _inputs[3] = vm.toString(_genSecretBySeed('secret'));
@@ -343,17 +365,16 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
     uint256 _depositAmount = 10 ether;
 
     // Calculate deposited amount after configured fees
-    uint256 _afterFees = _deductFee(_depositAmount, _vettingFeeBPSFromConfig);
+    _value = _deductFee(_depositAmount, _vettingFeeBPSFromConfig);
 
     // Deal user
     vm.deal(_user, _depositAmount);
 
-    uint256 _precommitment = _hashPrecommitment(_genSecretBySeed('nullifier'), _genSecretBySeed('secret'));
+    _precommitment = _hashPrecommitment(_genSecretBySeed('nullifier'), _genSecretBySeed('secret'));
 
     uint256 _currentNonce = ethPool.nonce();
 
-    uint256 _label =
-      uint256(keccak256(abi.encodePacked(ethPool.SCOPE(), ++_currentNonce))) % Constants.SNARK_SCALAR_FIELD;
+    _label = uint256(keccak256(abi.encodePacked(ethPool.SCOPE(), ++_currentNonce))) % Constants.SNARK_SCALAR_FIELD;
 
     // Deposit
     vm.prank(_user);
@@ -379,10 +400,10 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
     IPrivacyPool.Withdrawal memory _withdrawal =
       IPrivacyPool.Withdrawal({processooor: _recipient, data: abi.encode('')});
 
-    uint256 _context = uint256(keccak256(abi.encode(_withdrawal, ethPool.SCOPE()))) % Constants.SNARK_SCALAR_FIELD;
+    _context = uint256(keccak256(abi.encode(_withdrawal, ethPool.SCOPE()))) % Constants.SNARK_SCALAR_FIELD;
 
     string[] memory _inputs = new string[](12);
-    _inputs[0] = vm.toString(_afterFees);
+    _inputs[0] = vm.toString(_value);
     _inputs[1] = vm.toString(_label);
     _inputs[2] = vm.toString(_genSecretBySeed('nullifier'));
     _inputs[3] = vm.toString(_genSecretBySeed('secret'));
@@ -409,6 +430,121 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
     ethPool.withdraw(_withdrawal, _proof);
 
     assertEq(_recipientBalanceBefore + 5 ether, _recipient.balance);
+  }
+
+  /**
+   * @notice Test that a user can deposit, partially withdraw and ragequit
+   */
+  function test_DepositWithdrawAndRagequit() public {
+    uint256 _depositAmount = 5 ether;
+
+    // Calculate deposited amount after configured fees
+    _value = _deductFee(_depositAmount, _vettingFeeBPSFromConfig);
+
+    // Deal user
+    vm.deal(_user, _depositAmount);
+
+    uint256 _currentNonce = ethPool.nonce();
+    _label = uint256(keccak256(abi.encodePacked(ethPool.SCOPE(), ++_currentNonce))) % Constants.SNARK_SCALAR_FIELD;
+
+    // Deposit
+    _nullifier = _genSecretBySeed('nullifier');
+    _secret = _genSecretBySeed('secret');
+    _precommitment = _hashPrecommitment(_nullifier, _secret);
+
+    vm.prank(_user);
+    uint256 _commitmentHash = proxy.deposit{value: _depositAmount}(_precommitment);
+
+    string[] memory _stateMerkleProofInputs = new string[](4);
+    _stateMerkleProofInputs[0] = 'node';
+    _stateMerkleProofInputs[1] = 'test/helper/MerkleProofFromFile.mjs';
+    _stateMerkleProofInputs[2] = 'test/upgrades/leaves_and_roots.csv';
+    _stateMerkleProofInputs[3] = vm.toString(_commitmentHash);
+
+    bytes memory _stateMerkleProof = vm.ffi(_stateMerkleProofInputs);
+
+    uint256[] memory _leaves = new uint256[](1);
+    _leaves[0] = _label;
+    bytes memory _aspMerkleProof = _generateMerkleProofMemory(_leaves, _label);
+
+    (uint256 _aspRoot,,) = abi.decode(_aspMerkleProof, (uint256, uint256, uint256[]));
+
+    vm.prank(postman);
+    proxy.updateRoot(_aspRoot, 'ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid');
+
+    IPrivacyPool.Withdrawal memory _withdrawal =
+      IPrivacyPool.Withdrawal({processooor: _recipient, data: abi.encode('')});
+
+    _context = uint256(keccak256(abi.encode(_withdrawal, ethPool.SCOPE()))) % Constants.SNARK_SCALAR_FIELD;
+
+    string[] memory _inputs = new string[](12);
+    _inputs[0] = vm.toString(_value);
+    _inputs[1] = vm.toString(_label);
+    _inputs[2] = vm.toString(_genSecretBySeed('nullifier'));
+    _inputs[3] = vm.toString(_genSecretBySeed('secret'));
+    _inputs[4] = vm.toString(_genSecretBySeed('nullifier_2'));
+    _inputs[5] = vm.toString(_genSecretBySeed('secret_2'));
+    _inputs[6] = vm.toString(uint256(2 ether)); // <--- withdrawn value
+    _inputs[7] = vm.toString(_context);
+    _inputs[8] = vm.toString(_stateMerkleProof);
+    _inputs[9] = vm.toString(uint256(11));
+    _inputs[10] = vm.toString(_aspMerkleProof);
+    _inputs[11] = vm.toString(uint256(11));
+
+    // Call the ProofGenerator script using node
+    string[] memory _scriptArgs = new string[](2);
+    _scriptArgs[0] = 'node';
+    _scriptArgs[1] = 'test/helper/WithdrawalProofGenerator.mjs';
+    bytes memory _proofData = vm.ffi(_concat(_scriptArgs, _inputs));
+
+    _withdrawProof = abi.decode(_proofData, (ProofLib.WithdrawProof));
+
+    uint256 _recipientBalanceBefore = _recipient.balance;
+
+    vm.prank(_recipient);
+    ethPool.withdraw(_withdrawal, _withdrawProof);
+
+    assertEq(_recipientBalanceBefore + 2 ether, _recipient.balance);
+
+    _ragequitProof =
+      _generateRagequitProof(_value - 2 ether, _label, _genSecretBySeed('nullifier_2'), _genSecretBySeed('secret_2'));
+
+    vm.prank(_user);
+    ethPool.ragequit(_ragequitProof);
+  }
+
+  /**
+   * @notice Test that a user can deposit and completely ragequit
+   */
+  function test_DepositAndRagequit() public {
+    uint256 _depositAmount = 2 ether;
+
+    // Calculate deposited amount after configured fees
+    _value = _deductFee(_depositAmount, _vettingFeeBPSFromConfig);
+
+    // Deal user
+    vm.deal(_user, _depositAmount);
+
+    _nullifier = _genSecretBySeed('nullifier');
+    _secret = _genSecretBySeed('secret');
+
+    _precommitment = _hashPrecommitment(_nullifier, _secret);
+
+    uint256 _currentNonce = ethPool.nonce();
+
+    _label = uint256(keccak256(abi.encodePacked(ethPool.SCOPE(), ++_currentNonce))) % Constants.SNARK_SCALAR_FIELD;
+
+    // Deposit
+    vm.prank(_user);
+    proxy.deposit{value: _depositAmount}(_precommitment);
+
+    vm.warp(block.timestamp + 2 days);
+
+    ProofLib.RagequitProof memory _proof = _generateRagequitProof(_value, _label, _nullifier, _secret);
+
+    // Ragequit full commitment as the original depositor
+    vm.prank(_user);
+    ethPool.ragequit(_proof);
   }
 
   function _generateMerkleProofMemory(uint256[] memory _leaves, uint256 _leaf) internal returns (bytes memory _proof) {
