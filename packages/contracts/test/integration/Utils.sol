@@ -162,6 +162,21 @@ contract IntegrationUtils is Test {
     _proof = vm.ffi(_concat(scriptArgs, inputs));
   }
 
+  function _generateMerkleProofMemory(uint256[] memory _leaves, uint256 _leaf) internal returns (bytes memory _proof) {
+    uint256 _leavesAmt = _leaves.length;
+    string[] memory inputs = new string[](_leavesAmt + 1);
+    inputs[0] = vm.toString(_leaf);
+    for (uint256 i = 0; i < _leavesAmt; i++) {
+      inputs[i + 1] = vm.toString(_leaves[i]);
+    }
+
+    // Call the ProofGenerator script using node
+    string[] memory scriptArgs = new string[](2);
+    scriptArgs[0] = 'node';
+    scriptArgs[1] = 'test/helper/MerkleProofGenerator.mjs';
+    _proof = vm.ffi(_concat(scriptArgs, inputs));
+  }
+
   /*///////////////////////////////////////////////////////////////
                              UTILS 
   //////////////////////////////////////////////////////////////*/

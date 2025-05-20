@@ -77,7 +77,7 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
   ProofLib.WithdrawProof internal _withdrawProof;
   ProofLib.RagequitProof internal _ragequitProof;
 
-  function setUp() public virtual {
+  function setUp() public {
     // Fork from specific block since that's the tree state we're using
     vm.createSelectFork(vm.rpcUrl('mainnet'), _FORK_BLOCK);
 
@@ -593,41 +593,37 @@ contract EntrypointUpgradeIntegration is Test, IntegrationUtils, MainnetEnvironm
     // Check the balance was correctly updated
     assertEq(_userBalanceBefore + _value, _user.balance, 'User balance mismatch');
   }
-
-  function _generateMerkleProofMemory(uint256[] memory _leaves, uint256 _leaf) internal returns (bytes memory _proof) {
-    uint256 _leavesAmt = _leaves.length;
-    string[] memory inputs = new string[](_leavesAmt + 1);
-    inputs[0] = vm.toString(_leaf);
-
-    for (uint256 i = 0; i < _leavesAmt; i++) {
-      inputs[i + 1] = vm.toString(_leaves[i]);
-    }
-
-    // Call the ProofGenerator script using node
-    string[] memory scriptArgs = new string[](2);
-    scriptArgs[0] = 'node';
-    scriptArgs[1] = 'test/helper/MerkleProofGenerator.mjs';
-    _proof = vm.ffi(_concat(scriptArgs, inputs));
-  }
 }
 
 /**
  * @dev Testing a deposit+withdrawal with the upgrade in between
  */
-contract EntrypointBeforeAndAfterIntegration is EntrypointUpgradeIntegration {
-  function setUp() public override {
+contract EntrypointBeforeAndAfterIntegration is Test, IntegrationUtils, MainnetEnvironment {
+  uint256 internal _value;
+  uint256 internal _label;
+  uint256 internal _precommitment;
+  uint256 internal _nullifier;
+  uint256 internal _secret;
+  uint256 internal _context;
+  uint256 internal _vettingFeeBPS;
+
+  address internal _user = makeAddr('user');
+  address internal _recipient = makeAddr('recipient');
+  bytes32 internal constant _IMPLEMENTATION_SLOT = 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
+
+  function setUp() public {
     // Fork mainnet without upgrading
     vm.createSelectFork(vm.rpcUrl('mainnet'), _FORK_BLOCK);
 
     // Fetch vetting fee for value calculation
-    (,, _vettingFeeBPSFromConfig,) = proxy.assetConfig(IERC20(Constants.NATIVE_ASSET));
+    (,, _vettingFeeBPS,) = proxy.assetConfig(IERC20(Constants.NATIVE_ASSET));
   }
 
   function test_DepositAndWithdrawMidUpgrade() public {
     uint256 _depositAmount = 2 ether;
 
     // Calculate deposited amount after configured fees
-    _value = _deductFee(_depositAmount, _vettingFeeBPSFromConfig);
+    _value = _deductFee(_depositAmount, _vettingFeeBPS);
 
     // Deal user
     vm.deal(_user, _depositAmount);
