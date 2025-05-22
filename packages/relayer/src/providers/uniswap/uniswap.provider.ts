@@ -1,17 +1,17 @@
-import { Token } from '@uniswap/sdk-core'
-import { FeeAmount } from '@uniswap/v3-sdk'
-import { Address, getContract, createWalletClient, http, encodeAbiParameters } from 'viem'
+import { Token } from '@uniswap/sdk-core';
+import { FeeAmount } from '@uniswap/v3-sdk';
+import { Address, getContract, createWalletClient, http, encodeAbiParameters } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { writeContract } from 'viem/actions';
 
-import { getChainConfig, getSignerPrivateKey } from "../config/index.js";
-import { web3Provider } from '../providers/index.js'
-import { BlockchainError, RelayerError } from '../exceptions/base.exception.js'
-import { isViemError } from '../utils.js'
-import { UNIVERSAL_ROUTER_ADDRESS, QUOTER_CONTRACT_ADDRESS, WRAPPED_NATIVE_TOKEN_ADDRESS } from './uniswap/constants.js'
-import { IERC20MinimalABI } from './uniswap/erc20.abi.js'
-import { QuoterV2ABI } from './uniswap/quoterV2.abi.js'
-import { UniversalRouterABI } from './uniswap/universalRouter.abi.js';
+import { getChainConfig, getSignerPrivateKey } from "../../config/index.js";
+import { web3Provider } from '../../providers/index.js';
+import { BlockchainError, RelayerError } from '../../exceptions/base.exception.js';
+import { isViemError } from '../../utils.js';
+import { UNIVERSAL_ROUTER_ADDRESS, QUOTER_CONTRACT_ADDRESS, WRAPPED_NATIVE_TOKEN_ADDRESS } from './constants.js';
+import { IERC20MinimalABI } from './abis/erc20.abi.js';
+import { QuoterV2ABI } from './abis/quoterV2.abi.js';
+import { UniversalRouterABI } from './abis/universalRouter.abi.js';
 
 export type UniswapQuote = {
   chainId: number;
@@ -20,10 +20,10 @@ export type UniswapQuote = {
   amountIn: bigint;
 };
 
-type QuoteToken = { amount: bigint, decimals: number }
+type QuoteToken = { amount: bigint, decimals: number; };
 export type Quote = {
-  in: QuoteToken
-  out: QuoteToken
+  in: QuoteToken;
+  out: QuoteToken;
 };
 
 export class UniswapProvider {
@@ -37,12 +37,12 @@ export class UniswapProvider {
     const [decimals, symbol] = await Promise.all([
       contract.read.decimals(),
       contract.read.symbol(),
-    ])
+    ]);
     return new Token(chainId, address, Number(decimals), symbol);
   }
 
   async quoteNativeToken(chainId: number, addressIn: Address, amountIn: bigint): Promise<Quote> {
-    const addressOut = WRAPPED_NATIVE_TOKEN_ADDRESS[chainId.toString()]!
+    const addressOut = WRAPPED_NATIVE_TOKEN_ADDRESS[chainId.toString()]!;
     return this.quote({
       chainId,
       amountIn,
@@ -68,7 +68,7 @@ export class UniswapProvider {
         fee: FeeAmount.MEDIUM,
         amountIn,
         sqrtPriceLimitX96: 0n,
-      }])
+      }]);
 
       // amount, sqrtPriceX96After, tickAfter, gasEstimate
       const [amount, , ,] = quotedAmountOut.result;
@@ -83,9 +83,9 @@ export class UniswapProvider {
     } catch (error) {
       if (error instanceof Error && isViemError(error)) {
         const { metaMessages, shortMessage } = error;
-        throw BlockchainError.txError((metaMessages ? metaMessages[0] : undefined) || shortMessage)
+        throw BlockchainError.txError((metaMessages ? metaMessages[0] : undefined) || shortMessage);
       } else {
-        throw RelayerError.unknown("Something went wrong while quoting")
+        throw RelayerError.unknown("Something went wrong while quoting");
       }
     }
   }
