@@ -1,9 +1,19 @@
-import { Address, getAddress } from "viem";
-import { permit2Address } from "@uniswap/permit2-sdk";
-import { V3_CORE_FACTORY_ADDRESSES, QUOTER_ADDRESSES } from "@uniswap/sdk-core";
+import { QUOTER_ADDRESSES, V3_CORE_FACTORY_ADDRESSES } from "@uniswap/sdk-core";
 import { UNIVERSAL_ROUTER_ADDRESS, UniversalRouterVersion } from "@uniswap/universal-router-sdk";
+import { Address, getAddress } from "viem";
 
 export { WETH9 as WRAPPED_NATIVE_TOKEN_ADDRESS } from "@uniswap/sdk-core";
+
+export const PERMIT2_ADDRESS = '0x000000000022D473030F116dDEE9F6B43aC78BA3'
+
+export function permit2Address(chainId?: number): `0x${string}` {
+  switch (chainId) {
+    case 324:
+      return '0x0000000000225e31D15943971F47aD3022F714Fa'
+    default:
+      return PERMIT2_ADDRESS
+  }
+}
 
 /**
 * Mainnet (1), Polygon (137), Optimism (10), Arbitrum (42161), Testnets Address (11155111)

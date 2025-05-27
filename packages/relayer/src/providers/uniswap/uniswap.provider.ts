@@ -1,21 +1,19 @@
 import { Token } from '@uniswap/sdk-core';
 import { FeeAmount } from '@uniswap/v3-sdk';
-import { Address, getContract, createWalletClient, http, encodeAbiParameters, getAddress, SimulateContractReturnType, WriteContractReturnType, GetContractReturnType, SendTransactionParameters, WriteContractParameters, Account } from 'viem';
+import { Account, Address, getAddress, getContract, WriteContractParameters } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { writeContract } from 'viem/actions';
 
-import { getChainConfig, getSignerPrivateKey } from "../../config/index.js";
-import { web3Provider } from '../../providers/index.js';
+import { getSignerPrivateKey } from "../../config/index.js";
 import { BlockchainError, RelayerError } from '../../exceptions/base.exception.js';
+import { web3Provider } from '../../providers/index.js';
 import { isViemError } from '../../utils.js';
-import { getRouterAddress, getQuoterAddress, WRAPPED_NATIVE_TOKEN_ADDRESS, getPermit2Address } from './constants.js';
 import { IERC20MinimalABI } from './abis/erc20.abi.js';
 import { QuoterV2ABI } from './abis/quoterV2.abi.js';
 import { UniversalRouterABI } from './abis/universalRouter.abi.js';
-import * as routerCommands from "./commands.js";
-import { getPoolPath } from './pools.js';
-import { createPermit2 } from './permit.js';
 import { Command, CommandPair, encodeInstruction, Instruction, Permit2Params } from './commands.js';
+import { getPermit2Address, getQuoterAddress, getRouterAddress, WRAPPED_NATIVE_TOKEN_ADDRESS } from './constants.js';
+import { createPermit2 } from './createPermit.js';
+import { getPoolPath } from './pools.js';
 
 export type UniswapQuote = {
   chainId: number;
