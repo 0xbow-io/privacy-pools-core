@@ -148,10 +148,7 @@ export class PrivacyPoolRelayer {
 
     const feeGross = withdrawnValue * relayFeeBPS / 10_000n;
     const feeBase = withdrawnValue * assetConfig.fee_bps / 10_000n;
-    const quote = await this.uniswapProvider.quoteNativeToken(chainId, assetAddress, feeGross - feeBase);
 
-    // we price our costs in Erc20 asset and the rest is gas value for the withdrawer
-    // const relayerGasRefundInErc20 = TOTAL_GAS * gasPrice * quote.in.amount / quote.out.amount;
     const relayerGasRefundValue = TOTAL_GAS * gasPrice;
     // const valueInErc20Units = relayerCostsAmount - relayerGasRefundInErc20;
 
@@ -164,6 +161,8 @@ export class PrivacyPoolRelayer {
       nativeRecipient: recipient,
       feeReceiver
     });
+
+    return swapTxHash;
 
   }
 
