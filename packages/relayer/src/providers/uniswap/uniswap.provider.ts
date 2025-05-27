@@ -1,6 +1,6 @@
 import { Token } from '@uniswap/sdk-core';
 import { FeeAmount } from '@uniswap/v3-sdk';
-import { Address, getContract, createWalletClient, http, encodeAbiParameters, getAddress, SimulateContractReturnType, WriteContractReturnType, GetContractReturnType, SendTransactionParameters, WriteContractParameters } from 'viem';
+import { Address, getContract, createWalletClient, http, encodeAbiParameters, getAddress, SimulateContractReturnType, WriteContractReturnType, GetContractReturnType, SendTransactionParameters, WriteContractParameters, Account } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { writeContract } from 'viem/actions';
 
@@ -15,6 +15,7 @@ import { UniversalRouterABI } from './abis/universalRouter.abi.js';
 import * as routerCommands from "./commands.js";
 import { getPoolPath } from './pools.js';
 import { createPermit2 } from './permit.js';
+import { Command, CommandPair, encodeInstruction, Instruction, Permit2Params } from './commands.js';
 
 export type UniswapQuote = {
   chainId: number;
@@ -34,12 +35,32 @@ interface SwapWithRefundParams {
   feeReceiver: `0x${string}`;
   nativeRecipient: `0x${string}`;
   tokenIn: `0x${string}`;
-  amountIn: bigint;
+  feeGross: bigint;
   refundAmount: bigint;
   chainId: number;
+  feeBase: bigint;
+}
+
+interface CreateInstructionsFeeReceiveerIsRelayer {
+  router: { address: Address; };
+  relayer: Account;
+  nativeRecipient: Address;
+  amountToSwap: bigint;
+  minAmountOut: bigint;
+  permitParmas: Permit2Params;
+  pathParams: `0x${string}`;
+  refundAmount: bigint;
+}
+
+interface CreateInstructionsFeeReceiveerIsNotRelayer extends CreateInstructionsFeeReceiveerIsRelayer {
+  tokenIn: Address;
+  feeReceiver: Address;
+  feeBase: bigint;
 }
 
 export class UniswapProvider {
+
+  static readonly ZERO_ADDRESS = getAddress("0x0000000000000000000000000000000000000000");
 
   async getTokenInfo(chainId: number, address: Address): Promise<Token> {
     const contract = getContract({
@@ -103,117 +124,6 @@ export class UniswapProvider {
     }
   }
 
-  async swapExactInputSingle({
-    chainId,
-    amountIn,
-    quotedAmountOut,
-    slippageBps,
-    assetIn,
-    assetOut,
-    recipient
-  }: {
-    chainId: number;
-    amountIn: bigint;
-    quotedAmountOut: bigint;
-    slippageBps: bigint;
-    assetIn: Address;
-    assetOut: Address;
-    recipient: Address;
-  }): Promise<string> {
-    const config = getChainConfig(chainId);
-    const routerAddress = getRouterAddress(chainId);
-    if (!routerAddress) {
-      throw RelayerError.unknown(`Universal Router not configured for chain ${chainId}`);
-    }
-
-    const account = privateKeyToAccount(getSignerPrivateKey(chainId) as `0x${string}`);
-
-    const client = createWalletClient({
-      chain: {
-        id: config.chain_id,
-        name: config.chain_name,
-        rpcUrls: { default: { http: [config.rpc_url] } },
-        nativeCurrency: config.native_currency!,
-      },
-      transport: http(config.rpc_url),
-      account,
-    });
-
-    const deadline = BigInt(Math.floor(Date.now() / 1000) + 60 * 10); // 10 minutes
-
-
-    // when setting slippage use this:
-    // const slippageBps = 10n; // 0.1%
-    const minAmountOut = quotedAmountOut - (quotedAmountOut * slippageBps / 10_000n);
-
-    // command: V3_SWAP_EXACT_IN
-    const commands = '0x00';
-
-    const encodedInput = encodeAbiParameters(
-      [
-        { name: 'tokenIn', type: 'address' },
-        { name: 'tokenOut', type: 'address' },
-        { name: 'fee', type: 'uint24' },
-        { name: 'recipient', type: 'address' },
-        { name: 'amountIn', type: 'uint256' },
-        { name: 'amountOutMin', type: 'uint256' },
-        { name: 'deadline', type: 'uint160' },
-      ],
-      [
-        assetIn,
-        assetOut,
-        FeeAmount.MEDIUM,
-        recipient,
-        amountIn,
-        minAmountOut,
-        deadline,
-      ]
-    );
-
-    const hash = await writeContract(client, {
-      address: routerAddress,
-      abi: UniversalRouterABI,
-      functionName: 'execute',
-      args: [commands, [encodedInput]],
-      account
-    });
-
-    return hash;
-  }
-
-  async sendNativeToken(
-    chainId: number,
-    to: Address,
-    amount: bigint
-  ): Promise<void> {
-    const config = getChainConfig(chainId);
-    const privateKey = getSignerPrivateKey(chainId);
-    const account = privateKeyToAccount(privateKey as `0x${string}`);
-
-    const client = createWalletClient({
-      chain: {
-        id: config.chain_id,
-        name: config.chain_name,
-        rpcUrls: { default: { http: [config.rpc_url] } },
-        nativeCurrency: config.native_currency!,
-      },
-      transport: http(config.rpc_url),
-      account,
-    });
-
-    await client.sendTransaction({
-      chain: {
-        id: config.chain_id,
-        name: config.chain_name,
-        rpcUrls: { default: { http: [config.rpc_url] } },
-        nativeCurrency: config.native_currency!,
-      },
-      account,
-      to,
-      value: amount,
-    });
-  }
-
   async approvePermit2forERC20(tokenIn: `0x${string}`, chainId: number) {
     const relayer = privateKeyToAccount(getSignerPrivateKey(chainId) as `0x${string}`);
     const PERMIT2_ADDRESS = getPermit2Address(chainId);
@@ -234,13 +144,93 @@ export class UniswapProvider {
 
   // OPERATIONS:
   //  0) - (this is done only once) - Approve Permit2 to move Relayer's ERC20
+  //  1) Send permit for Router to move Gross Fees in Token from Relayer
+  //  2) AllowanceTransfer from Relayer to feeReceiver for Net Fees
+  //  3) Swap ERC20 for WETH consuming (Gross-Net) Fees, destination Router, setting the payerIsUser=true flag, meaning to use permit2
+  //  4) Unwrap WETH to Router
+  //  5) Transfer native Refund value to Relayer
+  //  6) Sweep whatever is left to Recipient
+  static createInstructionsIfFeeReceiverIsNotRelayer({
+    permitParmas, router, pathParams, relayer,
+    tokenIn, feeReceiver, feeBase,
+    refundAmount, amountToSwap, minAmountOut, nativeRecipient
+  }: CreateInstructionsFeeReceiveerIsNotRelayer): Instruction[] {
+    return [
+      // This is used to authorize the router to move our tokens
+      { command: Command.permit2, params: permitParmas },
+      // We send relaying fees to feeReceiver
+      { command: Command.transfer, params: { token: tokenIn, recipient: feeReceiver, amount: feeBase, } },
+      // Swap consuming all
+      {
+        command: Command.swapV3ExactIn, params: {
+          // we're going to unwrap weth from here
+          recipient: router.address,
+          amountIn: amountToSwap,
+          minAmountOut,
+          // USDC-WETH
+          path: pathParams,
+          // The relayer is the tx initiator
+          payerIsUser: true,
+        }
+      },
+      // the router will hold the value for further splitting
+      { command: Command.unrwapWeth, params: { recipient: router.address, minAmountOut } },
+      // gas refund to relayer
+      // 0 address means moving native
+      { command: Command.transfer, params: { token: this.ZERO_ADDRESS, recipient: relayer.address, amount: refundAmount } },
+      // 0 address means moving native
+      // sweep reminder to the withdrawal address
+      { command: Command.sweep, params: { token: this.ZERO_ADDRESS, recipient: nativeRecipient, minAmountOut } }
+    ];
+  }
+
+  // OPERATIONS:
+  //  0) - (this is done only once) - Approve Permit2 to move Relayer's ERC20
   //  1) AllowanceTransfer from Relayer to Router
   //  2) Swap ERC20 for WETH, destination Router, setting the permit2=true flag
   //  3) Unwrap WETH to Router
   //  4) Transfer Refund value to Relayer
   //  5) Sweep whatever is left to Recipient
-  async swapExactInputSingleForWeth({ nativeRecipient, feeReceiver, tokenIn, amountIn, refundAmount, chainId }: SwapWithRefundParams): Promise<WriteContractParameters> {
+  static createInstructionsIfFeeReceiverIsRelayer({
+    permitParmas, router, pathParams, relayer,
+    refundAmount, amountToSwap, minAmountOut, nativeRecipient
+  }: CreateInstructionsFeeReceiveerIsRelayer): Instruction[] {
+    return [
+      // This is used to authorize the router to move our tokens
+      { command: Command.permit2, params: permitParmas },
+      // Swap consuming all
+      {
+        command: Command.swapV3ExactIn, params: {
+          // we're going to unwrap weth from here
+          recipient: router.address,
+          amountIn: amountToSwap,
+          minAmountOut,
+          // USDC-WETH
+          path: pathParams,
+          // The relayer is the tx initiator
+          payerIsUser: true,
+        }
+      },
+      // the router will hold the value for further splitting
+      { command: Command.unrwapWeth, params: { recipient: router.address, minAmountOut } },
+      // gas refund to relayer
+      // 0 address means moving native
+      { command: Command.transfer, params: { token: this.ZERO_ADDRESS, recipient: relayer.address, amount: refundAmount } },
+      // 0 address means moving native
+      // sweep reminder to the withdrawal address
+      { command: Command.sweep, params: { token: this.ZERO_ADDRESS, recipient: nativeRecipient, minAmountOut } }
+    ];
+  }
 
+  async swapExactInputSingleForWeth({
+    nativeRecipient,
+    feeReceiver,
+    feeBase,
+    feeGross,
+    tokenIn,
+    refundAmount,
+    chainId
+  }: SwapWithRefundParams): Promise<WriteContractParameters> {
     const minAmountOut = 200_000n;
     const ROUTER_ADDRESS = getRouterAddress(chainId);
     const PERMIT2_ADDRESS = getPermit2Address(chainId);
@@ -253,67 +243,49 @@ export class UniswapProvider {
       client
     });
 
-    const [permitSingle, signature] = await createPermit2({
+    const [permit, signature] = await createPermit2({
       signer: relayer,
       chainId,
-      amountIn,
+      amountIn: feeGross,
       permit2Address: PERMIT2_ADDRESS,
       routerAddress: ROUTER_ADDRESS,
       assetAddress: tokenIn
     });
 
-    // This is used to authorize the router to move our tokens
-    const permitCommandPair = routerCommands.permit2({ permit: permitSingle, signature });
-
-    const transferERC20NetFee = routerCommands.transfer({
-      // 0 address means moving native
-      token: getAddress("0x0000000000000000000000000000000000000000"),
-      recipient: relayer.address,
-      amount: refundAmount,
-    });
-
     const pathParams = await getPoolPath(tokenIn, chainId);
 
-    // Swap consuming all
-    const swapCommandPAir = routerCommands.swapV3ExactIn({
-      // we're going to unwrap weth from here
-      recipient: router.address,
-      amountIn,
-      minAmountOut,
-      // USDC-WETH
-      path: pathParams,
-      // The relayer is the tx initiator
-      payerIsUser: true,
-    });
+    let instructions;
+    // If feeReceiver is the same as signer, moving coins around is easier
+    if (feeReceiver.toLowerCase() === relayer.address.toLowerCase()) {
+      instructions = UniswapProvider.createInstructionsIfFeeReceiverIsRelayer({
+        relayer,
+        router,
+        amountToSwap: feeGross,
+        permitParmas: { permit, signature },
+        refundAmount,
+        minAmountOut,
+        pathParams,
+        nativeRecipient
+      });
+    } else {
+      instructions = UniswapProvider.createInstructionsIfFeeReceiverIsNotRelayer({
+        relayer,
+        router,
+        amountToSwap: feeGross,
+        permitParmas: { permit, signature },
+        refundAmount,
+        minAmountOut,
+        pathParams,
+        nativeRecipient,
+        // we need to know receiver and how much to take
+        feeReceiver,
+        feeBase,
+        tokenIn
+      });
+    }
 
-    const unwrapOutputWeth = routerCommands.unwrapWeth({
-      // the router will hold the value for further splitting
-      recipient: router.address,
-      minAmountOut
-    });
-
-    const transferRefundNative = routerCommands.transfer({
-      // 0 address means moving native
-      token: getAddress("0x0000000000000000000000000000000000000000"),
-      recipient: relayer.address,
-      amount: refundAmount,
-    });
-
-    const sweepReminders = routerCommands.sweep({
-      // 0 address means moving native
-      token: getAddress("0x0000000000000000000000000000000000000000"),
-      // this is the withdrawal address
-      recipient: nativeRecipient,
-      minAmountOut
-    });
-
-    const commandPairs: [number, `0x${string}`][] = [
-      permitCommandPair,
-      swapCommandPAir,
-      unwrapOutputWeth,
-      transferRefundNative,
-      sweepReminders
-    ];
+    const commandPairs: CommandPair[] = [];
+    instructions.forEach((ins) => commandPairs.push(encodeInstruction(ins)));
 
     const commands = "0x" + commandPairs.map(x => x[0].toString(16).padStart(2, "0")).join("") as `0x${string}`;
     const params = commandPairs.map(x => x[1]);

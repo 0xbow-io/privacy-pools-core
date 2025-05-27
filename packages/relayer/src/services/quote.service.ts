@@ -27,9 +27,10 @@ export class QuoteService {
   }
 
   async quoteFeeBPSNative(quoteParams: QuoteFeeBPSParams): Promise<bigint> {
+    const EXTRA_GAS_AMOUNT = 500_000n;  // wei
     const { chainId, assetAddress, amountIn, baseFeeBPS, extraGas } = quoteParams;
     const gasPrice = await web3Provider.getGasPrice(chainId);
-    const extraGasUnits = extraGas ? 500_000n : 0n;
+    const extraGasUnits = extraGas ? EXTRA_GAS_AMOUNT : 0n;
 
     let quote: { num: bigint, den: bigint };
     if (assetAddress.toLowerCase() === NativeAddress.toLowerCase()) {

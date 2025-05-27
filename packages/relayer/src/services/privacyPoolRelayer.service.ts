@@ -26,6 +26,7 @@ import { Web3Provider } from "../providers/web3.provider.js";
 import { FeeCommitment } from "../interfaces/relayer/common.js";
 import { uniswapProvider } from "../providers/index.js";
 import { WRAPPED_NATIVE_TOKEN_ADDRESS } from "../providers/uniswap/constants.js";
+import { Withdrawal, WithdrawalProof } from "@0xbow/privacy-pools-core-sdk";
 
 /**
  * Class representing the Privacy Pool Relayer, responsible for processing withdrawal requests.
@@ -46,7 +47,7 @@ export class PrivacyPoolRelayer {
     this.db = db;
     this.sdkProvider = new SdkProvider();
     this.web3Provider = web3Provider;
-    this.uniswapProvider = new UniswapProvider();
+    this.uniswapProvider = uniswapProvider;
   }
 
   /**
@@ -71,41 +72,16 @@ export class PrivacyPoolRelayer {
         throw ZkError.invalidProof();
       }
 
+      // We do early check, before relaying
+      if (extraGas) {
+        if (!WRAPPED_NATIVE_TOKEN_ADDRESS[chainId])
+          throw RelayerError.unknown(`Missing wrapped native token for chain ${chainId}`);
+      }
+
       const response = await this.broadcastWithdrawal(req, chainId);
 
       if (extraGas) {
-        const { assetAddress } = await this.sdkProvider.scopeData(req.scope, chainId);
-        const feeReceiver = getFeeReceiverAddress(chainId) as Address;
-        const { recipient, relayFeeBPS } = decodeWithdrawalData(req.withdrawal.data);
-        const withdrawnValue = parseSignals(req.proof.publicSignals).withdrawnValue;
-        const relayerFeeAmount = withdrawnValue * BigInt(relayFeeBPS) / 10_000n;
-
-        const quote = await this.uniswapProvider.quoteNativeToken(chainId, assetAddress, relayerFeeAmount);
-
-        const slippageBps = 10n; // 0.1%
-
-        const wrappedNative = WRAPPED_NATIVE_TOKEN_ADDRESS[chainId.toString()];
-        if (!wrappedNative) throw RelayerError.unknown(`Missing wrapped native token for chain ${chainId}`);
-
-        const swapTxHash = await this.uniswapProvider.swapExactInputSingle({
-          chainId,
-          amountIn: relayerFeeAmount,
-          quotedAmountOut: quote.out.amount,
-          slippageBps,
-          assetIn: assetAddress,
-          assetOut: wrappedNative as Address,
-          recipient: feeReceiver,
-        });
-
-        console.log(`[relayer] swap tx: ${swapTxHash}`);
-
-        await this.uniswapProvider.sendNativeToken(
-          chainId,
-          recipient as Address,
-          quote.out.amount,
-        );
-
-        console.log(`[relayer] sent extra gas to ${recipient}`);
+        await this.swapForNativeAndFund(req.scope, req.withdrawal, req.proof, chainId);
       }
 
       await this.db.updateBroadcastedRequest(requestId, response.hash);
@@ -158,6 +134,39 @@ export class PrivacyPoolRelayer {
     }
   }
 
+  async swapForNativeAndFund(scope: bigint, withdrawal: Withdrawal, proof: WithdrawalProof, chainId: number) {
+    const EXTRA_GAS_AMOUNT = 500_000n;  // wei
+    const WITHDRAW_GAS = 700_000n;  // wei
+    const SWAP_GAS = 200_000n;     // wei
+    const TOTAL_GAS = WITHDRAW_GAS + SWAP_GAS + EXTRA_GAS_AMOUNT;
+    const { assetAddress } = await this.sdkProvider.scopeData(scope, chainId);
+    const assetConfig = getAssetConfig(chainId, assetAddress);
+    const feeReceiver = getFeeReceiverAddress(chainId) as Address;
+    const { recipient, relayFeeBPS } = decodeWithdrawalData(withdrawal.data);
+    const withdrawnValue = parseSignals(proof.publicSignals).withdrawnValue;
+    const gasPrice = await web3Provider.getGasPrice(chainId);
+
+    const feeGross = withdrawnValue * relayFeeBPS / 10_000n;
+    const feeBase = withdrawnValue * assetConfig.fee_bps / 10_000n;
+    const quote = await this.uniswapProvider.quoteNativeToken(chainId, assetAddress, feeGross - feeBase);
+
+    // we price our costs in Erc20 asset and the rest is gas value for the withdrawer
+    // const relayerGasRefundInErc20 = TOTAL_GAS * gasPrice * quote.in.amount / quote.out.amount;
+    const relayerGasRefundValue = TOTAL_GAS * gasPrice;
+    // const valueInErc20Units = relayerCostsAmount - relayerGasRefundInErc20;
+
+    const swapTxHash = await this.uniswapProvider.swapExactInputSingleForWeth({
+      chainId,
+      feeGross,
+      feeBase,
+      refundAmount: relayerGasRefundValue,
+      tokenIn: assetAddress,
+      nativeRecipient: recipient,
+      feeReceiver
+    });
+
+  }
+
   /**
    * Verifies a withdrawal proof.
    *
@@ -180,15 +189,15 @@ export class PrivacyPoolRelayer {
   protected async broadcastWithdrawal(
     withdrawal: WithdrawalPayload,
     chainId: number,
-  ): Promise<{ hash: string }> {
+  ): Promise<{ hash: string; }> {
     try {
       return await this.sdkProvider.broadcastWithdrawal(withdrawal, chainId);
     } catch (error) {
       if (isViemError(error)) {
         const { metaMessages, shortMessage } = error;
-        throw BlockchainError.txError((metaMessages ? metaMessages[0] : undefined) || shortMessage)
+        throw BlockchainError.txError((metaMessages ? metaMessages[0] : undefined) || shortMessage);
       } else {
-        throw RelayerError.unknown("Something went wrong while broadcasting Tx")
+        throw RelayerError.unknown("Something went wrong while broadcasting Tx");
       }
     }
   }
@@ -261,7 +270,11 @@ export class PrivacyPoolRelayer {
     } else {
 
       const currentFeeBPS = await quoteService.quoteFeeBPSNative({
-        chainId, amountIn: proofSignals.withdrawnValue, assetAddress, baseFeeBPS: assetConfig.fee_bps, extraGas
+        chainId,
+        amountIn: proofSignals.withdrawnValue,
+        assetAddress,
+        baseFeeBPS: assetConfig.fee_bps,
+        extraGas
       });
 
       if (relayFeeBPS < currentFeeBPS) {
@@ -283,9 +296,9 @@ export class PrivacyPoolRelayer {
 }
 
 function commitmentExpired(feeCommitment: FeeCommitment): boolean {
-  return feeCommitment.expiration < Number(new Date())
+  return feeCommitment.expiration < Number(new Date());
 }
 
 async function validFeeCommitment(chainId: number, feeCommitment: FeeCommitment): Promise<boolean> {
-  return web3Provider.verifyRelayerCommitment(chainId, feeCommitment)
+  return web3Provider.verifyRelayerCommitment(chainId, feeCommitment);
 }
