@@ -20,7 +20,7 @@ export async function relayQuoteHandler(
   const amountIn = BigInt(req.body.amount!.toString());
   const assetAddress = getAddress(req.body.asset!.toString());
 
-  const extraGas = Boolean(req.body.extra_gas);
+  const extraGas = Boolean(req.body.extraGas);
 
   // TODO: set native gas units amount on config
   // TODO: check if the units are ok
