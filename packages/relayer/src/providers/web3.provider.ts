@@ -16,12 +16,14 @@ const domain = (chainId: number) => ({
   name: "Privacy Pools Relayer",
   version: "1",
   chainId,
-} as const)
+} as const);
 
 const RelayerCommitmentTypes = {
   RelayerCommitment: [
     { name: "withdrawalData", type: "bytes" },
     { name: "expiration", type: "uint256" },
+    { name: "amount", type: "uint256" },
+    { name: "extraGas", type: "bool" },
   ]
 } as const;
 
@@ -29,8 +31,8 @@ const RelayerCommitmentTypes = {
  * Class representing the provider for interacting with several chains
  */
 export class Web3Provider implements IWeb3Provider {
-  chains: { [key: number]: Chain };
-  clients: { [key: number]: PublicClient };
+  chains: { [key: number]: Chain; };
+  clients: { [key: number]: PublicClient; };
 
   constructor() {
     this.chains = Object.fromEntries(CONFIG.chains.map(chainConfig => {
@@ -43,38 +45,40 @@ export class Web3Provider implements IWeb3Provider {
           chain,
           transport: http(chain.rpcUrls.default.http[0])
         })];
-    }))
+    }));
   }
 
   client(chainId: number): PublicClient {
     const client = this.clients[chainId];
     if (client === undefined) {
-      throw Error(`Web3ProviderError::UnsupportedChainId(${chainId})`)
+      throw Error(`Web3ProviderError::UnsupportedChainId(${chainId})`);
     }
-    else return client
+    else return client;
   }
 
   async getGasPrice(chainId: number): Promise<bigint> {
-    return await this.client(chainId).getGasPrice()
+    return await this.client(chainId).getGasPrice();
   }
 
   async signRelayerCommitment(chainId: number, commitment: Omit<FeeCommitment, 'signedRelayerCommitment'>) {
     const signer = privateKeyToAccount(getSignerPrivateKey(chainId) as Hex);
-    const { withdrawalData, expiration } = commitment;
+    const { withdrawalData, expiration, extraGas, amount } = commitment;
     return signer.signTypedData({
       domain: domain(chainId),
       types: RelayerCommitmentTypes,
       primaryType: 'RelayerCommitment',
       message: {
         withdrawalData,
+        amount,
+        extraGas,
         expiration: BigInt(expiration)
       }
-    })
+    });
   }
 
   async verifyRelayerCommitment(chainId: number, commitment: FeeCommitment): Promise<boolean> {
     const signer = privateKeyToAccount(getSignerPrivateKey(chainId) as Hex);
-    const { withdrawalData, expiration, signedRelayerCommitment } = commitment;
+    const { withdrawalData, expiration, amount, extraGas, signedRelayerCommitment } = commitment;
     return verifyTypedData({
       address: signer.address,
       domain: domain(chainId),
@@ -82,10 +86,12 @@ export class Web3Provider implements IWeb3Provider {
       primaryType: 'RelayerCommitment',
       message: {
         withdrawalData,
+        amount,
+        extraGas,
         expiration: BigInt(expiration)
       },
       signature: signedRelayerCommitment
-    })
+    });
   }
 
 }

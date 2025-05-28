@@ -1,11 +1,12 @@
 import { NextFunction, Request, Response } from "express";
 import { getAddress } from "viem";
-import { getAssetConfig, getFeeReceiverAddress } from "../../config/index.js";
+import { getAssetConfig, getFeeReceiverAddress, getSignerPrivateKey } from "../../config/index.js";
 import { QuoterError } from "../../exceptions/base.exception.js";
 import { web3Provider } from "../../providers/index.js";
 import { quoteService } from "../../services/index.js";
 import { QuoteMarshall } from "../../types.js";
 import { encodeWithdrawalData } from "../../utils.js";
+import { privateKeyToAccount } from "viem/accounts";
 
 const TIME_20_SECS = 20 * 1000;
 
@@ -17,7 +18,7 @@ export async function relayQuoteHandler(
 
   const chainId = Number(req.body.chainId!);
   const amountIn = BigInt(req.body.amount!.toString());
-  const assetAddress = getAddress(req.body.asset!.toString())
+  const assetAddress = getAddress(req.body.asset!.toString());
 
   const extraGas = Boolean(req.body.extra_gas);
 
@@ -33,7 +34,7 @@ export async function relayQuoteHandler(
     chainId, amountIn, assetAddress, baseFeeBPS: config.fee_bps, extraGas: extraGas
   });
 
-  const recipient = req.body.recipient ? getAddress(req.body.recipient.toString()) : undefined
+  const recipient = req.body.recipient ? getAddress(req.body.recipient.toString()) : undefined;
 
   const quoteResponse = new QuoteMarshall({
     baseFeeBPS: config.fee_bps,
@@ -41,16 +42,27 @@ export async function relayQuoteHandler(
   });
 
   if (recipient) {
-    const feeReceiverAddress = getFeeReceiverAddress(chainId);
+    let feeReceiverAddress: `0x${string}`;
+    if (extraGas) {
+      const finalFeeReceiverAddress = getAddress(getFeeReceiverAddress(chainId));
+      const signer = privateKeyToAccount(getSignerPrivateKey(chainId) as `0x${string}`);
+      if (finalFeeReceiverAddress.toLowerCase() === signer.address) {
+        feeReceiverAddress = getAddress(finalFeeReceiverAddress);
+      } else {
+        feeReceiverAddress = signer.address;
+      }
+    } else {
+      feeReceiverAddress = getAddress(getFeeReceiverAddress(chainId));
+    }
     const withdrawalData = encodeWithdrawalData({
       feeRecipient: getAddress(feeReceiverAddress),
       recipient,
       relayFeeBPS: feeBPS
-    })
-    const expiration = Number(new Date()) + TIME_20_SECS
-    const relayerCommitment = { withdrawalData, expiration, extraGas };
+    });
+    const expiration = Number(new Date()) + TIME_20_SECS;
+    const relayerCommitment = { withdrawalData, expiration, amount: amountIn, extraGas };
     const signedRelayerCommitment = await web3Provider.signRelayerCommitment(chainId, relayerCommitment);
-    quoteResponse.addFeeCommitment({ expiration, withdrawalData, signedRelayerCommitment, extraGas })
+    quoteResponse.addFeeCommitment({ expiration, withdrawalData, signedRelayerCommitment, extraGas, amount: amountIn });
   }
 
   res
