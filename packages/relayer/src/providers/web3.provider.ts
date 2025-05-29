@@ -1,4 +1,4 @@
-import { Chain, createPublicClient, Hex, http, PublicClient, verifyTypedData } from "viem";
+import { Chain, createPublicClient, createWalletClient, Hex, http, publicActions, PublicClient, verifyTypedData, WalletClient } from "viem";
 import {
   CONFIG,
   getSignerPrivateKey
@@ -33,6 +33,7 @@ const RelayerCommitmentTypes = {
 export class Web3Provider implements IWeb3Provider {
   chains: { [key: number]: Chain; };
   clients: { [key: number]: PublicClient; };
+  signers: { [key: number]: WalletClient; };
 
   constructor() {
     this.chains = Object.fromEntries(CONFIG.chains.map(chainConfig => {
@@ -46,6 +47,17 @@ export class Web3Provider implements IWeb3Provider {
           transport: http(chain.rpcUrls.default.http[0])
         })];
     }));
+    this.signers = Object.fromEntries(Object.entries(this.chains).map(([chainId, chain]) => {
+      const account = privateKeyToAccount(getSignerPrivateKey(Number(chainId)) as `0x${string}`);
+      return [
+        Number(chainId),
+        createWalletClient({
+          account,
+          chain,
+          transport: http(chain.rpcUrls.default.http[0])
+        })];
+    }));
+
   }
 
   client(chainId: number): PublicClient {
@@ -54,6 +66,14 @@ export class Web3Provider implements IWeb3Provider {
       throw Error(`Web3ProviderError::UnsupportedChainId(${chainId})`);
     }
     else return client;
+  }
+
+  signer(chainId: number): WalletClient {
+    const signer = this.signers[chainId];
+    if (signer === undefined) {
+      throw Error(`Web3ProviderError::UnsupportedChainId(${chainId})`);
+    }
+    else return signer;
   }
 
   async getGasPrice(chainId: number): Promise<bigint> {

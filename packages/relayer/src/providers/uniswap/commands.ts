@@ -196,4 +196,3 @@ export const commandFnMap: CommandFnMap = {
 export function encodeInstruction<K extends Command>(ins: { command: K, params: CommandParams[K]; }): CommandPair {
   return commandFnMap[ins.command](ins.params);
 }
-

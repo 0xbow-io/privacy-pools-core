@@ -5,7 +5,8 @@ import { Address, getAddress } from "viem";
 import {
   getAssetConfig,
   getEntrypointAddress,
-  getFeeReceiverAddress
+  getFeeReceiverAddress,
+  getSignerPrivateKey
 } from "../config/index.js";
 import {
   BlockchainError,
@@ -20,13 +21,15 @@ import {
 import { db, SdkProvider, UniswapProvider, web3Provider } from "../providers/index.js";
 import { RelayerDatabase } from "../types/db.types.js";
 import { SdkProviderInterface } from "../types/sdk.types.js";
-import { decodeWithdrawalData, isViemError, parseSignals } from "../utils.js";
+import { decodeWithdrawalData, isFeeReceiverSameAsSigner, isViemError, parseSignals } from "../utils.js";
 import { quoteService } from "./index.js";
 import { Web3Provider } from "../providers/web3.provider.js";
 import { FeeCommitment } from "../interfaces/relayer/common.js";
 import { uniswapProvider } from "../providers/index.js";
 import { WRAPPED_NATIVE_TOKEN_ADDRESS } from "../providers/uniswap/constants.js";
 import { Withdrawal, WithdrawalProof } from "@0xbow/privacy-pools-core-sdk";
+import { privateKeyToAccount } from "viem/accounts";
+import { isFunctionExpression } from "typescript";
 
 /**
  * Class representing the Privacy Pool Relayer, responsible for processing withdrawal requests.
@@ -79,9 +82,11 @@ export class PrivacyPoolRelayer {
       }
 
       const response = await this.broadcastWithdrawal(req, chainId);
+      // const response = { hash: "0x" }
 
+      let txSwap;
       if (extraGas) {
-        await this.swapForNativeAndFund(req.scope, req.withdrawal, req.proof, chainId);
+        txSwap = await this.swapForNativeAndFund(req.scope, req.withdrawal, req.proof, chainId, response.hash);
       }
 
       await this.db.updateBroadcastedRequest(requestId, response.hash);
@@ -89,6 +94,7 @@ export class PrivacyPoolRelayer {
       return {
         success: true,
         txHash: response.hash,
+        txSwap,
         timestamp,
         requestId,
       };
@@ -134,11 +140,13 @@ export class PrivacyPoolRelayer {
     }
   }
 
-  async swapForNativeAndFund(scope: bigint, withdrawal: Withdrawal, proof: WithdrawalProof, chainId: number) {
-    const EXTRA_GAS_AMOUNT = 500_000n;  // wei
-    const WITHDRAW_GAS = 700_000n;  // wei
-    const SWAP_GAS = 200_000n;     // wei
-    const TOTAL_GAS = WITHDRAW_GAS + SWAP_GAS + EXTRA_GAS_AMOUNT;
+  async swapForNativeAndFund(scope: bigint, withdrawal: Withdrawal, proof: WithdrawalProof, chainId: number, relayTx: string) {
+
+    const relayReceipt = await web3Provider.client(chainId).waitForTransactionReceipt({ hash: relayTx as `0x${string}` });
+    const { gasUsed: relayGasUsed, effectiveGasPrice: relayGasPrice } = relayReceipt;
+
+    console.log("SWAPPING FOR NATIVE");
+
     const { assetAddress } = await this.sdkProvider.scopeData(scope, chainId);
     const assetConfig = getAssetConfig(chainId, assetAddress);
     const feeReceiver = getFeeReceiverAddress(chainId) as Address;
@@ -149,10 +157,9 @@ export class PrivacyPoolRelayer {
     const feeGross = withdrawnValue * relayFeeBPS / 10_000n;
     const feeBase = withdrawnValue * assetConfig.fee_bps / 10_000n;
 
-    const relayerGasRefundValue = TOTAL_GAS * gasPrice;
-    // const valueInErc20Units = relayerCostsAmount - relayerGasRefundInErc20;
+    const relayerGasRefundValue = gasPrice * quoteService.extraGasTxCost + relayGasPrice * relayGasUsed;
 
-    const swapTxHash = await this.uniswapProvider.swapExactInputSingleForWeth({
+    const txHash = await this.uniswapProvider.swapExactInputSingleForWeth({
       chainId,
       feeGross,
       feeBase,
@@ -162,7 +169,7 @@ export class PrivacyPoolRelayer {
       feeReceiver
     });
 
-    return swapTxHash;
+    return txHash;
 
   }
 
@@ -212,6 +219,7 @@ export class PrivacyPoolRelayer {
   protected async validateWithdrawal(wp: WithdrawalPayload, chainId: number) {
     const entrypointAddress = getEntrypointAddress(chainId);
     const feeReceiverAddress = getFeeReceiverAddress(chainId);
+    const signerAddress = privateKeyToAccount(getSignerPrivateKey(chainId) as `0x${string}`).address;
 
     const extraGas = wp.feeCommitment?.extraGas ?? false;
 
@@ -226,10 +234,18 @@ export class PrivacyPoolRelayer {
       );
     }
 
-    if (getAddress(feeRecipient) !== feeReceiverAddress) {
-      throw WithdrawalValidationError.feeReceiverMismatch(
-        `Fee recipient mismatch: expected "${feeReceiverAddress}", got "${feeRecipient}".`,
-      );
+    if (extraGas && !isFeeReceiverSameAsSigner(chainId)) {
+      if (getAddress(feeRecipient) !== getAddress(signerAddress)) {
+        throw WithdrawalValidationError.feeReceiverMismatch(
+          `Fee recipient with extraGas mismatch: expected "${signerAddress}", got "${feeRecipient}".`,
+        );
+      }
+    } else {
+      if (getAddress(feeRecipient) !== feeReceiverAddress) {
+        throw WithdrawalValidationError.feeReceiverMismatch(
+          `Fee recipient mismatch: expected "${feeReceiverAddress}", got "${feeRecipient}".`,
+        );
+      }
     }
 
     const withdrawalContext = BigInt(

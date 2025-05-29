@@ -5,7 +5,7 @@ import { QuoterError } from "../../exceptions/base.exception.js";
 import { web3Provider } from "../../providers/index.js";
 import { quoteService } from "../../services/index.js";
 import { QuoteMarshall } from "../../types.js";
-import { encodeWithdrawalData } from "../../utils.js";
+import { encodeWithdrawalData, isFeeReceiverSameAsSigner } from "../../utils.js";
 import { privateKeyToAccount } from "viem/accounts";
 
 const TIME_20_SECS = 20 * 1000;
@@ -30,9 +30,14 @@ export async function relayQuoteHandler(
   if (config === undefined)
     return next(QuoterError.assetNotSupported(`Asset ${assetAddress} for chain ${chainId} is not supported`));
 
-  const feeBPS = await quoteService.quoteFeeBPSNative({
-    chainId, amountIn, assetAddress, baseFeeBPS: config.fee_bps, extraGas: extraGas
-  });
+  let feeBPS;
+  try {
+    feeBPS = await quoteService.quoteFeeBPSNative({
+      chainId, amountIn, assetAddress, baseFeeBPS: config.fee_bps, extraGas: extraGas
+    });
+  } catch (e) {
+    return next(e);
+  }
 
   const recipient = req.body.recipient ? getAddress(req.body.recipient.toString()) : undefined;
 
@@ -43,16 +48,16 @@ export async function relayQuoteHandler(
 
   if (recipient) {
     let feeReceiverAddress: `0x${string}`;
+    const finalFeeReceiverAddress = getAddress(getFeeReceiverAddress(chainId));
     if (extraGas) {
-      const finalFeeReceiverAddress = getAddress(getFeeReceiverAddress(chainId));
       const signer = privateKeyToAccount(getSignerPrivateKey(chainId) as `0x${string}`);
-      if (finalFeeReceiverAddress.toLowerCase() === signer.address) {
-        feeReceiverAddress = getAddress(finalFeeReceiverAddress);
+      if (isFeeReceiverSameAsSigner(chainId)) {
+        feeReceiverAddress = finalFeeReceiverAddress;
       } else {
         feeReceiverAddress = signer.address;
       }
     } else {
-      feeReceiverAddress = getAddress(getFeeReceiverAddress(chainId));
+      feeReceiverAddress = finalFeeReceiverAddress;
     }
     const withdrawalData = encodeWithdrawalData({
       feeRecipient: getAddress(feeReceiverAddress),

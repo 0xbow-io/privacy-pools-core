@@ -17,6 +17,8 @@ import {
   WithdrawPublicSignals,
 } from "./interfaces/relayer/request.js";
 import { FeeDataAbi } from "./types/abi.types.js";
+import { getFeeReceiverAddress, getSignerPrivateKey } from "./config/index.js";
+import { privateKeyToAccount } from "viem/accounts";
 
 interface WithdrawalData {
   recipient: Address,
@@ -109,4 +111,10 @@ export function isViemError(error: unknown): error is ViemError {
     ContractFunctionRevertedError.prototype.constructor.name,
   ]
   return viemErrorNames.includes(error?.constructor?.name || "");
+}
+
+export function isFeeReceiverSameAsSigner(chainId: number) {
+    const feeReceiverAddress = getFeeReceiverAddress(chainId);
+    const signerAddress = privateKeyToAccount(getSignerPrivateKey(chainId) as `0x${string}`).address;
+    return feeReceiverAddress.toLowerCase() === signerAddress.toLowerCase()
 }

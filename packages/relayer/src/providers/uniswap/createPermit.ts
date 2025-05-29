@@ -10,14 +10,14 @@ export async function createPermit2<Signer extends CustomSource>({
   permit2Address,
   routerAddress,
   assetAddress,
-  amountIn,
+  allowanceAmount,
 }: {
   signer: Signer,
   chainId: number,
   permit2Address: Address,
   routerAddress: Address,
   assetAddress: Address,
-  amountIn: bigint,
+  allowanceAmount: bigint,
 }): Promise<[PermitSingle, `0x${string}`]> {
 
   const deadline = Math.floor(3600 + Number(new Date()) / 1000); // one hour
@@ -39,7 +39,7 @@ export async function createPermit2<Signer extends CustomSource>({
     spender: routerAddress,
     details: {
       token: assetAddress,
-      amount: amountIn,
+      amount: allowanceAmount,
       expiration: deadline,
       nonce
     },

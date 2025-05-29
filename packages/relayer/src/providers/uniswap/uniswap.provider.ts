@@ -1,12 +1,12 @@
 import { Token } from '@uniswap/sdk-core';
 import { FeeAmount } from '@uniswap/v3-sdk';
-import { Account, Address, getAddress, getContract, WriteContractParameters } from 'viem';
+import { Account, Address, createWalletClient, getAddress, getContract, WriteContractParameters } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
 import { getSignerPrivateKey } from "../../config/index.js";
 import { BlockchainError, RelayerError } from '../../exceptions/base.exception.js';
 import { web3Provider } from '../../providers/index.js';
-import { isViemError } from '../../utils.js';
+import { isFeeReceiverSameAsSigner, isViemError } from '../../utils.js';
 import { IERC20MinimalABI } from './abis/erc20.abi.js';
 import { QuoterV2ABI } from './abis/quoterV2.abi.js';
 import { UniversalRouterABI } from './abis/universalRouter.abi.js';
@@ -97,7 +97,7 @@ export class UniswapProvider {
       const quotedAmountOut = await quoterContract.simulate.quoteExactInputSingle([{
         tokenIn: tokenIn.address as Address,
         tokenOut: tokenOut.address as Address,
-        fee: FeeAmount.MEDIUM,
+        fee: FeeAmount.LOW,
         amountIn,
         sqrtPriceLimitX96: 0n,
       }]);
@@ -123,6 +123,7 @@ export class UniswapProvider {
   }
 
   async approvePermit2forERC20(tokenIn: `0x${string}`, chainId: number) {
+    //  0) - (this is done only once) - Approve Permit2 to move Relayer's ERC20
     const relayer = privateKeyToAccount(getSignerPrivateKey(chainId) as `0x${string}`);
     const PERMIT2_ADDRESS = getPermit2Address(chainId);
     const client = web3Provider.client(chainId);
@@ -133,31 +134,32 @@ export class UniswapProvider {
     });
     const allowance = await erc20.read.allowance([relayer.address, PERMIT2_ADDRESS]);
     if (allowance < 2n ** 128n) {
-      await erc20.write.approve(
+      const hash = await erc20.write.approve(
         [PERMIT2_ADDRESS, 2n ** 256n - 1n],
         { chain: client.chain, account: relayer }
       );
+      const r = await client.waitForTransactionReceipt({ hash });
     }
   }
 
-  // OPERATIONS:
-  //  0) - (this is done only once) - Approve Permit2 to move Relayer's ERC20
-  //  1) Send permit for Router to move Gross Fees in Token from Relayer
-  //  2) AllowanceTransfer from Relayer to feeReceiver for Net Fees
-  //  3) Swap ERC20 for WETH consuming (Gross-Net) Fees, destination Router, setting the payerIsUser=true flag, meaning to use permit2
-  //  4) Unwrap WETH to Router
-  //  5) Transfer native Refund value to Relayer
-  //  6) Sweep whatever is left to Recipient
   static createInstructionsIfFeeReceiverIsNotRelayer({
     permitParmas, router, pathParams, relayer,
     tokenIn, feeReceiver, feeBase,
     refundAmount, amountToSwap, minAmountOut, nativeRecipient
   }: CreateInstructionsFeeReceiveerIsNotRelayer): Instruction[] {
+    // OPERATIONS:
+    //  1) Send permit for Router to move Gross Fees in Token from Relayer
+    //  2) AllowanceTransfer from Relayer to feeReceiver for Base Fees
+    //  3) Swap ERC20 for WETH consuming (Gross-Base) Fees, destination Router, setting the payerIsUser=true flag, meaning to use permit2 (Relayer has the tokens)
+    //  4) Unwrap WETH to Router
+    //  5) Transfer native Refund value to Relayer
+    //  6) Sweep whatever is left to Recipient
     return [
       // This is used to authorize the router to move our tokens
       { command: Command.permit2, params: permitParmas },
       // We send relaying fees to feeReceiver
-      { command: Command.transfer, params: { token: tokenIn, recipient: feeReceiver, amount: feeBase, } },
+      { command: Command.transferWithPermit, params: { token: tokenIn, recipient: feeReceiver, amount: feeBase } },
+
       // Swap consuming all
       {
         command: Command.swapV3ExactIn, params: {
@@ -182,17 +184,16 @@ export class UniswapProvider {
     ];
   }
 
-  // OPERATIONS:
-  //  0) - (this is done only once) - Approve Permit2 to move Relayer's ERC20
-  //  1) AllowanceTransfer from Relayer to Router
-  //  2) Swap ERC20 for WETH, destination Router, setting the permit2=true flag
-  //  3) Unwrap WETH to Router
-  //  4) Transfer Refund value to Relayer
-  //  5) Sweep whatever is left to Recipient
   static createInstructionsIfFeeReceiverIsRelayer({
     permitParmas, router, pathParams, relayer,
     refundAmount, amountToSwap, minAmountOut, nativeRecipient
   }: CreateInstructionsFeeReceiveerIsRelayer): Instruction[] {
+    // OPERATIONS:
+    //  1) Send permit for Router to move Gross Fees in Token from Relayer
+    //  2) Swap ERC20 for WETH, destination Router, setting the payerIsUser=true flag
+    //  3) Unwrap WETH to Router
+    //  4) Transfer native Refund value to Relayer
+    //  5) Sweep whatever is left to Recipient
     return [
       // This is used to authorize the router to move our tokens
       { command: Command.permit2, params: permitParmas },
@@ -220,7 +221,7 @@ export class UniswapProvider {
     ];
   }
 
-  async swapExactInputSingleForWeth({
+  async simulateSwapExactInputSingleForWeth({
     nativeRecipient,
     feeReceiver,
     feeBase,
@@ -229,7 +230,10 @@ export class UniswapProvider {
     refundAmount,
     chainId
   }: SwapWithRefundParams): Promise<WriteContractParameters> {
-    const minAmountOut = 200_000n;
+
+    await this.approvePermit2forERC20(tokenIn, chainId);
+
+    const minAmountOut = refundAmount;
     const ROUTER_ADDRESS = getRouterAddress(chainId);
     const PERMIT2_ADDRESS = getPermit2Address(chainId);
     const relayer = privateKeyToAccount(getSignerPrivateKey(chainId) as `0x${string}`);
@@ -241,10 +245,12 @@ export class UniswapProvider {
       client
     });
 
+    const amountToSwap = feeGross - feeBase;
+
     const [permit, signature] = await createPermit2({
       signer: relayer,
       chainId,
-      amountIn: feeGross,
+      allowanceAmount: feeGross,
       permit2Address: PERMIT2_ADDRESS,
       routerAddress: ROUTER_ADDRESS,
       assetAddress: tokenIn
@@ -253,23 +259,24 @@ export class UniswapProvider {
     const pathParams = await getPoolPath(tokenIn, chainId);
 
     let instructions;
-    // If feeReceiver is the same as signer, moving coins around is easier
-    if (feeReceiver.toLowerCase() === relayer.address.toLowerCase()) {
+    if (isFeeReceiverSameAsSigner(chainId)) {
+      // If feeReceiver is the same as signer, moving coins around is easier
       instructions = UniswapProvider.createInstructionsIfFeeReceiverIsRelayer({
         relayer,
         router,
-        amountToSwap: feeGross,
+        amountToSwap,
         permitParmas: { permit, signature },
         refundAmount,
         minAmountOut,
         pathParams,
         nativeRecipient
       });
+
     } else {
       instructions = UniswapProvider.createInstructionsIfFeeReceiverIsNotRelayer({
         relayer,
         router,
-        amountToSwap: feeGross,
+        amountToSwap,
         permitParmas: { permit, signature },
         refundAmount,
         minAmountOut,
@@ -288,30 +295,42 @@ export class UniswapProvider {
     const commands = "0x" + commandPairs.map(x => x[0].toString(16).padStart(2, "0")).join("") as `0x${string}`;
     const params = commandPairs.map(x => x[1]);
 
-    const { request: simulation } = await router.simulate.execute([commands, params]);
+    try {
+      const { request: simulation } = await router.simulate.execute([commands, params], { account: relayer });
+      const estimateGas = await client.estimateContractGas(simulation);
 
-    const estimateGas = await client.estimateContractGas(simulation);
+      const {
+        address,
+        abi,
+        functionName,
+        args,
+        chain,
+        nonce,
+      } = simulation;
 
-    const {
-      address,
-      abi,
-      functionName,
-      args,
-      chain,
-      nonce,
-    } = simulation;
+      return {
+        functionName,
+        account: relayer,
+        address,
+        abi,
+        args,
+        chain,
+        nonce,
+        gas: estimateGas * 11n / 10n
+      };
+    } catch (e) {
+      console.error(e);
+      throw e;
+    }
 
-    return {
-      functionName,
-      account: relayer,
-      address,
-      abi,
-      args,
-      chain,
-      nonce,
-      gas: estimateGas * 15n / 10n
-    };
+  }
 
+  async swapExactInputSingleForWeth(params: SwapWithRefundParams) {
+    const { chainId } = params;
+    const writeContractParams = await this.simulateSwapExactInputSingleForWeth(params);
+    const relayer = web3Provider.signer(chainId);
+    const txHash = await relayer.writeContract(writeContractParams);
+    return txHash;
   }
 
 }

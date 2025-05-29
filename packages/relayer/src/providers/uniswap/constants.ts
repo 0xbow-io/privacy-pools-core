@@ -49,5 +49,6 @@ export function getV3Factory(chainId: number) {
 }
 
 export function getQuoterAddress(chainId: number) {
-  return getAddress(QUOTER_ADDRESSES[chainId]!)
+  const mainnetQuoter = "0x61fFE014bA17989E743c5F6cB21bF9697530B21e";
+  return getAddress(chainId !== 1 ? QUOTER_ADDRESSES[chainId]! : mainnetQuoter)
 }
