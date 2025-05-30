@@ -19,7 +19,7 @@ export const notFound = async () => {
   console.log(JSON.stringify(await r.json(), null, 2));
 };
 
-export const request = async (requestBody) => {
+export const request = async (requestBody: any) => {
   let r = await fetch("http://localhost:3000/relayer/request", {
     method: "post",
     headers: {
@@ -30,7 +30,17 @@ export const request = async (requestBody) => {
   console.log(JSON.stringify(await r.json(), null, 2));
 };
 
-export const quote = async (quoteBody) => {
+interface QuoteResponse {
+  baseFeeBPS: bigint,
+  feeBPS: bigint,
+  feeCommitment?: {
+    expiration: number,
+    withdrawalData: `0x${string}`,
+    signedRelayerCommitment: `0x${string}`,
+  };
+}
+
+export const quote = async (quoteBody: any) => {
   let r = await fetch("http://localhost:3000/relayer/quote", {
     method: "post",
     headers: {
@@ -40,5 +50,5 @@ export const quote = async (quoteBody) => {
   })
   const quoteResponse = await r.json();
   console.log(JSON.stringify(quoteResponse, null, 2))
-  return quoteResponse;
+  return quoteResponse as QuoteResponse;
 }

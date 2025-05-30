@@ -1,3 +1,4 @@
+import { createPublicClient, encodeAbiParameters, http } from "viem";
 import {
   bigintToHash,
   calculateContext,
@@ -18,6 +19,8 @@ import {
   PRIVATE_KEY,
 } from "./constants.js";
 import { anvilChain } from "./chain.js";
+import { getContract } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 
 /*
   TestToken deployed at: 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
@@ -28,7 +31,7 @@ import { anvilChain } from "./chain.js";
   TST Pool deployed at: 0x8A791620dd6260079BF849Dc5567aDC3F2FdC318
 */
 
-const sdk = new PrivacyPoolSDK(new Circuits({ browser: false }));
+const sdk = new PrivacyPoolSDK(new Circuits());
 
 const contracts = sdk.createContractInstance(
   LOCAL_ANVIL_RPC,
@@ -37,21 +40,52 @@ const contracts = sdk.createContractInstance(
   PRIVATE_KEY,
 );
 
-export async function deposit() {
-  const existingValue = BigInt("5000000000000000000"); // 5 eth
-  const existingNullifier = BigInt("2827991637673173") as Secret;
-  const existingSecret = BigInt("7338940278733227") as Secret;
+export async function deposit(note: string, amount: bigint) {
+  const [secret, nullifier] = note.split(":").map(BigInt) as Secret[];
+  if (secret === undefined || nullifier === undefined)
+    throw Error(`Malformed note: ${note}`);
+
   const precommitment = {
-    hash: hashPrecommitment(existingNullifier, existingSecret),
-    nullifier: existingNullifier,
-    secret: existingSecret,
+    hash: hashPrecommitment(nullifier!, secret!),
+    nullifier: secret,
+    secret: nullifier,
   };
-  return contracts.depositETH(existingValue, precommitment.hash);
+  return contracts.depositETH(amount, precommitment.hash);
+}
+
+export async function depositAsset(note: string, amount: bigint, assetAddress: `0x${string}`) {
+  const [secret, nullifier] = note.split(":").map(BigInt) as Secret[];
+  if (secret === undefined || nullifier === undefined)
+    throw Error(`Malformed note: ${note}`);
+
+  const precommitment = {
+    hash: hashPrecommitment(nullifier!, secret!),
+    nullifier: secret,
+    secret: nullifier,
+  };
+
+  console.log(precommitment);
+  console.log(hashPrecommitment(secret!, nullifier!));
+
+  const client = createPublicClient({
+    transport: http("http://127.0.0.1:8545"),
+  });
+  const account = privateKeyToAccount(PRIVATE_KEY);
+  const erc20 = getContract({
+    address: assetAddress,
+    client,
+    abi: [{ "inputs": [{ "internalType": "address", "name": "spender", "type": "address" }, { "internalType": "uint256", "name": "value", "type": "uint256" }], "name": "approve", "outputs": [], "stateMutability": "payable", "type": "function" },]
+  });
+  const txApproval = await erc20.write.approve([ENTRYPOINT_ADDRESS, 2n ** 256n - 1n], { account, chain: anvilChain });
+  return contracts.depositERC20(assetAddress, amount, precommitment.hash);
 }
 
 export async function proveWithdrawal(
+  withdrawnValue: bigint,
   w: Withdrawal,
   scope: bigint,
+  oldNote: string,
+  newNote: string,
 ): Promise<WithdrawalProof> {
   try {
     console.log("🚀 Initializing PrivacyPoolSDK...");
@@ -63,7 +97,7 @@ export async function proveWithdrawal(
     );
 
     // **Load Valid Input Values**
-    const withdrawnValue = BigInt("100000000000000000"); // 0.1 eth
+    // const withdrawnValue = BigInt("100000000000000000"); // 0.1 eth
     const stateRoot = BigInt(
       "11647068014638404411083963959916324311405860401109309104995569418439086324505",
     );
@@ -76,18 +110,23 @@ export async function proveWithdrawal(
 
     // **Commitment Data**
     const existingValue = BigInt("5000000000000000000");
-    const existingNullifier = BigInt("2827991637673173") as Secret;
-    const existingSecret = BigInt("7338940278733227") as Secret;
-    const newNullifier = BigInt("1800210687471587") as Secret;
-    const newSecret = BigInt("6593588285288381") as Secret;
+    // const existingValue = BigInt("297000000");
+
+    const [existingSecret, existingNullifier] = oldNote.split(":").map(BigInt) as Secret[];
+    if (existingSecret === undefined || existingNullifier === undefined)
+      throw Error(`Malformed note: ${oldNote}`);
+
+    const [newSecret, newNullifier] = newNote.split(":").map(BigInt) as Secret[];
+    if (newSecret === undefined || newNullifier === undefined)
+      throw Error(`Malformed note: ${newNote}`);
 
     console.log("🛠️ Generating commitments...");
 
     const commitment = getCommitment(
       existingValue,
       label,
-      existingNullifier,
-      existingSecret,
+      existingNullifier!,
+      existingSecret!,
     );
 
     // **State Merkle Proof**
