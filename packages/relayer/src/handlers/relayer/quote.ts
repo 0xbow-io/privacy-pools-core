@@ -5,7 +5,7 @@ import { QuoterError } from "../../exceptions/base.exception.js";
 import { web3Provider } from "../../providers/index.js";
 import { quoteService } from "../../services/index.js";
 import { QuoteMarshall } from "../../types.js";
-import { encodeWithdrawalData, isFeeReceiverSameAsSigner } from "../../utils.js";
+import { encodeWithdrawalData, isFeeReceiverSameAsSigner, isNative } from "../../utils.js";
 import { privateKeyToAccount } from "viem/accounts";
 
 const TIME_20_SECS = 20 * 1000;
@@ -19,16 +19,15 @@ export async function relayQuoteHandler(
   const chainId = Number(req.body.chainId!);
   const amountIn = BigInt(req.body.amount!.toString());
   const assetAddress = getAddress(req.body.asset!.toString());
-
-  const extraGas = Boolean(req.body.extraGas);
-
-  // TODO: set native gas units amount on config
-  // TODO: check if the units are ok
-  const extraGasUnits = extraGas ? 500_000n : 0n;
+  let extraGas = Boolean(req.body.extraGas);
 
   const config = getAssetConfig(chainId, assetAddress);
   if (config === undefined)
     return next(QuoterError.assetNotSupported(`Asset ${assetAddress} for chain ${chainId} is not supported`));
+
+  if (isNative(assetAddress)) {
+    extraGas = false;
+  }
 
   let feeBPS;
   try {

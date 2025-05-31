@@ -21,7 +21,7 @@ import {
 import { db, SdkProvider, UniswapProvider, web3Provider } from "../providers/index.js";
 import { RelayerDatabase } from "../types/db.types.js";
 import { SdkProviderInterface } from "../types/sdk.types.js";
-import { decodeWithdrawalData, isFeeReceiverSameAsSigner, isViemError, parseSignals } from "../utils.js";
+import { decodeWithdrawalData, isFeeReceiverSameAsSigner, isNative, isViemError, parseSignals } from "../utils.js";
 import { quoteService } from "./index.js";
 import { Web3Provider } from "../providers/web3.provider.js";
 import { FeeCommitment } from "../interfaces/relayer/common.js";
@@ -142,12 +142,15 @@ export class PrivacyPoolRelayer {
 
   async swapForNativeAndFund(scope: bigint, withdrawal: Withdrawal, proof: WithdrawalProof, chainId: number, relayTx: string) {
 
+    const { assetAddress } = await this.sdkProvider.scopeData(scope, chainId);
+    if (isNative(assetAddress)) {
+      // we shouldn't be here
+      return
+    }
+
     const relayReceipt = await web3Provider.client(chainId).waitForTransactionReceipt({ hash: relayTx as `0x${string}` });
     const { gasUsed: relayGasUsed, effectiveGasPrice: relayGasPrice } = relayReceipt;
 
-    console.log("SWAPPING FOR NATIVE");
-
-    const { assetAddress } = await this.sdkProvider.scopeData(scope, chainId);
     const assetConfig = getAssetConfig(chainId, assetAddress);
     const feeReceiver = getFeeReceiverAddress(chainId) as Address;
     const { recipient, relayFeeBPS } = decodeWithdrawalData(withdrawal.data);
