@@ -5,6 +5,9 @@ import { ChainContext } from "./chain.js";
 import { feeRecipient, PRIVATE_KEY, processooor, recipient } from "./constants.js";
 import { encodeFeeData, isNative } from "./util.js";
 import { SdkWrapper } from './sdk-wrapper.js';
+import * as fs from "fs";
+import { generatePrivateKey } from 'viem/accounts';
+import { generateDepositSecrets } from '@0xbow/privacy-pools-core-sdk';
 
 interface Context {
   chainId: number;
@@ -13,19 +16,19 @@ interface Context {
 
 interface DepositCli {
   context: Context;
-  note: string;
+  accNonce: bigint;
   amount: bigint;
-  asset?: `0x${string}`;
+  asset: `0x${string}`;
 }
 
-export async function depositCli({ note, amount, asset, context }: DepositCli) {
+export async function depositCli({ accNonce, amount, asset, context }: DepositCli) {
   const { chainId, privateKey } = context;
   const sdkWrapper = new SdkWrapper(ChainContext(chainId, privateKey));
   let r;
-  if (asset) {
-    r = await sdkWrapper.depositAsset(note, amount, asset);
+  if (isNative(asset)) {
+    r = await sdkWrapper.deposit(accNonce, amount);
   } else {
-    r = await sdkWrapper.deposit(note, amount);
+    r = await sdkWrapper.depositAsset(accNonce, amount, asset);
   }
   await r.wait();
   console.log(`Successful deposit, hash := ${r.hash}`);
@@ -50,15 +53,26 @@ export async function quoteCli({ context, asset, amount, extraGas }: QuoteCli) {
 
 interface RelayCli {
   context: Context;
+
   asset: `0x${string}`;
   withQuote: boolean;
   extraGas: boolean;
   amount: bigint;
-  note: string;
-  newNote: string;
+
+  fromDeposit: boolean;
+  fromLabel?: bigint;
+  accNonce: bigint;
+  value: bigint;
+
+  leaves: {
+    index: bigint;
+    leaf: bigint;
+    root: bigint;
+    block: bigint;
+  }[];
 }
 
-export async function relayCli({ asset, withQuote, amount, extraGas, note, newNote, context }: RelayCli) {
+export async function relayCli({ asset, withQuote, amount, extraGas, fromDeposit, fromLabel, accNonce, value, context, leaves }: RelayCli) {
 
   const { chainId, privateKey } = context;
   const sdkWrapper = new SdkWrapper(ChainContext(chainId, privateKey));
@@ -66,9 +80,27 @@ export async function relayCli({ asset, withQuote, amount, extraGas, note, newNo
   const pool = await sdkWrapper.chainContext.getPoolContract(asset);
   const scope = await pool.read.SCOPE();
 
+  let note: { nullifier: bigint, secret: bigint; };
+  let newNote: { nullifier: bigint, secret: bigint; } | undefined;
+  let label: bigint;
+  if (fromDeposit) {
+    note = sdkWrapper.depositSecret(scope, accNonce);
+    const noteLabel = await sdkWrapper.findLabelFromDepositNote(asset, note);
+    label = noteLabel;
+    newNote = sdkWrapper.withdrawSecret(noteLabel, 0n);
+  } else if (fromLabel !== undefined) {
+    note = sdkWrapper.withdrawSecret(fromLabel, accNonce);
+    newNote = sdkWrapper.withdrawSecret(fromLabel, accNonce + 1n);
+    label = fromLabel;
+  } else {
+    throw new Error("No deposit or label");
+  }
+
+  console.log("note", note);
+  console.log("newnote", newNote);
+
   // 0.1 ETH or 1.5 dollars
-  const _withdrawAmount = isNative(asset) ? 100000000000000000n : 1500000n;
-  const withdrawAmount = amount ? BigInt(amount) : _withdrawAmount;
+  const withdrawAmount = amount;
 
   let data;
   let feeCommitment = undefined;
@@ -91,7 +123,7 @@ export async function relayCli({ asset, withQuote, amount, extraGas, note, newNo
   const withdrawal = { processooor, data };
 
   // prove
-  const { proof, publicSignals } = await sdkWrapper.proveWithdrawal(withdrawAmount, withdrawal, scope, note, newNote);
+  const { proof, publicSignals } = await sdkWrapper.proveWithdrawal(withdrawAmount, withdrawal, scope, label, value, note, newNote, leaves);
 
   const requestBody = {
     scope: scope.toString(),
@@ -113,12 +145,16 @@ interface DefArgs {
 
 export async function cli() {
   let args = minimist(process.argv.slice(2), {
-    string: ["asset", "note", "new-note"],
-    boolean: ["quote", "extraGas"],
+    string: ["asset", "note", "new-note", "fromLabel", "accNonce", "output"],
+    boolean: ["quote", "extraGas", "fromDeposit"],
     alias: {
       "private-key": "privateKey",
       "chain-id": "chainId",
-      "new-note": "newNote"
+      "new-note": "newNote",
+      "from-deposit": "fromDeposit",
+      "acc-nonce": "accNonce",
+      "from-label": "fromLabel",
+      "cache-file": "cacheFile"
     },
     default: {
       "chainId": process.env["CHAIN_ID"] || 1115511,
@@ -126,6 +162,7 @@ export async function cli() {
       "asset": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
       "extraGas": true,
       "quote": false,
+      "fromDeposit": false,
       "note": "7338940278733227:2827991637673173",
       "new-note": "6593588285288381:1800210687471587"
     }
@@ -134,7 +171,8 @@ export async function cli() {
   const actions = [
     "deposit",
     "quote",
-    "relay"
+    "relay",
+    "tree"
   ];
 
   if (!actions.includes(action)) {
@@ -147,7 +185,7 @@ export async function cli() {
   switch (action) {
     case "deposit": {
       args = args as DefArgs & { amount: string, asset?: string; note: string; };
-      const r = await depositCli({ note: args.note, amount: BigInt(args.amount), asset: args.asset, context });
+      const r = await depositCli({ accNonce: BigInt(args.accNonce), amount: BigInt(args.amount), asset: args.asset, context });
       console.log(r);
       break;
     }
@@ -165,16 +203,39 @@ export async function cli() {
       break;
     }
     case "relay": {
-      args = args as DefArgs & { amount: string, asset: string; quote: boolean; extraGas: boolean; note: string; newNote: string; };
+      args = args as DefArgs & {
+        amount: string;
+        asset: string;
+        quote: boolean;
+        extraGas: boolean;
+
+        fromDeposit: boolean;
+        fromLabel: string;
+        accNonce: string;
+        value: string;
+
+        cacheFile: string;
+      };
+
       await relayCli({
         context,
         asset: getAddress(args.asset),
         amount: BigInt(args.amount),
         extraGas: args.extraGas,
         withQuote: args.quote,
-        note: args.note,
-        newNote: args.newNote
+
+        fromDeposit: args.fromDeposit,
+        fromLabel: args.fromLabel ? BigInt(args.fromLabel) : undefined,
+        accNonce: BigInt(args.accNonce),
+        value: BigInt(args.value),
+
+        leaves: readLeavesFromFile(args.cacheFile),
       });
+      break;
+    }
+    case "tree": {
+      args = args as DefArgs & { fromBlock: string; asset: string; output?: string };
+      buildTreeCache({ context, asset: args.asset, fromBlock: args.fromBlock, output: args.output });
       break;
     }
     case undefined: {
@@ -183,4 +244,46 @@ export async function cli() {
     }
   }
 
+}
+
+
+async function buildTreeCache({ context, asset, fromBlock, output }: { fromBlock: string; asset: string; output?: string } & { context: Context; }) {
+  console.log("Building tree");
+  const { chainId, privateKey } = context;
+  const sdkWrapper = new SdkWrapper(ChainContext(chainId, privateKey));
+  const pool = await sdkWrapper.chainContext.getPoolContract(asset as `0x${string}`);
+  const leavesRaw = await pool.getEvents.LeafInserted({ fromBlock: BigInt(fromBlock) });
+  const leaves = leavesRaw.map(l => ({
+    index: l.args._index!.toString(),
+    leaf: l.args._leaf!.toString(),
+    root: l.args._root!.toString(),
+    block: l.blockNumber.toString()
+  }));
+  const timestamp = (new Date()).toISOString().replaceAll(":", "_").replace(new RegExp("\.[0-9]{3}Z"), "");
+  const treeFileName = output || `./tree-cache-${timestamp}.json`;
+  fs.writeFileSync(treeFileName, JSON.stringify(leaves, null, 2));
+  console.log(`Wrote ${leaves.length} leaves to file ${treeFileName}`);
+
+  // const depositsRaw = await pool.getEvents.Deposited(undefined, { fromBlock: BigInt(fromBlock) });
+  // const deposits = depositsRaw.map(d => ({
+  //   block: d.blockNumber.toString(),
+  //   depositor: d.args._depositor,
+  //   commitment: d.args._commitment!.toString(),
+  //   label: d.args._label!.toString(),
+  //   value: d.args._value!.toString(),
+  //   precommitmentHash: d.args._precommitmentHash
+  // }));
+  // const depositsFileName = `./deposits-cache-${timestamp}.json`;
+  // fs.writeFileSync(depositsFileName, JSON.stringify(deposits, null, 2));
+  // console.log(`Wrote ${deposits.length} deposits to file ${depositsFileName}`);
+}
+
+function readLeavesFromFile(filePath: string) {
+  const rawLeaves = JSON.parse(fs.readFileSync(filePath, { encoding: 'utf-8' })) as any[];
+  return rawLeaves.map(l => ({
+    index: BigInt(l.index),
+    leaf: BigInt(l.leaf),
+    root: BigInt(l.root),
+    block: BigInt(l.block),
+  }));
 }

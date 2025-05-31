@@ -10,16 +10,22 @@ const anvil_id = 31337;
 const sepolia_id = 11155111;
 const main = 1;
 
+type PoolContract = GetContractReturnType<typeof PoolAbi, PublicClient, `0x${string}`>;
+
 export interface IChainContext {
   account: Account,
   chain: ReturnType<typeof defineChain>;
   client: PublicClient;
   entrypoint: GetContractReturnType<typeof EntrypointAbi, PublicClient, `0x${string}`>,
-  getPoolContract: (asset: `0x${string}`) => Promise<GetContractReturnType<typeof PoolAbi, PublicClient, `0x${string}`>>;
+  getPoolContract: (asset: `0x${string}`) => Promise<PoolContract>;
+  getPoolContractByScope: (scope: bigint) => PoolContract;
   getErc20Contract: (asset: `0x${string}`) => GetContractReturnType<typeof Erc20Abi, PublicClient, `0x${string}`>;
 }
 
 export function ChainContext(chainId: number, privateKey: `0x${string}`): IChainContext {
+
+  const _poolCacheByAsset: { [key: `0x${string}`]: PoolContract; } = {};
+  const _poolCacheByScope: { [key: string]: PoolContract; } = {};
 
   const anvilChain = defineChain({ ...localhost, id: chainId });
 
@@ -35,17 +41,31 @@ export function ChainContext(chainId: number, privateKey: `0x${string}`): IChain
   });
 
   async function getPoolContract(asset: `0x${string}`) {
+    const cachedPool = _poolCacheByAsset[asset];
+    if (cachedPool !== undefined)
+      return cachedPool;
     const [
       poolAddress,
       _minimumDepositAmount,
       _vettingFeeBPS,
       _maxRelayFeeBPS
     ] = await entrypoint.read.assetConfig([asset]);
-    return getContract({
+    const pool = getContract({
       address: poolAddress,
       abi: PoolAbi,
       client: publicClient,
     });
+    const scope = await pool.read.SCOPE();
+    _poolCacheByAsset[asset] = pool;
+    _poolCacheByScope[scope.toString()] = pool;
+    return pool;
+  }
+
+  function getPoolContractByScope(scope: bigint) {
+    const cachedPool = _poolCacheByScope[scope.toString()];
+    if (cachedPool !== undefined)
+      return cachedPool;
+    throw Error("Pool is not instantiated")
   }
 
   function getErc20Contract(asset: `0x${string}`) {
@@ -62,7 +82,8 @@ export function ChainContext(chainId: number, privateKey: `0x${string}`): IChain
     client: publicClient,
     entrypoint,
     getPoolContract,
-    getErc20Contract
+    getErc20Contract,
+    getPoolContractByScope
   };
 
 }
