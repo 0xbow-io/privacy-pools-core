@@ -31,7 +31,7 @@ export async function getPool(chainId: number, tokenA: Token, tokenB: Token, fee
     poolContract.read.slot0!(),
   ]);
 
-  let [sqrtPriceX96, tick, , , , ,] = slot0;
+  const [sqrtPriceX96, tick, , , , ,] = slot0;
 
   const pool = new Pool(token0, token1, fee, toHex(sqrtPriceX96), toHex(liquidity), tick);
 

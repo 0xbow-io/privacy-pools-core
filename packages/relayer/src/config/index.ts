@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import { ConfigError, RelayerError, WithdrawalValidationError } from "../exceptions/base.exception.js";
+import { ConfigError, RelayerError } from "../exceptions/base.exception.js";
 import { zConfig } from "./schemas.js";
-import { ChainConfig, AssetConfig } from "./types.js";
+import { AssetConfig, ChainConfig } from "./types.js";
 
 /**
  * Reads the configuration file from the path specified in the CONFIG_PATH environment variable
@@ -132,4 +132,4 @@ export function getAssetConfig(chainId: number, assetAddress: string): AssetConf
 }
 
 // Re-export types
-export * from "./types.js"; 
+export * from "./types.js";

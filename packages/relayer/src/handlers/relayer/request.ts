@@ -1,16 +1,14 @@
 import { NextFunction, Request, Response } from "express";
-import { getAddress } from "viem";
+import { CONFIG, getChainConfig } from "../../config/index.js";
 import { ConfigError, ValidationError } from "../../exceptions/base.exception.js";
 import {
   RelayerResponse,
-  RelayRequestBody,
   WithdrawalPayload,
 } from "../../interfaces/relayer/request.js";
+import { web3Provider } from "../../providers/index.js";
 import { zRelayRequest } from "../../schemes/relayer/request.scheme.js";
 import { privacyPoolRelayer } from "../../services/index.js";
 import { RequestMashall } from "../../types.js";
-import { CONFIG, getChainConfig } from "../../config/index.js";
-import { web3Provider } from "../../providers/index.js";
 
 /**
  * Converts a RelayRequestBody into a WithdrawalPayload.
@@ -56,8 +54,7 @@ function parseWithdrawal(body: Request["body"]): { payload: WithdrawalPayload, c
 
   const { data, error, success } = zRelayRequest.safeParse(body);
 
-  if (success) {
-  } else {
+  if (!success) {
     throw ValidationError.invalidInput({ error, message: "Error parsing payload" });
   }
 

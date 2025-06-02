@@ -6,8 +6,6 @@ import { feeRecipient, PRIVATE_KEY, processooor, recipient } from "./constants.j
 import { encodeFeeData, isNative } from "./util.js";
 import { SdkWrapper } from './sdk-wrapper.js';
 import * as fs from "fs";
-import { generatePrivateKey } from 'viem/accounts';
-import { generateDepositSecrets } from '@0xbow/privacy-pools-core-sdk';
 
 interface Context {
   chainId: number;
@@ -255,14 +253,14 @@ async function buildTreeCache({ context, asset, fromBlock, output }: { fromBlock
     root: l.args._root!.toString(),
     block: l.blockNumber.toString()
   }));
-  const timestamp = (new Date()).toISOString().replaceAll(":", "_").replace(new RegExp("\.[0-9]{3}Z"), "");
+  const timestamp = (new Date()).toISOString().replaceAll(":", "_").replace(new RegExp(".[0-9]{3}Z"), "");
   const treeFileName = output || `./tree-cache-${timestamp}.json`;
   fs.writeFileSync(treeFileName, JSON.stringify(leaves, null, 2));
   console.log(`Wrote ${leaves.length} leaves to file ${treeFileName}`);
 }
 
 function readLeavesFromFile(filePath: string) {
-  const rawLeaves = JSON.parse(fs.readFileSync(filePath, { encoding: 'utf-8' })) as any[];
+  const rawLeaves = JSON.parse(fs.readFileSync(filePath, { encoding: 'utf-8' })) as { index: string, leaf: string, root: string, block: string; }[];
   return rawLeaves.map(l => ({
     index: BigInt(l.index),
     leaf: BigInt(l.leaf),

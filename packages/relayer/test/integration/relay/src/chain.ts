@@ -1,14 +1,10 @@
-import { Account, createPublicClient, defineChain, getContract, GetContractReturnType, http, parseAbi, PublicClient } from "viem";
+import { Account, createPublicClient, defineChain, getContract, GetContractReturnType, http, PublicClient } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import { localhost } from "viem/chains";
 import { abi as EntrypointAbi } from "./abis/Entrypoint.abi.js";
-import { abi as PoolAbi } from "./abis/Pool.abi.js";
 import { abi as Erc20Abi } from "./abis/ERC20.abi.js";
+import { abi as PoolAbi } from "./abis/Pool.abi.js";
 import { ENTRYPOINT_ADDRESS, LOCAL_ANVIL_RPC } from "./constants.js";
-import { privateKeyToAccount } from "viem/accounts";
-
-const anvil_id = 31337;
-const sepolia_id = 11155111;
-const main = 1;
 
 type PoolContract = GetContractReturnType<typeof PoolAbi, PublicClient, `0x${string}`>;
 
@@ -46,9 +42,9 @@ export function ChainContext(chainId: number, privateKey: `0x${string}`): IChain
       return cachedPool;
     const [
       poolAddress,
-      _minimumDepositAmount,
-      _vettingFeeBPS,
-      _maxRelayFeeBPS
+      _minimumDepositAmount,  // eslint-disable-line @typescript-eslint/no-unused-vars
+      _vettingFeeBPS,  // eslint-disable-line @typescript-eslint/no-unused-vars
+      _maxRelayFeeBPS  // eslint-disable-line @typescript-eslint/no-unused-vars
     ] = await entrypoint.read.assetConfig([asset]);
     const pool = getContract({
       address: poolAddress,

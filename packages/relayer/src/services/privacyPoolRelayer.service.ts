@@ -29,7 +29,6 @@ import { uniswapProvider } from "../providers/index.js";
 import { WRAPPED_NATIVE_TOKEN_ADDRESS } from "../providers/uniswap/constants.js";
 import { Withdrawal, WithdrawalProof } from "@0xbow/privacy-pools-core-sdk";
 import { privateKeyToAccount } from "viem/accounts";
-import { isFunctionExpression } from "typescript";
 
 /**
  * Class representing the Privacy Pool Relayer, responsible for processing withdrawal requests.

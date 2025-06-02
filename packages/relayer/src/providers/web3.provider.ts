@@ -1,11 +1,11 @@
-import { Chain, createPublicClient, createWalletClient, Hex, http, publicActions, PublicClient, verifyTypedData, WalletClient } from "viem";
+import { Chain, createPublicClient, createWalletClient, Hex, http, PublicClient, verifyTypedData, WalletClient } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import {
   CONFIG,
   getSignerPrivateKey
 } from "../config/index.js";
-import { createChainObject } from "../utils.js";
-import { privateKeyToAccount } from "viem/accounts";
 import { FeeCommitment } from "../interfaces/relayer/common.js";
+import { createChainObject } from "../utils.js";
 
 interface IWeb3Provider {
   client(chainId: number): PublicClient;

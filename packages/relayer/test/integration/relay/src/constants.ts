@@ -4,7 +4,8 @@ import { Address, getAddress, Hex } from "viem";
 // export const ENTRYPOINT_ADDRESS: Address = "0x6818809EefCe719E480a7526D76bD3e561526b46";
 
 // sepolia (localnet)
-export const ENTRYPOINT_ADDRESS: Address = "0x12213D498Fd274Ae6236De3358a385eB084bc6A6";
+export const ENTRYPOINT_ADDRESS: Address = "0x1fF2EA3C98E22d5589d66829a1599cB74b566E94";
+
 
 export const LOCAL_ANVIL_RPC = "http://127.0.0.1:8545";
 

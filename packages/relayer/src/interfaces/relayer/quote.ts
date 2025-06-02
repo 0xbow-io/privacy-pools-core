@@ -1,5 +1,3 @@
-import { FeeCommitment } from "./common.js";
-
 export interface QuotetBody {
   /** Chain ID to process the request on */
   chainId: string | number;

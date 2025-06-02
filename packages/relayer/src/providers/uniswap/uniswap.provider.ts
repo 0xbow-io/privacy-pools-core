@@ -1,6 +1,6 @@
 import { Token } from '@uniswap/sdk-core';
 import { FeeAmount } from '@uniswap/v3-sdk';
-import { Account, Address, createWalletClient, getAddress, getContract, WriteContractParameters } from 'viem';
+import { Account, Address, getAddress, getContract, WriteContractParameters } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
 import { getSignerPrivateKey } from "../../config/index.js";
@@ -138,7 +138,7 @@ export class UniswapProvider {
         [PERMIT2_ADDRESS, 2n ** 256n - 1n],
         { chain: client.chain, account: relayer }
       );
-      const r = await client.waitForTransactionReceipt({ hash });
+      await client.waitForTransactionReceipt({ hash });
     }
   }
 

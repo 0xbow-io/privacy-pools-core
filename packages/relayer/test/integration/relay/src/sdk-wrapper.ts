@@ -10,6 +10,7 @@ import {
   Hash,
   hashPrecommitment,
   LeanIMTMerkleProof,
+  MasterKeys,
   PrivacyPoolSDK,
   Secret,
   Withdrawal,
@@ -40,7 +41,7 @@ export class SdkWrapper {
   sdk: PrivacyPoolSDK;
   contracts: ContractInteractionsService;
   mnemonic: string;
-  masterKeys: any;
+  masterKeys: MasterKeys;
 
   constructor(chainContext: IChainContext) {
     this.chainContext = chainContext;
@@ -116,7 +117,7 @@ export class SdkWrapper {
     };
 
     const erc20 = this.chainContext.getErc20Contract(assetAddress);
-    const txApproval = await erc20.write.approve([ENTRYPOINT_ADDRESS, 2n ** 256n - 1n], {
+    await erc20.write.approve([ENTRYPOINT_ADDRESS, 2n ** 256n - 1n], {
       account: this.chainContext.account,
       chain: this.chainContext.chain
     });
@@ -259,6 +260,7 @@ export class SdkWrapper {
         proofInput,
       );
 
+      console.log(proofPayload)
       return proofPayload;
 
     } catch (error) {
