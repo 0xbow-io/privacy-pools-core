@@ -145,12 +145,11 @@ interface DefArgs {
 
 export async function cli() {
   let args = minimist(process.argv.slice(2), {
-    string: ["asset", "note", "new-note", "fromLabel", "accNonce", "output"],
+    string: ["asset", "fromLabel", "accNonce", "output"],
     boolean: ["quote", "extraGas", "fromDeposit"],
     alias: {
       "private-key": "privateKey",
       "chain-id": "chainId",
-      "new-note": "newNote",
       "from-deposit": "fromDeposit",
       "acc-nonce": "accNonce",
       "from-label": "fromLabel",
@@ -163,8 +162,6 @@ export async function cli() {
       "extraGas": true,
       "quote": false,
       "fromDeposit": false,
-      "note": "7338940278733227:2827991637673173",
-      "new-note": "6593588285288381:1800210687471587"
     }
   });
   const action = process.argv[2]!;
@@ -234,7 +231,7 @@ export async function cli() {
       break;
     }
     case "tree": {
-      args = args as DefArgs & { fromBlock: string; asset: string; output?: string };
+      args = args as DefArgs & { fromBlock: string; asset: string; output?: string; };
       buildTreeCache({ context, asset: args.asset, fromBlock: args.fromBlock, output: args.output });
       break;
     }
@@ -246,8 +243,7 @@ export async function cli() {
 
 }
 
-
-async function buildTreeCache({ context, asset, fromBlock, output }: { fromBlock: string; asset: string; output?: string } & { context: Context; }) {
+async function buildTreeCache({ context, asset, fromBlock, output }: { fromBlock: string; asset: string; output?: string; } & { context: Context; }) {
   console.log("Building tree");
   const { chainId, privateKey } = context;
   const sdkWrapper = new SdkWrapper(ChainContext(chainId, privateKey));
@@ -263,19 +259,6 @@ async function buildTreeCache({ context, asset, fromBlock, output }: { fromBlock
   const treeFileName = output || `./tree-cache-${timestamp}.json`;
   fs.writeFileSync(treeFileName, JSON.stringify(leaves, null, 2));
   console.log(`Wrote ${leaves.length} leaves to file ${treeFileName}`);
-
-  // const depositsRaw = await pool.getEvents.Deposited(undefined, { fromBlock: BigInt(fromBlock) });
-  // const deposits = depositsRaw.map(d => ({
-  //   block: d.blockNumber.toString(),
-  //   depositor: d.args._depositor,
-  //   commitment: d.args._commitment!.toString(),
-  //   label: d.args._label!.toString(),
-  //   value: d.args._value!.toString(),
-  //   precommitmentHash: d.args._precommitmentHash
-  // }));
-  // const depositsFileName = `./deposits-cache-${timestamp}.json`;
-  // fs.writeFileSync(depositsFileName, JSON.stringify(deposits, null, 2));
-  // console.log(`Wrote ${deposits.length} deposits to file ${depositsFileName}`);
 }
 
 function readLeavesFromFile(filePath: string) {

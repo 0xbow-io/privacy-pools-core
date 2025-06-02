@@ -6,7 +6,6 @@ import {
   generateDepositSecrets,
   generateMasterKeys,
   generateMerkleProof,
-  generateWithdrawalSecrets,
   getCommitment,
   Hash,
   hashPrecommitment,
@@ -15,10 +14,10 @@ import {
   Secret,
   Withdrawal,
   WithdrawalProof,
-  WithdrawalProofInput,
+  WithdrawalProofInput
 } from "@0xbow/privacy-pools-core-sdk";
 
-import { ChainContext, IChainContext } from "./chain.js";
+import { IChainContext } from "./chain.js";
 import {
   ENTRYPOINT_ADDRESS,
   PRIVATE_KEY
@@ -107,13 +106,8 @@ export class SdkWrapper {
 
     const pool = await this.chainContext.getPoolContract(assetAddress);
     const scope = await pool.read.SCOPE() as Hash;
-    const index = await pool.read.nonce();
 
     const { secret, nullifier } = this.depositSecret(scope, accNonce);
-
-    // const [secret, nullifier] = note.split(":").map(BigInt) as Secret[];
-    // if (secret === undefined || nullifier === undefined)
-    //   throw Error(`Malformed note: ${note}`);
 
     const precommitment = {
       hash: hashPrecommitment(nullifier!, secret!),
@@ -188,16 +182,14 @@ export class SdkWrapper {
         existingSecret as Secret,
       );
 
-      // console.log("Old commitment", commitment);
       const sortedLeaves = leaves.sort((a, b) => Number(a.index - b.index)).map(x => x.leaf);
-      // console.log(leaves, sortedLeaves)
 
       // **State Merkle Proof**
       const stateMerkleProof: LeanIMTMerkleProof = generateMerkleProof(sortedLeaves, commitment.hash);
       stateMerkleProof.index = Number.isNaN(stateMerkleProof.index) ? 0 : stateMerkleProof.index;
       if (stateMerkleProof.siblings.length < 32) {
-        const N = 32 - stateMerkleProof.siblings.length
-        const siblings = [...stateMerkleProof.siblings, ...Array(N).fill(0n) ];
+        const N = 32 - stateMerkleProof.siblings.length;
+        const siblings = [...stateMerkleProof.siblings, ...Array(N).fill(0n)];
         stateMerkleProof.siblings = siblings;
       }
       stateMerkleProof.siblings = stateMerkleProof.siblings.length === 0 ? [stateRoot, ...Array(31).fill(0n)] : stateMerkleProof.siblings;
