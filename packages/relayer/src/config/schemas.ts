@@ -53,7 +53,7 @@ export const zChainConfig = z.object({
   chain_id: z.string().or(z.number()).pipe(z.coerce.number().positive()),
   chain_name: z.string(),
   rpc_url: z.string().url(),
-  max_gas_price: zNonNegativeBigInt.optional(),
+  max_gas_price: zNonNegativeBigInt.optional(), // DEPRECATED: Use dynamic limits via QuoteService
   fee_receiver_address: zAddress.optional(),
   signer_private_key: zPkey.optional(),
   entrypoint_address: zAddress.optional(),

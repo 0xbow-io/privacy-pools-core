@@ -4,6 +4,7 @@ import { getAddress } from "viem/utils";
 import { Address } from "viem/accounts";
 import { CONFIG, getAssetConfig, getChainConfig } from "../../config/index.js";
 import { ValidationError } from "../../exceptions/base.exception.js";
+import { quoteService } from "../../services/index.js";
 
 /**
  * Handler for the relayer details endpoint.
@@ -14,7 +15,7 @@ import { ValidationError } from "../../exceptions/base.exception.js";
  * @param {Response} res - The HTTP response.
  * @param {NextFunction} next - The next middleware function.
  */
-export function relayerDetailsHandler(
+export async function relayerDetailsHandler(
   req: Request,
   res: Response,
   next: NextFunction,
@@ -53,6 +54,9 @@ export function relayerDetailsHandler(
     });
   }
 
+  // Get dynamic gas price limit based on current network conditions
+  const dynamicMaxGasPrice = await quoteService.getReasonableMaxGasPrice(chainId);
+
   // Return details for the specific asset
   res.status(200).json(
     res.locals.marshalResponse(
@@ -60,7 +64,7 @@ export function relayerDetailsHandler(
         feeBPS: assetConfig.fee_bps,
         feeReceiverAddress: getAddress(feeReceiverAddress),
         chainId,
-        maxGasPrice: chainConfig.max_gas_price,
+        maxGasPrice: dynamicMaxGasPrice, // Dynamic gas price limit via QuoteService
         assetAddress: normalizedAssetAddress as Address,
         minWithdrawAmount: assetConfig.min_withdraw_amount
       })

@@ -62,9 +62,7 @@ export function getChainConfig(chainId: number): ChainConfig {
     console.warn(`[CONFIG WARNING] Using default entrypoint_address for chain ${chainId}`);
   }
 
-  if (!chainConfig.max_gas_price) {
-    console.warn(`[CONFIG WARNING] There's no max_gas_price set for chain ${chainId}`);
-  }
+  // Note: max_gas_price is deprecated in favor of dynamic gas price limits via QuoteService
 
   return chainConfig;
 }

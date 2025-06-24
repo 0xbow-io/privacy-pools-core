@@ -17,7 +17,6 @@ vi.mock("../../src/config/index.js", () => {
           chain_id: 31337,
           chain_name: "localhost",
           rpc_url: "http://localhost:8545",
-          max_gas_price: "5",
           supported_assets: [
             {
               asset_address: "0x1111111111111111111111111111111111111111",
@@ -34,7 +33,6 @@ vi.mock("../../src/config/index.js", () => {
       chain_id: 31337,
       chain_name: "localhost",
       rpc_url: "http://localhost:8545",
-      max_gas_price: "5",
       supported_assets: [
         {
           asset_address: "0x1111111111111111111111111111111111111111",
@@ -49,7 +47,7 @@ vi.mock("../../src/config/index.js", () => {
 
 import { relayRequestHandler } from "../../src/handlers/index.js";
 import { ConfigError, ValidationError, ErrorCode } from "../../src/exceptions/base.exception.js";
-import { privacyPoolRelayer } from "../../src/services/index.js";
+import { privacyPoolRelayer, quoteService } from "../../src/services/index.js";
 import { web3Provider } from "../../src/providers/index.js";
 
 const withdrawalPayload = {
@@ -91,7 +89,7 @@ describe("relayRequestHandler", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
-  })
+  });
 
   beforeEach(() => {
     resMock = newResMock();
@@ -104,18 +102,21 @@ describe("relayRequestHandler", () => {
     expect(nextMock.mock.calls[0][0]).toBeInstanceOf(ValidationError)
   });
 
-  it("gas price below max is ok", async () => {
+  it("gas price within dynamic limit is processed", async () => {
     const req = { body: { ...withdrawalPayload } };
-    vi.spyOn(web3Provider, "getGasPrice").mockResolvedValue(2n);  // max_gas_price == 5
+    vi.spyOn(web3Provider, "getGasPrice").mockResolvedValue(10n); // Current gas
+    // Mock QuoteService to return 3x current = 30n as reasonable max
+    vi.spyOn(quoteService, "getReasonableMaxGasPrice").mockResolvedValue(30n);
     vi.spyOn(privacyPoolRelayer, "handleRequest").mockResolvedValue(undefined);
     await relayRequestHandler(req, resMock, nextMock);
     expect(nextMock.mock.calls[0][0]).toEqual(undefined)
     expect(resMock.status.mock.calls[0][0]).toEqual(200)
   });
 
-  it("gas price above max is rejected", async () => {
+  it("gas price exceeding dynamic limit is rejected", async () => {
     const req = { body: { ...withdrawalPayload } };
-    vi.spyOn(web3Provider, "getGasPrice").mockResolvedValue(10n);  // max_gas_price == 5
+    vi.spyOn(web3Provider, "getGasPrice").mockResolvedValue(100n); // Very high current gas
+    vi.spyOn(quoteService, "getReasonableMaxGasPrice").mockResolvedValue(50n); // Reasonable max lower than current
     vi.spyOn(privacyPoolRelayer, "handleRequest").mockResolvedValue(undefined);
     await relayRequestHandler(req, resMock, nextMock);
     const error = nextMock.mock.calls[0][0]
