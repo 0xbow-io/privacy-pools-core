@@ -9,7 +9,8 @@ import {
 import { validateRelayRequestBody } from "../../schemes/relayer/request.scheme.js";
 import { privacyPoolRelayer } from "../../services/index.js";
 import { RequestMashall } from "../../types.js";
-import { CONFIG, getChainConfig } from "../../config/index.js";
+import { CONFIG } from "../../config/index.js";
+import { quoteService } from "../../services/index.js";
 import { web3Provider } from "../../providers/index.js";
 
 /**
@@ -104,12 +105,14 @@ export async function relayRequestHandler(
 ) {
   try {
     const { payload: withdrawalPayload, chainId } = parseWithdrawal(req.body);
-    const maxGasPrice = getChainConfig(chainId)?.max_gas_price;
+    
+    // Use dynamic gas price limit based on current network conditions
+    const maxGasPrice = await quoteService.getReasonableMaxGasPrice(chainId);
     const currentGasPrice = await web3Provider.getGasPrice(chainId);
-    if (maxGasPrice !== undefined && currentGasPrice > maxGasPrice) {
-      throw ConfigError.maxGasPrice(`Current gas price ${currentGasPrice} is higher than max price ${maxGasPrice}`)
+    if (currentGasPrice > maxGasPrice) {
+      throw ConfigError.maxGasPrice(`Current gas price ${currentGasPrice} exceeds reasonable limit ${maxGasPrice} (3x current network rate)`)
     }
-
+    
     const requestResponse: RelayerResponse =
       await privacyPoolRelayer.handleRequest(withdrawalPayload, chainId);
 

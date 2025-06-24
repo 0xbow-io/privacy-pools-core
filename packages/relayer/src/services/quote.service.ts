@@ -20,6 +20,16 @@ export class QuoteService {
     this.txCost = 700_000n;
   }
 
+  /**
+   * Calculate a reasonable maximum gas price based on current network conditions.
+   * This replaces hardcoded limits with dynamic calculation.
+   */
+  async getReasonableMaxGasPrice(chainId: number): Promise<bigint> {
+    const currentGasPrice = await web3Provider.getGasPrice(chainId);
+    // Allow up to 3x current gas price to handle spikes while preventing extreme abuse
+    return currentGasPrice * 3n;
+  }
+
   async netFeeBPSNative(baseFee: bigint, balance: bigint, nativeQuote: { num: bigint, den: bigint }, gasPrice: bigint, value: bigint): Promise<bigint> {
     const nativeCosts = (1n * gasPrice * this.txCost + value)
     return baseFee + nativeQuote.den * 10_000n * nativeCosts / balance / nativeQuote.num;

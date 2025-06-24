@@ -10,6 +10,7 @@
             "chain_name": "localhost",
             "rpc_url": "http://0.0.0.0:8545",
             "max_gas_price": "2392000000",
+            "_comment_max_gas_price": "DEPRECATED - Static gas limits replaced by dynamic QuoteService limits",
             "native_currency": {
                 "name": "Ether",
                 "symbol": "ETH",
@@ -32,6 +33,7 @@
             "signer_private_key": "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
             "entrypoint_address": "0xa513e6e4b8f2a923d98304ec87f64353c4d5c853",
             "max_gas_price": "2392000000",
+            "_comment_max_gas_price": "DEPRECATED - Static gas limits replaced by dynamic QuoteService limits",
             "native_currency": {
                 "name": "Sepolia Ether",
                 "symbol": "ETH",
