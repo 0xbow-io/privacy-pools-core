@@ -1,0 +1,86 @@
+name: Relayer (deploy)
+
+on:
+  push:
+    tags:
+      - 'nightly-*'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{github.workflow}}-${{github.ref}}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: packages/relayer
+
+jobs:
+
+  push-staging:
+    if: startsWith(github.ref, 'refs/tags/nightly-')
+    name: Push Image to Staging
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Check out github repository
+        uses: actions/checkout@v4
+        with:
+          ref: 'dev'
+          fetch-depth: 1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Google Auth
+        id: auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          token_format: 'access_token'
+          workload_identity_provider: '${{ vars.WIF_PROVIDER_ID }}'
+          service_account: '${{ vars.SERVICE_ACCOUNT_EMAIL }}'
+      - name: Docker Auth
+        id: docker-auth
+        uses: 'docker/login-action@v3'
+        with:
+          username: 'oauth2accesstoken'
+          password: '${{ steps.auth.outputs.access_token }}'
+          registry: 'us-central1-docker.pkg.dev'
+      - name: Build, tag and push container
+        id: build-image
+        uses: docker/build-push-action@v5
+        with:
+          context: packages/relayer
+          file: packages/relayer/Dockerfile
+          push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: |
+            us-central1-docker.pkg.dev/${{ vars.GCP_PROJECT }}/relayer/nightly:${{ github.sha }}
+            us-central1-docker.pkg.dev/${{ vars.GCP_PROJECT }}/relayer/nightly:latest
+
+  deploy-staging:
+    if: startsWith(github.ref, 'refs/tags/nightly-')
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [push-staging]
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Check out github repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Google Auth
+        id: auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          token_format: 'access_token'
+          workload_identity_provider: '${{ vars.WIF_PROVIDER_ID }}'
+          service_account: '${{ vars.SERVICE_ACCOUNT_EMAIL }}'
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+        with:
+          version: '>= 494.0.0'
+      - name: 'Update service image'
+        run: 'gcloud run deploy relayer-staging --region us-east1 --image=us-central1-docker.pkg.dev/${{ vars.GCP_PROJECT }}/relayer/nightly:${{ github.sha }}'
