@@ -138,15 +138,15 @@ export class PrivacyPoolRelayer {
   protected async broadcastWithdrawal(
     withdrawal: WithdrawalPayload,
     chainId: number,
-  ): Promise<{ hash: string }> {
+  ): Promise<{ hash: string; }> {
     try {
       return await this.sdkProvider.broadcastWithdrawal(withdrawal, chainId);
     } catch (error) {
       if (isViemError(error)) {
         const { metaMessages, shortMessage } = error;
-        throw BlockchainError.txError((metaMessages ? metaMessages[0] : undefined) || shortMessage)
+        throw BlockchainError.txError((metaMessages ? metaMessages[0] : undefined) || shortMessage);
       } else {
-        throw RelayerError.unknown("Something went wrong while broadcasting Tx")
+        throw RelayerError.unknown("Something went wrong while broadcasting Tx");
       }
     }
   }
@@ -202,6 +202,14 @@ export class PrivacyPoolRelayer {
 
     if (wp.feeCommitment) {
 
+      const { relayFeeBPS: commitmentRelayFeeBPS } = decodeWithdrawalData(wp.feeCommitment.withdrawalData);
+
+      if (relayFeeBPS !== commitmentRelayFeeBPS) {
+        throw WithdrawalValidationError.relayerCommitmentRejected(
+          `Proof relay fee does not match signed commitment: pi:=${relayFeeBPS}, commitment:=${commitmentRelayFeeBPS}`,
+        );
+      }
+
       if (commitmentExpired(wp.feeCommitment)) {
         throw WithdrawalValidationError.relayerCommitmentRejected(
           `Relay fee commitment expired, please quote again`,
@@ -239,9 +247,9 @@ export class PrivacyPoolRelayer {
 }
 
 function commitmentExpired(feeCommitment: FeeCommitment): boolean {
-  return feeCommitment.expiration < Number(new Date())
+  return feeCommitment.expiration < Number(new Date());
 }
 
 async function validFeeCommitment(chainId: number, feeCommitment: FeeCommitment): Promise<boolean> {
-  return web3Provider.verifyRelayerCommitment(chainId, feeCommitment)
+  return web3Provider.verifyRelayerCommitment(chainId, feeCommitment);
 }
