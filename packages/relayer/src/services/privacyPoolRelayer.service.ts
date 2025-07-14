@@ -272,6 +272,14 @@ export class PrivacyPoolRelayer {
 
     if (wp.feeCommitment) {
 
+      const { relayFeeBPS: commitmentRelayFeeBPS } = decodeWithdrawalData(wp.feeCommitment.withdrawalData);
+
+      if (relayFeeBPS !== commitmentRelayFeeBPS) {
+        throw WithdrawalValidationError.relayerCommitmentRejected(
+          `Proof relay fee does not match signed commitment: pi:=${relayFeeBPS}, commitment:=${commitmentRelayFeeBPS}`,
+        );
+      }
+
       if (commitmentExpired(wp.feeCommitment)) {
         throw WithdrawalValidationError.relayerCommitmentRejected(
           `Relay fee commitment expired, please quote again`,
