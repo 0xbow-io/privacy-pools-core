@@ -225,9 +225,15 @@ export class PrivacyPoolRelayer {
 
     const extraGas = wp.feeCommitment?.extraGas ?? false;
 
-    const { feeRecipient, relayFeeBPS } = decodeWithdrawalData(
-      wp.withdrawal.data,
-    );
+    // If there's a fee commitment, then we use it's withdrawalData as source of truth to check against the proof.
+    const withdrawalData = wp.feeCommitment ? wp.feeCommitment.withdrawalData : wp.withdrawal.data;
+    if ((wp.feeCommitment !== undefined) && (wp.feeCommitment.withdrawalData !== wp.withdrawal.data)) {
+      throw WithdrawalValidationError.relayerCommitmentRejected(
+        `Signed commitment does not match withdrawal data, exiting early: commitment data ${wp.feeCommitment.withdrawalData}, request data ${wp.withdrawal.data}`,
+      );
+    }
+
+    const { feeRecipient, relayFeeBPS } = decodeWithdrawalData(withdrawalData);
     const proofSignals = parseSignals(wp.proof.publicSignals);
 
     if (wp.withdrawal.processooor !== entrypointAddress) {
@@ -251,7 +257,7 @@ export class PrivacyPoolRelayer {
     }
 
     const withdrawalContext = BigInt(
-      this.sdkProvider.calculateContext(wp.withdrawal, wp.scope),
+      this.sdkProvider.calculateContext({ processooor: wp.withdrawal.processooor, data: withdrawalData }, wp.scope),
     );
     if (proofSignals.context !== withdrawalContext) {
       throw WithdrawalValidationError.contextMismatch(
@@ -272,8 +278,8 @@ export class PrivacyPoolRelayer {
 
     if (wp.feeCommitment) {
 
+      // TODO: remove this check beacuse we should already have errored out at the begining
       const { relayFeeBPS: commitmentRelayFeeBPS } = decodeWithdrawalData(wp.feeCommitment.withdrawalData);
-
       if (relayFeeBPS !== commitmentRelayFeeBPS) {
         throw WithdrawalValidationError.relayerCommitmentRejected(
           `Proof relay fee does not match signed commitment: pi:=${relayFeeBPS}, commitment:=${commitmentRelayFeeBPS}`,
