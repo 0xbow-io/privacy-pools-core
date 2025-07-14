@@ -7,7 +7,10 @@ import { quoteService } from "../../services/index.js";
 import { QuoteMarshall } from "../../types.js";
 import { encodeWithdrawalData } from "../../utils.js";
 
-const TIME_20_SECS = 20 * 1000;
+// const TIME_20_SECS = 20 * 1000;
+const TIME_60_SECS = 60 * 1000;
+
+const EXPIRATION_TIME = TIME_60_SECS;
 
 export async function relayQuoteHandler(
   req: Request,
@@ -41,7 +44,7 @@ export async function relayQuoteHandler(
       recipient,
       relayFeeBPS: feeBPS
     })
-    const expiration = Number(new Date()) + TIME_20_SECS
+    const expiration = Number(new Date()) + EXPIRATION_TIME
     const relayerCommitment = { withdrawalData, expiration };
     const signedRelayerCommitment = await web3Provider.signRelayerCommitment(chainId, relayerCommitment);
     quoteResponse.addFeeCommitment({ expiration, withdrawalData, signedRelayerCommitment })
