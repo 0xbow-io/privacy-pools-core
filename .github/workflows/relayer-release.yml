@@ -29,7 +29,7 @@ jobs:
         with:
           fetch-tags: true
           fetch-depth: 1
-          ref: github.ref
+          ref: ${{ github.ref }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Google Auth
@@ -73,7 +73,7 @@ jobs:
         with:
           fetch-tags: true
           fetch-depth: 1
-          ref: github.ref
+          ref: ${{ github.ref }}
       - name: Google Auth
         id: auth
         uses: 'google-github-actions/auth@v2'
