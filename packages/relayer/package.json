@@ -34,6 +34,7 @@
   },
   "dependencies": {
     "@0xbow/privacy-pools-core-sdk": "0.1.17",
+    "@uniswap/sdk-core": "^7.7.2",
     "@uniswap/v3-sdk": "^3.25.2",
     "ajv": "8.17.1",
     "body-parser": "1.20.3",
@@ -45,7 +46,10 @@
     "zod": "3.24.1"
   },
   "devDependencies": {
+    "@types/body-parser": "^1.19.6",
     "@types/cors": "^2.8.17",
-    "@types/express": "5.0.0"
+    "@types/express": "5.0.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "vitest": "^3.2.4"
   }
 }
