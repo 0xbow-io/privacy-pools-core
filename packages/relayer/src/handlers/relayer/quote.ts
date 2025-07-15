@@ -66,7 +66,9 @@ export async function relayQuoteHandler(
       recipient,
       relayFeeBPS: feeBPS
     })
-    const expiration = Number(new Date()) + EXPIRATION_TIME
+    const now = new Date();
+    const expiration = Number(now) + EXPIRATION_TIME;
+    console.log("expiration debugging", now, new Date(expiration));
     const relayerCommitment = { withdrawalData, expiration };
     const signedRelayerCommitment = await web3Provider.signRelayerCommitment(chainId, relayerCommitment);
     quoteResponse.addFeeCommitment({ expiration, withdrawalData, signedRelayerCommitment, extraGas, amount: amountIn });
