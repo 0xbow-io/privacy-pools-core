@@ -11,7 +11,7 @@ import { privateKeyToAccount } from "viem/accounts";
 // const TIME_20_SECS = 20 * 1000;
 const TIME_60_SECS = 60 * 1000;
 
-const EXPIRATION_TIME = TIME_60_SECS;
+const EXPIRATION_TIME = 3 * TIME_60_SECS;
 
 export async function relayQuoteHandler(
   req: Request,
