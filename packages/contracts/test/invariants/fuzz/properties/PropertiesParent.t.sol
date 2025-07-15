@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.0;
 
-import {Actors} from '../helpers/Actors.sol';
 import {PropertiesAccounting} from './PropertiesAccounting.t.sol';
 import {PropertiesPool} from './PropertiesPool.t.sol';
 import {PropertiesPoseidon} from './PropertiesPoseidon.t.sol';
-import {ProofLib} from 'contracts/PrivacyPool.sol';
 
 contract PropertiesParent is PropertiesAccounting, PropertiesPool, PropertiesPoseidon {
   function property_protocolWindDown() public {

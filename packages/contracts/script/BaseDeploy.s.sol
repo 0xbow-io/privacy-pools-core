@@ -8,7 +8,7 @@ import {Script} from 'forge-std/Script.sol';
 
 import {Strings} from '@oz/utils/Strings.sol';
 import {stdJson} from 'forge-std/StdJson.sol';
-import {Vm, VmSafe} from 'forge-std/Vm.sol';
+import {VmSafe} from 'forge-std/Vm.sol';
 import {console} from 'forge-std/console.sol';
 
 import {Constants} from 'contracts/lib/Constants.sol';

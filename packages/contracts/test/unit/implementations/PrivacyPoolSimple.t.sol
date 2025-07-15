@@ -5,7 +5,6 @@ import {IPrivacyPoolSimple, PrivacyPoolSimple} from 'contracts/implementations/P
 import {Test} from 'forge-std/Test.sol';
 import {Constants} from 'test/helper/Constants.sol';
 
-import {IPrivacyPool} from 'interfaces/IPrivacyPool.sol';
 import {IState} from 'interfaces/IState.sol';
 
 /**

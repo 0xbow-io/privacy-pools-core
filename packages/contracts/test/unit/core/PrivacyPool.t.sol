@@ -293,7 +293,6 @@ contract UnitDeposit is UnitPrivacyPool {
     uint256 _nonce = _pool.nonce();
     uint256 _label = uint256(keccak256(abi.encodePacked(_scope, _nonce + 1))) % Constants.SNARK_SCALAR_FIELD;
     uint256 _commitment = PoseidonT4.hash([_amount, _label, _precommitmentHash]);
-    uint256 _newRoot = _pool.insertLeafInShadowTree(_commitment);
 
     // Expect pull and deposit events
     vm.expectEmit(address(_pool));
@@ -332,7 +331,6 @@ contract UnitDeposit is UnitPrivacyPool {
     uint256 _nonce = _pool.nonce();
     uint256 _label = uint256(keccak256(abi.encodePacked(_scope, _nonce + 1)));
     uint256 _commitment = PoseidonT4.hash([_amount, _label, _precommitmentHash]);
-    uint256 _newRoot = _pool.insertLeafInShadowTree(_commitment);
 
     vm.expectEmit(address(_pool));
     emit PoolForTest.Pulled(_ENTRYPOINT, _amount);
@@ -361,7 +359,6 @@ contract UnitDeposit is UnitPrivacyPool {
     uint256 _nonce = _pool.nonce();
     uint256 _label = uint256(keccak256(abi.encodePacked(_scope, _nonce + 1)));
     uint256 _commitment = PoseidonT4.hash([_amount, _label, _precommitmentHash]);
-    uint256 _newRoot = _pool.insertLeafInShadowTree(_commitment);
 
     vm.expectEmit(address(_pool));
     emit PoolForTest.Pulled(_ENTRYPOINT, _amount);
