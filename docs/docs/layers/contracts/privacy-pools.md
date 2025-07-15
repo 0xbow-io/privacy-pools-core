@@ -107,7 +107,7 @@ Allows graceful shutdown:
 
 1. Marks pool as dead
 2. Prevents new deposits
-3. Allows existing withdrawals
+3. Allows existing withdrawals and ragequits
 
 ### Security Features
 
