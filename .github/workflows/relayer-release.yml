@@ -46,6 +46,8 @@ jobs:
           username: 'oauth2accesstoken'
           password: '${{ steps.auth.outputs.access_token }}'
           registry: 'us-central1-docker.pkg.dev'
+      - name: Set build date
+        run: echo "BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_ENV
       - name: Build, tag and push container
         id: build-image
         uses: docker/build-push-action@v5
@@ -55,6 +57,9 @@ jobs:
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_DATE=${{ env.BUILD_DATE }}
+            GIT_SHA=${{ github.sha }}
           tags: |
             us-central1-docker.pkg.dev/${{ vars.GCP_PROJECT }}/relayer/nightly:${{ github.sha }}
             us-central1-docker.pkg.dev/${{ vars.GCP_PROJECT }}/relayer/nightly:latest
