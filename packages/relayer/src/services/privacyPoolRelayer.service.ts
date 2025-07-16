@@ -144,7 +144,7 @@ export class PrivacyPoolRelayer {
     const { assetAddress } = await this.sdkProvider.scopeData(scope, chainId);
     if (isNative(assetAddress)) {
       // we shouldn't be here
-      return
+      return;
     }
 
     const relayReceipt = await web3Provider.client(chainId).waitForTransactionReceipt({ hash: relayTx as `0x${string}` });
@@ -161,7 +161,7 @@ export class PrivacyPoolRelayer {
 
     const relayerGasRefundValue = gasPrice * quoteService.extraGasTxCost + relayGasPrice * relayGasUsed;
 
-    const txHash = await this.uniswapProvider.swapExactInputSingleForWeth({
+    const txHash = await this.uniswapProvider.swapExactInputForWeth({
       chainId,
       feeGross,
       feeBase,
@@ -236,6 +236,12 @@ export class PrivacyPoolRelayer {
     const { feeRecipient, relayFeeBPS } = decodeWithdrawalData(withdrawalData);
     const proofSignals = parseSignals(wp.proof.publicSignals);
 
+    if ((wp.feeCommitment !== undefined) && (wp.feeCommitment.amount > proofSignals.withdrawnValue)) {
+      throw WithdrawalValidationError.withdrawnValueTooSmall(
+        `WithdrawnValue too small: expected "${wp.feeCommitment.amount}", got "${proofSignals.withdrawnValue}".`,
+      );
+    }
+
     if (wp.withdrawal.processooor !== entrypointAddress) {
       throw WithdrawalValidationError.processooorMismatch(
         `Processooor mismatch: expected "${entrypointAddress}", got "${wp.withdrawal.processooor}".`,
@@ -308,7 +314,7 @@ export class PrivacyPoolRelayer {
         extraGas
       });
 
-      if (relayFeeBPS < currentFeeBPS) {
+      if (relayFeeBPS < currentFeeBPS.feeBPS) {
         throw WithdrawalValidationError.feeTooLow(
           `Relay fee too low: expected at least "${currentFeeBPS}", got "${relayFeeBPS}".`,
         );

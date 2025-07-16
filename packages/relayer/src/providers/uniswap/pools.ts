@@ -27,8 +27,8 @@ export async function getPool(chainId: number, tokenA: Token, tokenB: Token, fee
   });
 
   const [liquidity, slot0] = await Promise.all([
-    poolContract.read.liquidity!(),
-    poolContract.read.slot0!(),
+    poolContract.read.liquidity(),
+    poolContract.read.slot0(),
   ]);
 
   const [sqrtPriceX96, tick, , , , ,] = slot0;
@@ -47,3 +47,30 @@ export async function getPoolPath(tokenIn: `0x${string}`, chainId: number) {
   return pathParams;
 }
 
+export function hopsFromAddressRoute(route: `0x${string}`[]) {
+  const hops: [`0x${string}`, `0x${string}`][] = [];
+  for (let i = 1; i <= route.length - 1; i++) {
+    hops.push([route[i - 1]!, route[i]!]);
+  }
+  return hops;
+}
+
+function isAddress(p: `0x${string}` | FeeAmount): p is `0x${string}` {
+  return (p as `0x${string}`).length !== undefined;
+}
+
+export function encodePath(path: (`0x${string}` | FeeAmount)[]): `0x${string}` {
+  // Encode the path for quoteExactInput
+  // Path encoding: token0 (20 bytes) + fee0 (3 bytes) + token1 (20 bytes) + fee1 (3 bytes) + token2 (20 bytes)...
+  let encodedPath: `0x${string}` = '0x';
+  path.forEach((p, i) => {
+    // is address
+    if (isAddress(p)) {
+      encodedPath += p.replace(/^0x/, ""); // Remove '0x' prefix
+      // is number
+    } else {
+      encodedPath += p.toString(16).padStart(6, '0');
+    }
+  });
+  return encodedPath
+}
