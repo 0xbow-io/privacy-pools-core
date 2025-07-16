@@ -18,7 +18,7 @@ export const FACTORY_CONTRACT_ADDRESS: Record<string, Address> = {
   "10": "0x1F98431c8aD98523631AE4a59f267346ea31F984",        // Optimism
   "42161": "0x1F98431c8aD98523631AE4a59f267346ea31F984",     // Arbitrum
   "11155111": "0x0227628f3f023bb0b980b67d528571c95c6dac1c",  // Sepolia
-}
+};
 
 export const WRAPPED_NATIVE_TOKEN_ADDRESS: Record<string, Address> = {
   "1": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",         // mainnet (WETH)
@@ -27,4 +27,19 @@ export const WRAPPED_NATIVE_TOKEN_ADDRESS: Record<string, Address> = {
   "10": "0x4200000000000000000000000000000000000006",        // Optimism (WETH)
   "42161": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",     // Arbitrum (WETH)
   "11155111": "0xfff9976782d46cc05630d1f6ebab18b2324d6b14",  // sepolia (WETH)
-}
+};
+
+// Common intermediate tokens for multi-hop routing
+export const INTERMEDIATE_TOKENS: Record<string, Address[]> = {
+  '1': [ // Mainnet
+    '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+    '0xdAC17F958D2ee523a2206206994597C13D831ec7', // USDT
+    '0x6B175474E89094C44Da98b954EedeAC495271d0F', // DAI
+    '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599', // WBTC
+  ],
+  '11155111': [ // Sepolia
+    '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', // USDC
+    '0x7169D38820dfd117C3FA1f22a697dBA58d90BA06', // USDT
+  ],
+};
+
