@@ -1,12 +1,28 @@
-import { Token } from '@uniswap/sdk-core'
-import { FeeAmount } from '@uniswap/v3-sdk'
-import { Address, getContract } from 'viem'
+import { Token } from '@uniswap/sdk-core';
+import { FeeAmount } from '@uniswap/v3-sdk';
+import { Address, getContract } from 'viem';
 
-import { web3Provider } from '../providers/index.js'
-import { RelayerError } from '../exceptions/base.exception.js'
-import { QUOTER_CONTRACT_ADDRESS, WRAPPED_NATIVE_TOKEN_ADDRESS } from './uniswap/constants.js'
-import { IERC20MinimalABI } from './uniswap/erc20.abi.js'
-import { QuoterV2ABI } from './uniswap/quoterV2.abi.js'
+import { RelayerError } from '../exceptions/base.exception.js';
+import { web3Provider } from '../providers/index.js';
+import { FACTORY_CONTRACT_ADDRESS, INTERMEDIATE_TOKENS, QUOTER_CONTRACT_ADDRESS, WRAPPED_NATIVE_TOKEN_ADDRESS } from './uniswap/constants.js';
+import { IERC20MinimalABI } from './uniswap/erc20.abi.js';
+import { FactoryABI } from './uniswap/factory.abi.js';
+import { QuoterV2ABI } from './uniswap/quoterV2.abi.js';
+
+
+function isNullAddress(a: string) {
+  return a === '0x0000000000000000000000000000000000000000';
+}
+
+const feeTiers: FeeAmount[] = [
+  FeeAmount.LOWEST,
+  FeeAmount.LOW_200,
+  FeeAmount.LOW_300,
+  FeeAmount.LOW_400,
+  FeeAmount.LOW,
+  FeeAmount.MEDIUM,
+  FeeAmount.HIGH,
+];
 
 export type UniswapQuote = {
   chainId: number;
@@ -15,32 +31,25 @@ export type UniswapQuote = {
   amountIn: bigint;
 };
 
-type QuoteToken = { amount: bigint, decimals: number }
+type QuoteToken = { amount: bigint, decimals: number; };
 export type Quote = {
-  in: QuoteToken
-  out: QuoteToken
-};
-
-const UNISWAP_V3_FACTORY_ADDRESS: Record<string, Address> = {
-  '1': '0x1F98431c8aD98523631AE4a59f267346ea31F984',
-  '11155111': '0x0227628f3F023bb0B980b67D528571c95c6DaC1c',
-};
-
-// Common intermediate tokens for multi-hop routing
-const INTERMEDIATE_TOKENS: Record<string, Address[]> = {
-  '1': [ // Mainnet
-    '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
-    '0xdAC17F958D2ee523a2206206994597C13D831ec7', // USDT
-    '0x6B175474E89094C44Da98b954EedeAC495271d0F', // DAI
-    '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599', // WBTC
-  ],
-  '11155111': [ // Sepolia
-    '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', // USDC
-    '0x7169D38820dfd117C3FA1f22a697dBA58d90BA06', // USDT
-  ],
+  in: QuoteToken;
+  out: QuoteToken;
 };
 
 export class UniswapProvider {
+
+  private getFactory(chainId: number) {
+    const factoryAddress = FACTORY_CONTRACT_ADDRESS[chainId.toString()];
+    if (!factoryAddress) {
+      throw RelayerError.unknown(`No Uniswap V3 factory address configured for chain ${chainId}`);
+    }
+    return getContract({
+      address: factoryAddress,
+      abi: FactoryABI.abi,
+      client: web3Provider.client(chainId)
+    });
+  }
 
   async getTokenInfo(chainId: number, address: Address): Promise<Token> {
     const contract = getContract({
@@ -67,10 +76,12 @@ export class UniswapProvider {
         addressIn
       });
     } catch (directError) {
+
       // If direct quote fails, try multi-hop routing
       const intermediateTokens = INTERMEDIATE_TOKENS[chainId.toString()] || [];
 
       for (const intermediateToken of intermediateTokens) {
+
         // Skip if intermediate token is same as input or output
         if (intermediateToken.toLowerCase() === addressIn.toLowerCase() ||
           intermediateToken.toLowerCase() === addressOut.toLowerCase()) {
@@ -86,6 +97,7 @@ export class UniswapProvider {
         } catch {
           continue;
         }
+
       }
 
       throw directError;
@@ -103,38 +115,7 @@ export class UniswapProvider {
       client
     });
 
-    const factoryAddress = UNISWAP_V3_FACTORY_ADDRESS[chainId.toString()];
-    if (!factoryAddress) {
-      throw RelayerError.unknown(`No Uniswap V3 factory address configured for chain ${chainId}`);
-    }
-
-    const factoryContract = getContract({
-      address: factoryAddress,
-      abi: [{
-        type: 'function',
-        name: 'getPool',
-        stateMutability: 'view',
-        inputs: [
-          { name: 'tokenA', type: 'address' },
-          { name: 'tokenB', type: 'address' },
-          { name: 'fee', type: 'uint24' }
-        ],
-        outputs: [
-          { name: 'pool', type: 'address' }
-        ]
-      }],
-      client
-    });
-
-    const feeTiers: FeeAmount[] = [
-      FeeAmount.LOWEST,
-      FeeAmount.LOW_200,
-      FeeAmount.LOW_300,
-      FeeAmount.LOW_400,
-      FeeAmount.LOW,
-      FeeAmount.MEDIUM,
-      FeeAmount.HIGH,
-    ];
+    const factoryContract = this.getFactory(chainId);
 
     for (const fee of feeTiers) {
       const pool = await factoryContract.read.getPool([
@@ -143,32 +124,36 @@ export class UniswapProvider {
         fee,
       ]);
 
-      if (pool !== '0x0000000000000000000000000000000000000000') {
-        try {
-          const quotedAmountOut = await quoterContract.simulate.quoteExactInputSingle([{
-            tokenIn: tokenIn.address as Address,
-            tokenOut: tokenOut.address as Address,
-            fee,
-            amountIn,
-            sqrtPriceLimitX96: 0n,
-          }]);
-
-          const [amountOut] = quotedAmountOut.result;
-
-          return {
-            in: {
-              amount: amountIn,
-              decimals: tokenIn.decimals
-            },
-            out: {
-              amount: amountOut,
-              decimals: tokenOut.decimals
-            }
-          };
-        } catch {
-          continue; // try next fee
-        }
+      // pool does not exist
+      if (isNullAddress(pool)) {
+        continue;
       }
+
+      try {
+        const quotedAmountOut = await quoterContract.simulate.quoteExactInputSingle([{
+          tokenIn: tokenIn.address as Address,
+          tokenOut: tokenOut.address as Address,
+          fee,
+          amountIn,
+          sqrtPriceLimitX96: 0n,
+        }]);
+
+        const [amountOut] = quotedAmountOut.result;
+
+        return {
+          in: {
+            amount: amountIn,
+            decimals: tokenIn.decimals
+          },
+          out: {
+            amount: amountOut,
+            decimals: tokenOut.decimals
+          }
+        };
+      } catch {
+        continue; // try next fee
+      }
+
     }
 
     throw RelayerError.unknown(
@@ -176,7 +161,7 @@ export class UniswapProvider {
     );
   }
 
-  async quoteMultiHop({ chainId, amountIn, path }: { chainId: number, amountIn: bigint, path: Address[] }): Promise<Quote> {
+  async quoteMultiHop({ chainId, amountIn, path }: { chainId: number, amountIn: bigint, path: Address[]; }): Promise<Quote> {
     if (path.length < 2) {
       throw RelayerError.unknown('Path must contain at least 2 addresses');
     }
@@ -195,58 +180,43 @@ export class UniswapProvider {
     ]);
 
     // For each hop, we need to find a valid pool and fee tier
-    const pathWithFees: { token: Address, fee: FeeAmount }[] = [];
+    const pathWithFees: { token: Address, fee: FeeAmount; }[] = [];
+    const hops: [`0x${string}`, `0x${string}`][] = [];
+    for (let i = 1; i <= path.length - 1; i++) {
+      hops.push([path[i - 1]!, path[i]!]);
+    }
 
-    for (let i = 0; i < path.length - 1; i++) {
-      const tokenA = path[i]!;
-      const tokenB = path[i + 1]!;
-
-      let poolFound = false;
-
-      // Try each fee tier to find a valid pool
-      for (const fee of [
-        FeeAmount.LOWEST,
-        FeeAmount.LOW_200,
-        FeeAmount.LOW_300,
-        FeeAmount.LOW_400,
-        FeeAmount.LOW,
-        FeeAmount.MEDIUM,
-        FeeAmount.HIGH,
-      ]) {
+    for (const hop of hops) {
+      const [tokenA, tokenB] = hop;
+      const feePaths = await Promise.all(feeTiers.map(async fee => {
         const pool = await this.getPool(chainId, tokenA as Address, tokenB as Address, fee);
-
-        if (pool !== '0x0000000000000000000000000000000000000000') {
-          if (i === 0) {
-            pathWithFees.push({ token: tokenA as Address, fee });
-          }
-          if (i === path.length - 2) {
-            pathWithFees.push({ token: tokenB as Address, fee: FeeAmount.MEDIUM }); // fee doesn't matter for last token
-          } else {
-            pathWithFees.push({ token: tokenB as Address, fee });
-          }
-          poolFound = true;
-          break;
+        if (isNullAddress(pool)) {
+          return;
+        } else {
+          return { token: tokenA, fee };
         }
-      }
-
-      if (!poolFound) {
+      }));
+      const feePath = feePaths.find(o => o?.fee !== undefined);
+      if (feePath === undefined) {
         throw RelayerError.unknown(
-          `No pool found for hop ${i}: ${tokenA} -> ${tokenB}`
+          `No pool found for hop: ${tokenA} -> ${tokenB}`
         );
       }
+      pathWithFees.push(feePath);
     }
+    pathWithFees.push({ token: path[path.length - 1] as Address, fee: FeeAmount.MEDIUM }); // fee doesn't matter for last token
 
     // Encode the path for quoteExactInput
     // Path encoding: token0 (20 bytes) + fee0 (3 bytes) + token1 (20 bytes) + fee1 (3 bytes) + token2 (20 bytes)...
     let encodedPath = '0x';
-    for (let i = 0; i < pathWithFees.length; i++) {
-      const item = pathWithFees[i]!;
-      encodedPath += item.token.slice(2); // Remove '0x' prefix
+    pathWithFees.forEach((p, i) => {
+      const { token, fee } = p;
+      encodedPath += token.replace(/^0x/, ""); // Remove '0x' prefix
       if (i < pathWithFees.length - 1) {
         // Add fee as 3 bytes (24 bits)
-        encodedPath += item.fee.toString(16).padStart(6, '0');
+        encodedPath += fee.toString(16).padStart(6, '0');
       }
-    }
+    });
 
     try {
       const quotedAmount = await quoterContract.simulate.quoteExactInput([
@@ -266,7 +236,7 @@ export class UniswapProvider {
           decimals: tokenOut.decimals
         }
       };
-    } catch (error) {
+    } catch {
       throw RelayerError.unknown(
         `Failed to get multi-hop quote for path: ${path.join(' -> ')}`
       );
@@ -274,31 +244,7 @@ export class UniswapProvider {
   }
 
   private async getPool(chainId: number, tokenA: Address, tokenB: Address, fee: FeeAmount): Promise<Address> {
-    const factoryAddress = UNISWAP_V3_FACTORY_ADDRESS[chainId.toString()];
-    if (!factoryAddress) {
-      throw RelayerError.unknown(`No Uniswap V3 factory address configured for chain ${chainId}`);
-    }
-
-    const client = web3Provider.client(chainId);
-    const factoryContract = getContract({
-      address: factoryAddress,
-      abi: [{
-        type: 'function',
-        name: 'getPool',
-        stateMutability: 'view',
-        inputs: [
-          { name: 'tokenA', type: 'address' },
-          { name: 'tokenB', type: 'address' },
-          { name: 'fee', type: 'uint24' }
-        ],
-        outputs: [
-          { name: 'pool', type: 'address' }
-        ]
-      }],
-      client
-    });
-
-    return await factoryContract.read.getPool([tokenA, tokenB, fee]);
+    return await this.getFactory(chainId).read.getPool([tokenA, tokenB, fee]);
   }
 
 }

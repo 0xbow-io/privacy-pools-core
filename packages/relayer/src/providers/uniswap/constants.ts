@@ -34,7 +34,7 @@ export const FACTORY_CONTRACT_ADDRESS: Record<string, Address> = {
   "10": "0x1F98431c8aD98523631AE4a59f267346ea31F984",        // Optimism
   "42161": "0x1F98431c8aD98523631AE4a59f267346ea31F984",     // Arbitrum
   "11155111": "0x0227628f3f023bb0b980b67d528571c95c6dac1c",  // Sepolia
-}
+};
 
 export function getRouterAddress(chainId: number) {
   return getAddress(UNIVERSAL_ROUTER_ADDRESS(UniversalRouterVersion.V2_0, chainId));
@@ -52,3 +52,17 @@ export function getQuoterAddress(chainId: number) {
   const mainnetQuoter = "0x61fFE014bA17989E743c5F6cB21bF9697530B21e";
   return getAddress(chainId !== 1 ? QUOTER_ADDRESSES[chainId]! : mainnetQuoter)
 }
+
+// Common intermediate tokens for multi-hop routing
+export const INTERMEDIATE_TOKENS: Record<string, Address[]> = {
+  '1': [ // Mainnet
+    '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+    '0xdAC17F958D2ee523a2206206994597C13D831ec7', // USDT
+    '0x6B175474E89094C44Da98b954EedeAC495271d0F', // DAI
+    '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599', // WBTC
+  ],
+  '11155111': [ // Sepolia
+    '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', // USDC
+    '0x7169D38820dfd117C3FA1f22a697dBA58d90BA06', // USDT
+  ],
+};
