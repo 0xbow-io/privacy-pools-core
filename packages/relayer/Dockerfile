@@ -15,4 +15,4 @@ ENV GIT_SHA=$GIT_SHA
 ENV BUILD_DATE=$BUILD_DATE
 
 EXPOSE 3000
-CMD ["node", "dist/src/index.js"]
+CMD ["node", "dist/index.js"]
