@@ -32,15 +32,16 @@ export async function relayQuoteHandler(
     extraGas = false;
   }
 
-  let feeBPS;
+  let quote;
   try {
-    feeBPS = await quoteService.quoteFeeBPSNative({
+    quote = await quoteService.quoteFeeBPSNative({
       chainId, amountIn, assetAddress, baseFeeBPS: config.fee_bps, extraGas: extraGas
     });
   } catch (e) {
     return next(e);
   }
 
+  const { feeBPS, path } = quote;
   const recipient = req.body.recipient ? getAddress(req.body.recipient.toString()) : undefined;
 
   const quoteResponse = new QuoteMarshall({
