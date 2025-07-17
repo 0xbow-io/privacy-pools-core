@@ -14,11 +14,13 @@ export interface QuotetBody {
 export interface QuoteResponse {
   baseFeeBPS: bigint,
   feeBPS: bigint,
+  gasPrice: bigint,
+  detail: { [key: string]: { gas: bigint, eth: bigint; } | undefined; };
   feeCommitment?: {
     expiration: number,
     withdrawalData: `0x${string}`,
     amount: string,
     extraGas: boolean,
     signedRelayerCommitment: `0x${string}`,
-  }
+  };
 }
