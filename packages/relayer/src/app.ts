@@ -7,7 +7,7 @@ import {
   notFoundMiddleware,
 } from "./middlewares/index.js";
 import { relayerRouter } from "./routes/index.js";
-import { CONFIG, CORS_ALLOW_ALL, ALLOWED_DOMAINS } from "./config/index.js";
+import { CONFIG } from "./config/index.js";
 
 // Initialize the express app
 const app = express();
@@ -15,25 +15,16 @@ const app = express();
 // Middleware functions
 const parseJsonMiddleware = bodyParser.json();
 
-// CORS config - allow all origins by default for development and testnet
-const isTestnetRelayer = process.env.NODE_ENV === 'production' && 
-  (process.env.RELAYER_HOST === 'testnet-relayer.privacypools.com' || 
-   process.env.HOST === 'testnet-relayer.privacypools.com');
-
-const shouldAllowAll = CORS_ALLOW_ALL || isTestnetRelayer;
-
+// CORS config
 const corsOptions = {
-  origin: shouldAllowAll ? '*' : function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
-    // Allow requests without origin (like mobile apps) or from allowed domains
-    if (!origin || ALLOWED_DOMAINS.indexOf(origin) !== -1) {
+  origin: CONFIG.cors_allow_all ? '*' : function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
+    if (!origin || CONFIG.allowed_domains.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
-      console.log(`Request blocked by CORS middleware: ${origin}. Allowed domains: ${ALLOWED_DOMAINS}`);
+      console.log(`Request blocked by CORS middleware: ${origin}. Allowed domains: ${CONFIG.allowed_domains}`);
       callback(new Error("Not allowed by CORS"));
     }
   },
-  credentials: true,
-  optionsSuccessStatus: 200
 };
 
 
