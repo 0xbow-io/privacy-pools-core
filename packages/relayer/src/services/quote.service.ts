@@ -11,6 +11,15 @@ interface QuoteFeeBPSParams {
 
 const NativeAddress = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 
+export interface QuoteFee {
+  feeBPS: bigint;
+  path: (string | number)[];
+  gasPrice: bigint;
+  relayTxCost: bigint;
+  extraGasTxCost?: bigint;
+  extraGasFundAmount?: bigint;
+};
+
 export class QuoteService {
 
   readonly relayTxCost: bigint;
@@ -32,14 +41,15 @@ export class QuoteService {
     return baseFee + nativeQuote.den * 10_000n * nativeCosts / balance / nativeQuote.num;
   }
 
-  async quoteFeeBPSNative(quoteParams: QuoteFeeBPSParams): Promise<{ feeBPS: bigint; path: (string | number)[]; }>  {
+  async quoteFeeBPSNative(quoteParams: QuoteFeeBPSParams): Promise<QuoteFee> {
     const { chainId, assetAddress, amountIn, baseFeeBPS, extraGas } = quoteParams;
     const gasPrice = await web3Provider.getGasPrice(chainId);
 
     const EXTRA_GAS_AMOUNT = this.extraGasTxCost + this.extraGasFundAmount;
     const extraGasUnits = extraGas ? EXTRA_GAS_AMOUNT : 0n;
+    const extraGasDetail = extraGas ? { extraGasTxCost: this.extraGasTxCost, extraGasFundAmount: this.extraGasFundAmount } : undefined;
 
-    let quote: { num: bigint, den: bigint; path: (string|number)[] };
+    let quote: { num: bigint, den: bigint; path: (string | number)[]; };
     if (assetAddress.toLowerCase() === NativeAddress.toLowerCase()) {
       quote = { num: 1n, den: 1n, path: [] };
     } else {
@@ -47,7 +57,14 @@ export class QuoteService {
     }
 
     const feeBPS = await this.netFeeBPSNative(baseFeeBPS, amountIn, quote, gasPrice, extraGasUnits);
-    return { feeBPS, path: quote.path };
+
+    return {
+      feeBPS,
+      gasPrice,
+      relayTxCost: this.relayTxCost,
+      ...extraGasDetail,
+      path: quote.path
+    };
   }
 
 }
