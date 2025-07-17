@@ -58,13 +58,12 @@ const withdrawalPayload = {
     data: "0xfeeMismatch",
   },
   proof: {
-    pi_a: ["0", "0", "0"],
+    pi_a: ["0", "0"],
     pi_b: [
       ["0", "0"],
       ["0", "0"],
-      ["0", "0"],
     ],
-    pi_c: ["0", "0", "0"],
+    pi_c: ["0", "0"],
     protocol: "groth16",
     curve: "bn128",
   },
@@ -120,7 +119,6 @@ describe("relayRequestHandler", () => {
     vi.spyOn(privacyPoolRelayer, "handleRequest").mockResolvedValue(undefined);
     await relayRequestHandler(req, resMock, nextMock);
     const error = nextMock.mock.calls[0][0]
-    console.log(error)
     expect(error).toBeInstanceOf(ConfigError)
     expect(error.code).toEqual(ErrorCode.MAX_GAS_PRICE);
   });

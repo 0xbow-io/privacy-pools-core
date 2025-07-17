@@ -11,7 +11,6 @@ const quoteSchema: JSONSchemaType<QuotetBody> = {
     amount: { type: ["string"] },
     asset: { type: ["string"] },
     recipient: { type: ["string"], nullable: true },
-    extraGas: { type: "boolean" }
   },
   required: ["chainId", "amount", "asset"],
 } as const;

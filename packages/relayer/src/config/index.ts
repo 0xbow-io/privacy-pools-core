@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import { ConfigError, RelayerError } from "../exceptions/base.exception.js";
+import { ConfigError } from "../exceptions/base.exception.js";
 import { zConfig } from "./schemas.js";
-import { AssetConfig, ChainConfig } from "./types.js";
+import { ChainConfig, AssetConfig } from "./types.js";
 
 /**
  * Reads the configuration file from the path specified in the CONFIG_PATH environment variable
@@ -110,26 +110,18 @@ export function getEntrypointAddress(chainId: number): string {
  * 
  * @param {number} chainId - The chain ID
  * @param {string} assetAddress - The asset address
- * @returns {AssetConfig} The asset configuration, or undefined if not found
+ * @returns {AssetConfig | undefined} The asset configuration, or undefined if not found
  */
-export function getAssetConfig(chainId: number, assetAddress: string): AssetConfig {
+export function getAssetConfig(chainId: number, assetAddress: string): AssetConfig | undefined {
   const chainConfig = getChainConfig(chainId);
-
   if (!chainConfig.supported_assets) {
-    throw RelayerError.assetNotSupported();
+    return undefined;
   }
 
-  const assetConfig =  chainConfig.supported_assets.find(
+  return chainConfig.supported_assets.find(
     asset => asset.asset_address.toLowerCase() === assetAddress.toLowerCase()
   );
-
-  if (!assetConfig) {
-    throw RelayerError.assetNotSupported();
-  }
-
-  return assetConfig
-
 }
 
 // Re-export types
-export * from "./types.js";
+export * from "./types.js"; 

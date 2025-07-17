@@ -17,13 +17,11 @@ import {
   WithdrawPublicSignals,
 } from "./interfaces/relayer/request.js";
 import { FeeDataAbi } from "./types/abi.types.js";
-import { getFeeReceiverAddress, getSignerPrivateKey } from "./config/index.js";
-import { privateKeyToAccount } from "viem/accounts";
 
 interface WithdrawalData {
   recipient: Address,
   feeRecipient: Address,
-  relayFeeBPS: bigint;
+  relayFeeBPS: bigint
 }
 
 export function decodeWithdrawalData(data: `0x${string}`): WithdrawalData {
@@ -44,7 +42,7 @@ export function decodeWithdrawalData(data: `0x${string}`): WithdrawalData {
 
 export function encodeWithdrawalData(withdrawalData: WithdrawalData): `0x${string}` {
   try {
-    return encodeAbiParameters(FeeDataAbi, [withdrawalData]);
+    return encodeAbiParameters(FeeDataAbi, [withdrawalData])
   } catch (e) {
     const error = e as EncodeAbiParametersErrorType;
     throw WithdrawalValidationError.invalidWithdrawalAbi({
@@ -88,7 +86,7 @@ export function createChainObject(chainConfig: {
   chain_id: number;
   chain_name: string;
   rpc_url: string;
-  native_currency?: { name: string; symbol: string; decimals: number; };
+  native_currency?: { name: string; symbol: string; decimals: number };
 }): Chain {
   return {
     id: chainConfig.chain_id,
@@ -109,16 +107,6 @@ export function isViemError(error: unknown): error is ViemError {
   const viemErrorNames = [
     ContractFunctionExecutionError.prototype.constructor.name,
     ContractFunctionRevertedError.prototype.constructor.name,
-  ];
+  ]
   return viemErrorNames.includes(error?.constructor?.name || "");
-}
-
-export function isFeeReceiverSameAsSigner(chainId: number) {
-  const feeReceiverAddress = getFeeReceiverAddress(chainId);
-  const signerAddress = privateKeyToAccount(getSignerPrivateKey(chainId) as `0x${string}`).address;
-  return feeReceiverAddress.toLowerCase() === signerAddress.toLowerCase();
-}
-
-export function isNative(asset: `0x${string}`) {
-  return asset.toLowerCase() === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
 }

@@ -75,8 +75,6 @@ export interface RelayerResponse {
   requestId: string;
   /** Optional transaction hash */
   txHash?: string;
-  /** Optional transaction swap hash */
-  txSwap?: string;
   /** Optional error message */
   error?: string;
 }

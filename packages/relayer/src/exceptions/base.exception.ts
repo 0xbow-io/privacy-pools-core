@@ -82,12 +82,6 @@ export class RelayerError extends Error {
   public static unknown(message?: string): RelayerError {
     return new RelayerError(message || "", ErrorCode.UNKNOWN);
   }
-
-  public static assetNotSupported(
-    details?: Record<string, unknown> | string) {
-    return new RelayerError("Asset is not supported", ErrorCode.ASSET_NOT_SUPPORTED, details);
-  }
-
 }
 
 export class ValidationError extends RelayerError {
@@ -252,7 +246,7 @@ export class WithdrawalValidationError extends RelayerError {
     );
   }
 
-  public static override assetNotSupported(details: string) {
+  public static assetNotSupported(details: string) {
     return new WithdrawalValidationError(
       "Asset not supported on this chain",
       ErrorCode.ASSET_NOT_SUPPORTED,
@@ -291,7 +285,7 @@ export class QuoterError extends RelayerError {
     this.name = this.constructor.name;
   }
 
-  public static override assetNotSupported(
+  public static assetNotSupported(
     details?: Record<string, unknown> | string) {
     return new QuoterError("Asset is not supported", ErrorCode.ASSET_NOT_SUPPORTED, details);
   }
