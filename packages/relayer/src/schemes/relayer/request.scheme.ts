@@ -38,6 +38,7 @@ export const zProof = z.object({
 export const zFeeCommitment = z.object({
   expiration: z.number().nonnegative().int(),
   withdrawalData: zHex,
+  asset: zAddress,
   signedRelayerCommitment: zHex,
   extraGas: z.boolean(),
   amount: zNonNegativeBigInt
