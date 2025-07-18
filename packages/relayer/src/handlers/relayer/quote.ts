@@ -22,21 +22,21 @@ export async function relayQuoteHandler(
 
   const chainId = Number(req.body.chainId!);
   const amountIn = BigInt(req.body.amount!.toString());
-  const assetAddress = getAddress(req.body.asset!.toString());
+  const asset = getAddress(req.body.asset!.toString());
   let extraGas = Boolean(req.body.extraGas);
 
-  const config = getAssetConfig(chainId, assetAddress);
+  const config = getAssetConfig(chainId, asset);
   if (config === undefined)
-    return next(QuoterError.assetNotSupported(`Asset ${assetAddress} for chain ${chainId} is not supported`));
+    return next(QuoterError.assetNotSupported(`Asset ${asset} for chain ${chainId} is not supported`));
 
-  if (isNative(assetAddress)) {
+  if (isNative(asset)) {
     extraGas = false;
   }
 
   let quote: QuoteFee;
   try {
     quote = await quoteService.quoteFeeBPSNative({
-      chainId, amountIn, assetAddress, baseFeeBPS: config.fee_bps, extraGas: extraGas
+      chainId, amountIn, assetAddress: asset, baseFeeBPS: config.fee_bps, extraGas: extraGas
     });
   } catch (e) {
     return next(e);
@@ -76,9 +76,9 @@ export async function relayQuoteHandler(
       relayFeeBPS: feeBPS
     });
     const expiration = Number(new Date()) + EXPIRATION_TIME;
-    const relayerCommitment = { withdrawalData, expiration, amount: amountIn, extraGas };
+    const relayerCommitment = { withdrawalData, expiration, asset, amount: amountIn, extraGas };
     const signedRelayerCommitment = await web3Provider.signRelayerCommitment(chainId, relayerCommitment);
-    quoteResponse.addFeeCommitment({ expiration, withdrawalData, signedRelayerCommitment, extraGas, amount: amountIn });
+    quoteResponse.addFeeCommitment({ expiration, asset, withdrawalData, signedRelayerCommitment, extraGas, amount: amountIn });
   }
 
   res

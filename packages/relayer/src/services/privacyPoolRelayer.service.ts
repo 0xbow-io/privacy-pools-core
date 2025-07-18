@@ -284,6 +284,12 @@ export class PrivacyPoolRelayer {
 
     if (wp.feeCommitment) {
 
+      if (wp.feeCommitment.asset != assetAddress) {
+        throw WithdrawalValidationError.relayerCommitmentRejected(
+          `Asset in commitment does not match withdrawal scope asset: expected ${wp.feeCommitment.asset}, received ${assetAddress}`,
+        );
+      }
+
       // TODO: remove this check beacuse we should already have errored out at the begining
       const { relayFeeBPS: commitmentRelayFeeBPS } = decodeWithdrawalData(wp.feeCommitment.withdrawalData);
       if (relayFeeBPS !== commitmentRelayFeeBPS) {
