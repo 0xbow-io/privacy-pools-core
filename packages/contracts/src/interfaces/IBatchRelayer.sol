@@ -24,6 +24,20 @@ interface IBatchRelayer {
   }
 
   /*///////////////////////////////////////////////////////////////
+                              EVENTS
+  //////////////////////////////////////////////////////////////*/
+
+  /**
+   * @notice Event emitted when a batch is relayed
+   * @param _pool The pool that was withdrawn from
+   * @param _withdrawal The withdrawal that was relayed
+   * @param _proofs The proofs that were used
+   */
+  event BatchRelayed(
+    IPrivacyPool indexed _pool, IPrivacyPool.Withdrawal indexed _withdrawal, ProofLib.WithdrawProof[] indexed _proofs
+  );
+
+  /*///////////////////////////////////////////////////////////////
                               ERRORS
   //////////////////////////////////////////////////////////////*/
 
