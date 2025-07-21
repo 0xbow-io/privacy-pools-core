@@ -8,14 +8,14 @@ import { BlockchainError, RelayerError } from '../../exceptions/base.exception.j
 import { web3Provider } from '../../providers/index.js';
 import { isFeeReceiverSameAsSigner, isViemError } from '../../utils.js';
 import { IERC20MinimalABI } from './abis/erc20.abi.js';
+import { FactoryV3ABI } from './abis/factoryV3.abi.js';
 import { QuoterV2ABI } from './abis/quoterV2.abi.js';
 import { UniversalRouterABI } from './abis/universalRouter.abi.js';
+import { v3PoolABI } from './abis/v3pool.abi.js';
 import { Command, CommandPair, encodeInstruction, Instruction, Permit2Params } from './commands.js';
 import { getPermit2Address, getQuoterAddress, getRouterAddress, WRAPPED_NATIVE_TOKEN_ADDRESS } from './constants.js';
 import { createPermit2 } from './createPermit.js';
-import { encodePath, getPoolPath, hopsFromAddressRoute } from './pools.js';
-import { FactoryV3ABI } from './abis/factoryV3.abi.js';
-import { v3PoolABI } from './abis/v3pool.abi.js';
+import { encodePath, hopsFromAddressRoute } from './pools.js';
 
 export type UniswapQuote = {
   chainId: number;
@@ -122,11 +122,9 @@ export class UniswapProvider {
     ]);
     if (liq === 0n)
       return false;
-    const [sqrtPriceX96, tick,
-      observationIndex, observationCardinality,
-      observationCardinalityNext, feeProtocol,
-      unlocked
-    ] = slot0;
+    // sqrtPriceX96, tick, observationIndex, observationCardinality, observationCardinalityNext, feeProtocol, unlocked
+    const tick = slot0[1];
+    const unlocked = slot0[6];
     if (!unlocked || tick === 0)
       return false;
 
@@ -234,7 +232,7 @@ export class UniswapProvider {
     // Encode the path for quoteExactInput
     // Path encoding: token0 (20 bytes) + fee0 (3 bytes) + token1 (20 bytes) + fee1 (3 bytes) + token2 (20 bytes)...
     let encodedPath = '0x';
-    let plainPath: (string | FeeAmount)[] = [];
+    const plainPath: (string | FeeAmount)[] = [];
     pathWithFees.forEach((p, i) => {
       const { token, fee } = p;
       encodedPath += token.replace(/^0x/, ""); // Remove '0x' prefix

@@ -42,7 +42,7 @@ export async function relayQuoteHandler(
     return next(e);
   }
 
-  const { feeBPS, path, gasPrice, extraGasFundAmount, relayTxCost, extraGasTxCost } = quote;
+  const { feeBPS, gasPrice, extraGasFundAmount, relayTxCost, extraGasTxCost } = quote;
   const recipient = req.body.recipient ? getAddress(req.body.recipient.toString()) : undefined;
   const detail = {
     relayTxCost: { gas: relayTxCost, eth: relayTxCost * gasPrice },

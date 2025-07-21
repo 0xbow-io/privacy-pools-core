@@ -63,7 +63,7 @@ export function encodePath(path: (`0x${string}` | FeeAmount)[]): `0x${string}` {
   // Encode the path for quoteExactInput
   // Path encoding: token0 (20 bytes) + fee0 (3 bytes) + token1 (20 bytes) + fee1 (3 bytes) + token2 (20 bytes)...
   let encodedPath: `0x${string}` = '0x';
-  path.forEach((p, i) => {
+  path.forEach(p => {
     // is address
     if (isAddress(p)) {
       encodedPath += p.replace(/^0x/, ""); // Remove '0x' prefix
