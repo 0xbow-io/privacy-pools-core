@@ -6,8 +6,8 @@
   "license": "Apache-2.0",
   "author": "Wonderland",
   "type": "module",
-  "main": "./dist/src/index.js",
-  "types": "./dist/src/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "directories": {
     "src": "src"
   },
@@ -18,7 +18,8 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "start": "node ./dist/src/index.js",
+    "build:clean": "rm -r ./tsconfig.build.tsbuildinfo ./dist && tsc -p tsconfig.build.json",
+    "start": "node ./dist/index.js",
     "build:start": "yarn build && yarn start",
     "start:ts": "node --no-warnings=ExperimentalWarning --loader ts-node/esm src/index.ts",
     "check-types": "tsc --noEmit -p ./tsconfig.json",
@@ -34,7 +35,11 @@
   },
   "dependencies": {
     "@0xbow/privacy-pools-core-sdk": "0.1.17",
-    "@uniswap/v3-sdk": "^3.25.2",
+    "@ethersproject/bignumber": "5.8.0",
+    "@ethersproject/bytes": "5.8.0",
+    "@uniswap/sdk-core": "7.7.2",
+    "@uniswap/universal-router-sdk": "4.19.5",
+    "@uniswap/v3-sdk": "3.25.2",
     "ajv": "8.17.1",
     "body-parser": "1.20.3",
     "cors": "^2.8.5",
@@ -45,7 +50,10 @@
     "zod": "3.24.1"
   },
   "devDependencies": {
+    "@types/body-parser": "^1.19.6",
     "@types/cors": "^2.8.17",
-    "@types/express": "5.0.0"
+    "@types/express": "5.0.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "vitest": "^3.2.4"
   }
 }
