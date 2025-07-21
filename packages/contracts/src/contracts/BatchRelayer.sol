@@ -12,6 +12,12 @@ contract BatchRelayer is IBatchRelayer {
   using SafeERC20 for IERC20;
   using ProofLib for ProofLib.WithdrawProof;
 
+  uint256 public immutable MAX_RELAY_FEE_BPS;
+
+  constructor(uint256 _maxRelayFeeBPS) {
+    MAX_RELAY_FEE_BPS = _maxRelayFeeBPS;
+  }
+
   receive() external payable {}
 
   /// @inheritdoc IBatchRelayer

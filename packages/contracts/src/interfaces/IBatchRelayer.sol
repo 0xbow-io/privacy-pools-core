@@ -64,4 +64,14 @@ interface IBatchRelayer {
     IPrivacyPool.Withdrawal memory _withdrawal,
     ProofLib.WithdrawProof[] memory _proofs
   ) external;
+
+  /*///////////////////////////////////////////////////////////////
+                              STORAGE
+  //////////////////////////////////////////////////////////////*/
+
+  /**
+   * @notice Function to get the max relay fee BPS
+   * @return _maxRelayFeeBPS The max relay fee BPS
+   */
+  function MAX_RELAY_FEE_BPS() external view returns (uint256 _maxRelayFeeBPS);
 }
