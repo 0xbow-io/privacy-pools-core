@@ -7,7 +7,7 @@ import {
   notFoundMiddleware,
 } from "./middlewares/index.js";
 import { relayerRouter } from "./routes/index.js";
-import { CONFIG, CORS_ALLOW_ALL, ALLOWED_DOMAINS } from "./config/index.js";
+import { CORS_ALLOW_ALL, ALLOWED_DOMAINS } from "./config/index.js";
 
 // Initialize the express app
 const app = express();

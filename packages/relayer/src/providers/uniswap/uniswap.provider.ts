@@ -13,7 +13,7 @@ import { QuoterV2ABI } from './abis/quoterV2.abi.js';
 import { UniversalRouterABI } from './abis/universalRouter.abi.js';
 import { v3PoolABI } from './abis/v3pool.abi.js';
 import { Command, CommandPair, encodeInstruction, Instruction, Permit2Params } from './commands.js';
-import { getPermit2Address, getQuoterAddress, getRouterAddress, WRAPPED_NATIVE_TOKEN_ADDRESS } from './constants.js';
+import { FeeTiers, getPermit2Address, getQuoterAddress, getRouterAddress, getV3Factory, INTERMEDIATE_TOKENS, WRAPPED_NATIVE_TOKEN_ADDRESS } from './constants.js';
 import { createPermit2 } from './createPermit.js';
 import { encodePath, hopsFromAddressRoute } from './pools.js';
 
@@ -59,9 +59,14 @@ interface CreateInstructionsFeeReceiveerIsNotRelayer extends CreateInstructionsF
   feeBase: bigint;
 }
 
+const ZERO_ADDRESS = getAddress("0x0000000000000000000000000000000000000000");
+function isNullAddress(a: string) {
+  return getAddress(a) === ZERO_ADDRESS;
+}
+
 export class UniswapProvider {
 
-  static readonly ZERO_ADDRESS = getAddress("0x0000000000000000000000000000000000000000");
+  static readonly ZERO_ADDRESS = ZERO_ADDRESS;
 
   async getTokenInfo(chainId: number, address: Address): Promise<Token> {
     const contract = getContract({
@@ -106,12 +111,40 @@ export class UniswapProvider {
 
   async quoteNativeToken(chainId: number, addressIn: Address, amountIn: bigint): Promise<Quote> {
     const weth = WRAPPED_NATIVE_TOKEN_ADDRESS[chainId]!;
-    return this.quote({
-      chainId,
-      amountIn,
-      addressOut: weth.address,
-      addressIn
-    });
+    // First try direct quote
+    try {
+      return await this.quote({
+        chainId,
+        amountIn,
+        addressOut: weth.address,
+        addressIn
+      });
+    } catch (directError) {
+
+      // If direct quote fails, try multi-hop routing
+      const intermediateTokens = INTERMEDIATE_TOKENS[chainId.toString()] || [];
+      for (const intermediateToken of intermediateTokens) {
+
+        // Skip if intermediate token is same as input or output
+        if (intermediateToken.toLowerCase() === addressIn.toLowerCase() ||
+          intermediateToken.toLowerCase() === weth.address.toLowerCase()) {
+          continue;
+        }
+
+        try {
+          return await this.quoteMultiHop({
+            chainId,
+            amountIn,
+            path: [addressIn as Address, intermediateToken, weth.address as Address]
+          });
+        } catch {
+          continue;
+        }
+
+      }
+
+      throw directError;
+    }
   }
 
   private async poolHasLiquidity(chainId: number, poolAddress: `0x${string}`) {
@@ -158,18 +191,15 @@ export class UniswapProvider {
   async quote({ chainId, addressIn, addressOut, amountIn }: UniswapQuote) {
     const tokenIn = await this.getTokenInfo(chainId, addressIn as Address);
     const tokenOut = await this.getTokenInfo(chainId, addressOut as Address);
-    const quoterContract = getContract({
-      address: getQuoterAddress(chainId),
-      abi: QuoterV2ABI,
-      client: web3Provider.client(chainId)
-    });
+    const quoterContract = this.getQuoter(chainId);
 
+    const fee = await this.findLowestFeePoolForPair(chainId, addressIn, addressOut);
     try {
 
       const quotedAmountOut = await quoterContract.simulate.quoteExactInputSingle([{
         tokenIn: tokenIn.address as Address,
         tokenOut: tokenOut.address as Address,
-        fee: FeeAmount.LOW,
+        fee,
         amountIn,
         sqrtPriceLimitX96: 0n,
       }]);

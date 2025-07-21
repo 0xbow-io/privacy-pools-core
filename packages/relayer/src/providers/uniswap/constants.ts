@@ -1,5 +1,6 @@
 import { QUOTER_ADDRESSES, V3_CORE_FACTORY_ADDRESSES } from "@uniswap/sdk-core";
 import { UNIVERSAL_ROUTER_ADDRESS, UniversalRouterVersion } from "@uniswap/universal-router-sdk";
+import { FeeAmount } from "@uniswap/v3-sdk";
 import { Address, getAddress } from "viem";
 
 export { WETH9 as WRAPPED_NATIVE_TOKEN_ADDRESS } from "@uniswap/sdk-core";
@@ -36,6 +37,20 @@ export const FACTORY_CONTRACT_ADDRESS: Record<string, Address> = {
   "11155111": "0x0227628f3f023bb0b980b67d528571c95c6dac1c",  // Sepolia
 };
 
+// Common intermediate tokens for multi-hop routing
+export const INTERMEDIATE_TOKENS: Record<string, Address[]> = {
+  '1': [ // Mainnet
+    '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+    '0xdAC17F958D2ee523a2206206994597C13D831ec7', // USDT
+    '0x6B175474E89094C44Da98b954EedeAC495271d0F', // DAI
+    '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599', // WBTC
+  ],
+  '11155111': [ // Sepolia
+    '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', // USDC
+    '0x7169D38820dfd117C3FA1f22a697dBA58d90BA06', // USDT
+  ],
+};
+
 export function getRouterAddress(chainId: number) {
   return getAddress(UNIVERSAL_ROUTER_ADDRESS(UniversalRouterVersion.V2_0, chainId));
 }
@@ -53,16 +68,12 @@ export function getQuoterAddress(chainId: number) {
   return getAddress(chainId !== 1 ? QUOTER_ADDRESSES[chainId]! : mainnetQuoter)
 }
 
-// Common intermediate tokens for multi-hop routing
-export const INTERMEDIATE_TOKENS: Record<string, Address[]> = {
-  '1': [ // Mainnet
-    '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
-    '0xdAC17F958D2ee523a2206206994597C13D831ec7', // USDT
-    '0x6B175474E89094C44Da98b954EedeAC495271d0F', // DAI
-    '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599', // WBTC
-  ],
-  '11155111': [ // Sepolia
-    '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', // USDC
-    '0x7169D38820dfd117C3FA1f22a697dBA58d90BA06', // USDT
-  ],
-};
+export const FeeTiers: FeeAmount[] = [
+  FeeAmount.LOWEST,
+  FeeAmount.LOW_200,
+  FeeAmount.LOW_300,
+  FeeAmount.LOW_400,
+  FeeAmount.LOW,
+  FeeAmount.MEDIUM,
+  FeeAmount.HIGH,
+];
