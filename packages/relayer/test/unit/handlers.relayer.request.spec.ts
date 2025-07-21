@@ -10,7 +10,8 @@ vi.mock("../../src/config/index.js", () => {
       defaults: {
         fee_receiver_address: "0x1212121212121212121212121212121212121212",
         entrypoint_address: "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
-        signer_private_key: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+        signer_private_key: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+        quote_expiration_time: 20
       },
       chains: [
         {

@@ -2,7 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { DetailsMarshall } from "../../types.js";
 import { getAddress } from "viem/utils";
 import { Address } from "viem/accounts";
-import { CONFIG, getAssetConfig, getChainConfig } from "../../config/index.js";
+import { CONFIG, getAssetConfig, getChainConfig, getQuoteExpirationTime } from "../../config/index.js";
 import { ValidationError } from "../../exceptions/base.exception.js";
 
 /**
@@ -60,6 +60,7 @@ export function relayerDetailsHandler(
         feeBPS: assetConfig.fee_bps,
         feeReceiverAddress: getAddress(feeReceiverAddress),
         chainId,
+        quoteExpirationTime: getQuoteExpirationTime(),
         maxGasPrice: chainConfig.max_gas_price,
         assetAddress: normalizedAssetAddress as Address,
         minWithdrawAmount: assetConfig.min_withdraw_amount

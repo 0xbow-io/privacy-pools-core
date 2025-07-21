@@ -5,6 +5,7 @@ export const ENTRYPOINT_ADDRESS_TEST =
   "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1";
 export const SIGNER_PRIVATE_KEY_TEST =
   "0x8888888888888888888888888888888888888888888888888888888888888888";
+export const QUOTE_EXPIRATION_TIME = 20;
 export const FEE_BPS_TEST = 2_000n;
 export const PROVIDER_URL_TEST = "http://some.rpc.url";
 export const ASSET_ADDRESS_TEST = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -28,6 +29,7 @@ export const testingConfig = {
       fee_receiver_address: FEE_RECEIVER_ADDRESS_TEST,
       entrypoint_address: ENTRYPOINT_ADDRESS_TEST,
       signer_private_key: SIGNER_PRIVATE_KEY_TEST,
+      quote_expiration_time: QUOTE_EXPIRATION_TIME,
     },
     chains: [
       {

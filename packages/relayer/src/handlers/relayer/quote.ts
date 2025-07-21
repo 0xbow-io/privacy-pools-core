@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { getAddress } from "viem";
-import { getAssetConfig, getFeeReceiverAddress, getSignerPrivateKey } from "../../config/index.js";
+import { getAssetConfig, getFeeReceiverAddress, getQuoteExpirationTime, getSignerPrivateKey } from "../../config/index.js";
 import { QuoterError } from "../../exceptions/base.exception.js";
 import { web3Provider } from "../../providers/index.js";
 import { quoteService } from "../../services/index.js";
@@ -8,11 +8,6 @@ import { QuoteMarshall } from "../../types.js";
 import { encodeWithdrawalData, isFeeReceiverSameAsSigner, isNative } from "../../utils.js";
 import { privateKeyToAccount } from "viem/accounts";
 import { QuoteFee } from "../../services/quote.service.js";
-
-// const TIME_20_SECS = 20 * 1000;
-const TIME_60_SECS = 60 * 1000;
-
-const EXPIRATION_TIME = TIME_60_SECS;
 
 export async function relayQuoteHandler(
   req: Request,
@@ -75,7 +70,7 @@ export async function relayQuoteHandler(
       recipient,
       relayFeeBPS: feeBPS
     });
-    const expiration = Number(new Date()) + EXPIRATION_TIME;
+    const expiration = Number(new Date()) + getQuoteExpirationTime();
     const relayerCommitment = { withdrawalData, expiration, asset, amount: amountIn, extraGas };
     const signedRelayerCommitment = await web3Provider.signRelayerCommitment(chainId, relayerCommitment);
     quoteResponse.addFeeCommitment({ expiration, asset, withdrawalData, signedRelayerCommitment, extraGas, amount: amountIn });

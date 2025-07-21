@@ -14,6 +14,13 @@ export const zAddress = z
   .length(42)
   .transform((v) => getAddress(v));
 
+// Quote timeout validation schema
+export const zQuoteTime = z
+  .number()
+  .min(12, { message: 'Quote timeout must be at least 12 seconds' })
+  .transform((v) => v * 1000);    // convert to ms
+
+
 // Private key validation schema
 export const zPkey = z
   .string()
@@ -73,6 +80,7 @@ export const zDefaultConfig = z.object({
   fee_receiver_address: zAddress,
   signer_private_key: zPkey,
   entrypoint_address: zAddress,
+  quote_expiration_time: zQuoteTime,
 });
 
 // Complete configuration schema

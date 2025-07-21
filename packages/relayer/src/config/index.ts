@@ -106,6 +106,15 @@ export function getEntrypointAddress(chainId: number): string {
 }
 
 /**
+ * Gets the quote expiration timeout value.
+ * 
+ * @returns {number} Quote expiration time in miliseconds 
+ */
+export function getQuoteExpirationTime(): number {
+  return CONFIG.defaults.quote_expiration_time;
+}
+
+/**
  * Gets the asset configuration for a specific chain and asset address.
  * 
  * @param {number} chainId - The chain ID

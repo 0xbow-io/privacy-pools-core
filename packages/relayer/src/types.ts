@@ -12,6 +12,7 @@ export class DetailsMarshall extends RelayerMarshall {
     feeBPS: bigint,
     feeReceiverAddress: Address,
     chainId?: number,
+    quoteExpirationTime: number,
     assetAddress?: Address,
     minWithdrawAmount?: bigint,
     maxGasPrice?: bigint,
@@ -31,6 +32,7 @@ export class DetailsMarshall extends RelayerMarshall {
     return {
       feeBPS: this.details.feeBPS.toString(),
       feeReceiverAddress: this.details.feeReceiverAddress.toString(),
+      quoteExpirationTime: this.details.quoteExpirationTime,
       chainId: this.details.chainId,
       assetAddress: this.details.assetAddress?.toString(),
       minWithdrawAmount: this.details.minWithdrawAmount?.toString(),
