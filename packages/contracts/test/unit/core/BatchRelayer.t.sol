@@ -62,24 +62,30 @@ contract UnitBatchRelayer is Test {
     _assumeFuzzable(_happyPath.relayer);
     _assumeFuzzable(_happyPath.feeRecipient);
 
+    // Reset the total amount
     _happyPath.totalAmount = 0;
 
+    // Save the length and bound the batch size to it
     uint256 _l = _happyPath.withdrawnAmounts.length;
     _happyPath.batchSize = uint8(bound(uint256(_happyPath.batchSize), 0, _l));
+
+    // Cap the relay fee BPS
     _happyPath.relayFeeBPS = uint256(bound(uint256(_happyPath.relayFeeBPS), 0, MAX_RELAY_FEE_BPS));
 
+    // Cap the total amount to avoid overflows when deducting fees
     uint256 _totalAmountMax =
       _happyPath.relayFeeBPS == 0 ? type(uint256).max / 2 : type(uint256).max / _happyPath.relayFeeBPS;
     uint256 _withdrawnAmountMax =
       _happyPath.batchSize == 0 ? _totalAmountMax / 2 : _totalAmountMax / _happyPath.batchSize;
 
+    // Loop through the batch and sum the withdrawn amounts
+    // Create a new array with the new length == batchSize
     uint256[] memory _withdrawnAmounts = new uint256[](_happyPath.batchSize);
     for (uint256 i = 0; i < _happyPath.batchSize; i++) {
       _withdrawnAmounts[i] = uint256(bound(_happyPath.withdrawnAmounts[i], 0, _withdrawnAmountMax));
       _happyPath.totalAmount += _withdrawnAmounts[i];
     }
     _happyPath.withdrawnAmounts = _withdrawnAmounts;
-    _happyPath.totalAmount = _happyPath.totalAmount;
 
     _;
   }
