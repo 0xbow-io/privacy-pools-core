@@ -84,9 +84,11 @@ contract UnitBatchRelayer is Test {
     _;
   }
 
-  function test_ConstructorWhenCalled() external {
+  function test_ConstructorWhenCalled(uint256 _maxRelayFeeBPS) external {
+    batchRelayer = new BatchRelayer(_maxRelayFeeBPS);
+
     // It sets the max relay fee BPS
-    assertEq(batchRelayer.MAX_RELAY_FEE_BPS(), MAX_RELAY_FEE_BPS);
+    assertEq(batchRelayer.MAX_RELAY_FEE_BPS(), _maxRelayFeeBPS);
   }
 
   function test_WhenCalled(HappyPath memory _happyPath) external happyPath(_happyPath) {
