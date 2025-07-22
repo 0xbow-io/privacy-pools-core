@@ -2,8 +2,8 @@ UnitBatchRelayer::constructor
 └── When called
     └── It sets the max relay fee BPS
 
-UnitBatchRelayer::batchRelayNative
-└── When called
+UnitBatchRelayer::batchRelay
+└── When calling an native asset pool
     ├── It gets the asset from the pool
     ├── It call withdraw() on the pool for each proof
     ├── It transfers the assets to the recipient

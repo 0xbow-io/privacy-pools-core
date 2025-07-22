@@ -91,7 +91,7 @@ contract UnitBatchRelayer is Test {
     assertEq(batchRelayer.MAX_RELAY_FEE_BPS(), _maxRelayFeeBPS);
   }
 
-  function test_WhenCalled(HappyPath memory _happyPath) external happyPath(_happyPath) {
+  function test_BatchRelayWhenCallingAnNativeAssetPool(HappyPath memory _happyPath) external happyPath(_happyPath) {
     IPrivacyPool.Withdrawal memory _withdrawal = IPrivacyPool.Withdrawal({
       processooor: _happyPath.processooor,
       data: abi.encode(
