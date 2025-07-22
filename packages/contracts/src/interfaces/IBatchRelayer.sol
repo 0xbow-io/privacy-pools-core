@@ -70,6 +70,7 @@ interface IBatchRelayer {
 
   /**
    * @notice Function to get the max relay fee BPS
+   * @dev set at construction time and immutable
    * @return _maxRelayFeeBPS The max relay fee BPS
    */
   function MAX_RELAY_FEE_BPS() external view returns (uint256 _maxRelayFeeBPS);
