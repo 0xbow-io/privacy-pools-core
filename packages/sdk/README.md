@@ -6,11 +6,11 @@ A TypeScript SDK for interacting with the Privacy Pool protocol. This SDK provid
 
 
 ```bash
-npm install @0xbow/privacy-pool-core-sdk
+npm install @0xbow/privacy-pools-core-sdk
 # or
-yarn add @0xbow/privacy-pool-core-sdk
+yarn add @0xbow/privacy-pools-core-sdk
 # or
-pnpm add @0xbow/privacy-pool-core-sdk
+pnpm add @0xbow/privacy-pools-core-sdk
 ```
 
 ## Setup
@@ -36,15 +36,15 @@ pnpm add @0xbow/privacy-pool-core-sdk
 ## Usage
 
 ```typescript
-import { PrivacyPoolSDK } from '@0xbow/privacy-pool-core-sdk';
+import { ContractInteractionsService } from '@0xbow/privacy-pools-core-sdk';
 
 // Initialize the SDK
-const sdk = new PrivacyPoolSDK({
+const sdk = new ContractInteractionsService({
   // Configuration options
 });
 
 // Example: Create a deposit
-const deposit = await sdk.deposit({
+const deposit = await sdk.depositETH({
   // Deposit parameters
 });
 
