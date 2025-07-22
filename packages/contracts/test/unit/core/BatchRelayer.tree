@@ -1,0 +1,11 @@
+UnitBatchRelayer::constructor
+└── When called
+    └── It sets the max relay fee BPS
+
+UnitBatchRelayer::batchRelayNative
+└── When called
+    ├── It gets the asset from the pool
+    ├── It call withdraw() on the pool for each proof
+    ├── It transfers the assets to the recipient
+    ├── It transfers the fees to the fee recipient
+    └── It emits an event
