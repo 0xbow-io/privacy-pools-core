@@ -48,7 +48,7 @@ contract BatchRelayer is IBatchRelayer {
     // Transfer fees to fee recipient
     _transfer(_asset, _data.feeRecipient, _feeAmount);
 
-    emit BatchRelayed(_pool, _withdrawal, _proofs);
+    emit BatchRelayed(_pool, _data.recipient, _amountAfterFees, _feeAmount);
   }
 
   /**

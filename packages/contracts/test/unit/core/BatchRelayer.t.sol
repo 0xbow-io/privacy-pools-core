@@ -17,6 +17,8 @@ contract UnitBatchRelayer is Test {
     batchRelayer = new BatchRelayer(MAX_RELAY_FEE_BPS);
   }
 
+  receive() external payable {}
+
   struct HappyPath {
     IPrivacyPool pool;
     address processooor;
@@ -119,18 +121,18 @@ contract UnitBatchRelayer is Test {
       );
     }
 
+    uint256 _fee = _happyPath.totalAmount * _happyPath.relayFeeBPS / 10_000;
+    uint256 _afterFees = _happyPath.totalAmount - _fee;
+
     // It emits an event
     vm.expectEmit();
-    emit IBatchRelayer.BatchRelayed(_happyPath.pool, _withdrawal, _proofs);
+    emit IBatchRelayer.BatchRelayed(_happyPath.pool, _happyPath.recipient, _afterFees, _fee);
 
     uint256 _recipientBalanceBefore = address(_happyPath.recipient).balance;
     uint256 _feeRecipientBalanceBefore = address(_happyPath.feeRecipient).balance;
 
     vm.prank(_happyPath.relayer);
     batchRelayer.batchRelay(_happyPath.pool, _withdrawal, _proofs);
-
-    uint256 _fee = _happyPath.totalAmount * _happyPath.relayFeeBPS / 10_000;
-    uint256 _afterFees = _happyPath.totalAmount - _fee;
 
     // It transfers the assets to the recipient
     assertEq(address(_happyPath.recipient).balance, _recipientBalanceBefore + _afterFees);

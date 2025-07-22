@@ -30,12 +30,11 @@ interface IBatchRelayer {
   /**
    * @notice Event emitted when a batch is relayed
    * @param _pool The pool that was withdrawn from
-   * @param _withdrawal The withdrawal that was relayed
-   * @param _proofs The proofs that were used
+   * @param _recipient The recipient of the funds
+   * @param _amountAfterFees The amount after fees are deducted
+   * @param _fee The fee that was deducted
    */
-  event BatchRelayed(
-    IPrivacyPool indexed _pool, IPrivacyPool.Withdrawal indexed _withdrawal, ProofLib.WithdrawProof[] indexed _proofs
-  );
+  event BatchRelayed(IPrivacyPool indexed _pool, address _recipient, uint256 _amountAfterFees, uint256 _fee);
 
   /*///////////////////////////////////////////////////////////////
                               ERRORS
