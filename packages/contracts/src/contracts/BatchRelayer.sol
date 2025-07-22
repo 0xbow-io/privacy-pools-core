@@ -12,6 +12,7 @@ contract BatchRelayer is IBatchRelayer {
   using SafeERC20 for IERC20;
   using ProofLib for ProofLib.WithdrawProof;
 
+  /// @inheritdoc IBatchRelayer
   uint256 public immutable MAX_RELAY_FEE_BPS;
 
   constructor(uint256 _maxRelayFeeBPS) {
@@ -26,13 +27,11 @@ contract BatchRelayer is IBatchRelayer {
     IPrivacyPool.Withdrawal memory _withdrawal,
     ProofLib.WithdrawProof[] memory _proofs
   ) external {
-    // Decode relay data
     BatchRelayData memory _data = abi.decode(_withdrawal.data, (BatchRelayData));
 
-    // Store pool asset
     IERC20 _asset = IERC20(_pool.ASSET());
 
-    // Batch withdraw
+    // Loop and withdraw each proof
     uint256 _withdrawnAmount;
     for (uint256 i = 0; i < _proofs.length; i++) {
       _pool.withdraw(_withdrawal, _proofs[i]);
