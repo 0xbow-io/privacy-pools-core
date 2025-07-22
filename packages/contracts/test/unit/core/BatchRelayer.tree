@@ -3,9 +3,11 @@ UnitBatchRelayer::constructor
     └── It sets the max relay fee BPS
 
 UnitBatchRelayer::batchRelay
-└── When calling an native asset pool
-    ├── It gets the asset from the pool
-    ├── It call withdraw() on the pool for each proof
-    ├── It transfers the assets to the recipient
-    ├── It transfers the fees to the fee recipient
-    └── It emits an event
+├── When calling an native asset pool
+│   ├── It gets the asset from the pool
+│   ├── It call withdraw() on the pool for each proof
+│   ├── It transfers the assets to the recipient
+│   ├── It transfers the fees to the fee recipient
+│   └── It emits an event
+└── When proofs array is empty
+    └── It reverts with EmptyProofs

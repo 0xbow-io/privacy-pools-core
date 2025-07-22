@@ -27,6 +27,8 @@ contract BatchRelayer is IBatchRelayer {
     IPrivacyPool.Withdrawal memory _withdrawal,
     ProofLib.WithdrawProof[] memory _proofs
   ) external {
+    if (_proofs.length == 0) revert EmptyProofs();
+
     BatchRelayData memory _data = abi.decode(_withdrawal.data, (BatchRelayData));
 
     IERC20 _asset = IERC20(_pool.ASSET());
