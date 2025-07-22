@@ -130,16 +130,13 @@ contract UnitBatchRelayer is Test {
     vm.expectEmit();
     emit IBatchRelayer.BatchRelayed(_happyPath.pool, _happyPath.recipient, _afterFees, _fee);
 
-    uint256 _recipientBalanceBefore = address(_happyPath.recipient).balance;
-    uint256 _feeRecipientBalanceBefore = address(_happyPath.feeRecipient).balance;
+    // It transfers the assets to the recipient
+    vm.expectCall(address(_happyPath.recipient), _afterFees, '');
+
+    // It transfers the fees to the fee recipient
+    vm.expectCall(address(_happyPath.feeRecipient), _fee, '');
 
     vm.prank(_happyPath.relayer);
     batchRelayer.batchRelay(_happyPath.pool, _withdrawal, _proofs);
-
-    // It transfers the assets to the recipient
-    assertEq(address(_happyPath.recipient).balance, _recipientBalanceBefore + _afterFees);
-
-    // It transfers the fees to the fee recipient
-    assertEq(address(_happyPath.feeRecipient).balance, _feeRecipientBalanceBefore + _fee);
   }
 }
