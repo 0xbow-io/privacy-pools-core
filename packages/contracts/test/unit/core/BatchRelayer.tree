@@ -9,5 +9,7 @@ UnitBatchRelayer::batchRelay
 │   ├── It transfers the assets to the recipient
 │   ├── It transfers the fees to the fee recipient
 │   └── It emits an event
-└── When proofs array is empty
-    └── It reverts with EmptyProofs
+├── When proofs array is empty
+│   └── It reverts with EmptyProofs
+└── When relay fee BPS is greater than max relay fee BPS
+    └── It reverts with InvalidRelayFeeBPS

@@ -31,6 +31,8 @@ contract BatchRelayer is IBatchRelayer {
 
     BatchRelayData memory _data = abi.decode(_withdrawal.data, (BatchRelayData));
 
+    if (_data.relayFeeBPS > MAX_RELAY_FEE_BPS) revert InvalidRelayFeeBPS();
+
     IERC20 _asset = IERC20(_pool.ASSET());
 
     // Loop and withdraw each proof

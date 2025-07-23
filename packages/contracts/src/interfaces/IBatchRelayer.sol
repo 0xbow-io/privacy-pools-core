@@ -55,6 +55,11 @@ interface IBatchRelayer {
    */
   error EmptyProofs();
 
+  /**
+   * @notice Thrown when the relay fee in basis points is greater than the max relay fee BPS
+   */
+  error InvalidRelayFeeBPS();
+
   /*///////////////////////////////////////////////////////////////
                               FUNCTIONS
   //////////////////////////////////////////////////////////////*/
