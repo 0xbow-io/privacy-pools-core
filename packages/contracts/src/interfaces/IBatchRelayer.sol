@@ -50,6 +50,11 @@ interface IBatchRelayer {
    */
   error NativeAssetTransferFailed();
 
+  /**
+   * @notice Error thrown when the proofs array is empty
+   */
+  error EmptyProofs();
+
   /*///////////////////////////////////////////////////////////////
                               FUNCTIONS
   //////////////////////////////////////////////////////////////*/

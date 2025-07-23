@@ -67,7 +67,9 @@ contract UnitBatchRelayer is Test {
 
     // Save the length and bound the batch size to it
     uint256 _l = _happyPath.withdrawnAmounts.length;
-    _happyPath.batchSize = uint8(bound(uint256(_happyPath.batchSize), 0, _l));
+    // TODO: improve this
+    vm.assume(_l > 0);
+    _happyPath.batchSize = uint8(bound(uint256(_happyPath.batchSize), 1, _l));
 
     // Cap the relay fee BPS
     _happyPath.relayFeeBPS = uint256(bound(uint256(_happyPath.relayFeeBPS), 0, MAX_RELAY_FEE_BPS));
@@ -144,5 +146,15 @@ contract UnitBatchRelayer is Test {
 
     vm.prank(_happyPath.relayer);
     batchRelayer.batchRelay(_happyPath.pool, _withdrawal, _proofs);
+  }
+
+  function test_BatchRelayWhenProofsArrayIsEmpty() external {
+    ProofLib.WithdrawProof[] memory _proofs = new ProofLib.WithdrawProof[](0);
+    IPrivacyPool.Withdrawal memory _withdrawal = IPrivacyPool.Withdrawal({processooor: address(0), data: ''});
+
+    // It reverts with EmptyProofs
+    vm.expectRevert(IBatchRelayer.EmptyProofs.selector);
+
+    batchRelayer.batchRelay(IPrivacyPool(address(0)), _withdrawal, _proofs);
   }
 }
