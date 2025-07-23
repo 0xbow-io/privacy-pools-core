@@ -150,10 +150,7 @@ contract UnitBatchRelayer is Test {
 
   function test_BatchRelayWhenProofsArrayIsEmpty() external {
     ProofLib.WithdrawProof[] memory _proofs = new ProofLib.WithdrawProof[](0);
-    IPrivacyPool.Withdrawal memory _withdrawal = IPrivacyPool.Withdrawal({
-      processooor: address(0),
-      data: ''
-    });
+    IPrivacyPool.Withdrawal memory _withdrawal = IPrivacyPool.Withdrawal({processooor: address(0), data: ''});
 
     // It reverts with EmptyProofs
     vm.expectRevert(IBatchRelayer.EmptyProofs.selector);
