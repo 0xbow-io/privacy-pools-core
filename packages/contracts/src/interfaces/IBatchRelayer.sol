@@ -55,6 +55,11 @@ interface IBatchRelayer {
    */
   error EmptyProofs();
 
+  /**
+   * @notice Thrown when `relayFeeBPS` is greater than `MAX_RELAY_FEE_BPS`
+   */
+  error InvalidRelayFeeBPS();
+
   /*///////////////////////////////////////////////////////////////
                               FUNCTIONS
   //////////////////////////////////////////////////////////////*/

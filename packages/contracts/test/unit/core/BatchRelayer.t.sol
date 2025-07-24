@@ -157,4 +157,27 @@ contract UnitBatchRelayer is Test {
 
     batchRelayer.batchRelay(IPrivacyPool(address(0)), _withdrawal, _proofs);
   }
+
+  function test_BatchRelayWhenRelayFeeBPSIsGreaterThanMaxRelayFeeBPS(uint256 _relayFeeBPS) external {
+    _relayFeeBPS = bound(_relayFeeBPS, MAX_RELAY_FEE_BPS + 1, type(uint256).max);
+
+    // It reverts with InvalidRelayFeeBPS
+    vm.expectRevert(IBatchRelayer.InvalidRelayFeeBPS.selector);
+
+    batchRelayer.batchRelay(
+      IPrivacyPool(address(0)),
+      IPrivacyPool.Withdrawal({
+        processooor: address(0),
+        data: abi.encode(
+          IBatchRelayer.BatchRelayData({
+            recipient: address(0),
+            feeRecipient: address(0),
+            relayFeeBPS: _relayFeeBPS,
+            batchSize: 1
+          })
+        )
+      }),
+      new ProofLib.WithdrawProof[](1)
+    );
+  }
 }
