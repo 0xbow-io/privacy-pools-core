@@ -60,6 +60,11 @@ interface IBatchRelayer {
    */
   error InvalidRelayFeeBPS();
 
+  /**
+   * @notice Error thrown when the contract balance has changed after the batch relay
+   */
+  error BalanceChanged();
+
   /*///////////////////////////////////////////////////////////////
                               FUNCTIONS
   //////////////////////////////////////////////////////////////*/

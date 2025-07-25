@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.28;
 
+import {IERC20} from '@oz/interfaces/IERC20.sol';
+import {SafeERC20} from '@oz/token/ERC20/utils/SafeERC20.sol';
 import {BatchRelayer} from 'contracts/BatchRelayer.sol';
 import {Constants} from 'contracts/lib/Constants.sol';
 import {ProofLib} from 'contracts/lib/ProofLib.sol';
@@ -9,19 +11,46 @@ import {IBatchRelayer} from 'interfaces/IBatchRelayer.sol';
 import {IPrivacyPool} from 'interfaces/IPrivacyPool.sol';
 import {IState} from 'interfaces/IState.sol';
 
+contract PrivacyPoolForTest {
+  using SafeERC20 for IERC20;
+  using ProofLib for ProofLib.WithdrawProof;
+
+  IERC20 public immutable ASSET;
+
+  constructor(IERC20 _asset) {
+    ASSET = _asset;
+  }
+
+  function withdraw(IPrivacyPool.Withdrawal memory _withdrawal, ProofLib.WithdrawProof memory _proof) external {
+    _transfer(ASSET, _withdrawal.processooor, _proof.withdrawnValue());
+  }
+
+  function _transfer(IERC20 _asset, address _recipient, uint256 _amount) internal {
+    if (_recipient == address(0)) revert('Zero address');
+
+    if (_asset == IERC20(Constants.NATIVE_ASSET)) {
+      (bool _success,) = _recipient.call{value: _amount}('');
+      if (!_success) revert('Native asset transfer failed');
+    } else {
+      _asset.safeTransfer(_recipient, _amount);
+    }
+  }
+}
+
 contract UnitBatchRelayer is Test {
   BatchRelayer public batchRelayer;
   uint256 public constant MAX_RELAY_FEE_BPS = 1000; // 10%
+  IPrivacyPool public privacyPoolNative;
 
   function setUp() external {
     batchRelayer = new BatchRelayer(MAX_RELAY_FEE_BPS);
+
+    privacyPoolNative = IPrivacyPool(address(new PrivacyPoolForTest(IERC20(Constants.NATIVE_ASSET))));
   }
 
   receive() external payable {}
 
   struct HappyPath {
-    IPrivacyPool pool;
-    address processooor;
     address recipient;
     address relayer;
     address feeRecipient;
@@ -36,6 +65,7 @@ contract UnitBatchRelayer is Test {
     assumeNotZeroAddress(_address);
     assumeNotPrecompile(_address);
     vm.assume(_address != address(batchRelayer));
+    vm.assume(_address != address(privacyPoolNative));
   }
 
   function _mockAndExpect(address _contract, bytes memory _call, bytes memory _return) internal {
@@ -56,8 +86,6 @@ contract UnitBatchRelayer is Test {
   }
 
   modifier happyPath(HappyPath memory _happyPath) {
-    _assumeFuzzable(address(_happyPath.pool));
-    _assumeFuzzable(_happyPath.processooor);
     _assumeFuzzable(_happyPath.recipient);
     _assumeFuzzable(_happyPath.relayer);
     _assumeFuzzable(_happyPath.feeRecipient);
@@ -101,7 +129,7 @@ contract UnitBatchRelayer is Test {
 
   function test_BatchRelayWhenCallingAnNativeAssetPool(HappyPath memory _happyPath) external happyPath(_happyPath) {
     IPrivacyPool.Withdrawal memory _withdrawal = IPrivacyPool.Withdrawal({
-      processooor: _happyPath.processooor,
+      processooor: address(batchRelayer),
       data: abi.encode(
         IBatchRelayer.BatchRelayData({
           recipient: _happyPath.recipient,
@@ -115,19 +143,15 @@ contract UnitBatchRelayer is Test {
     for (uint256 i = 0; i < _happyPath.batchSize; i++) {
       _proofs[i] = _createFakeProof(_happyPath.withdrawnAmounts[i]);
     }
-    vm.deal(address(batchRelayer), _happyPath.totalAmount);
+    vm.deal(address(privacyPoolNative), _happyPath.totalAmount);
 
     // It gets the asset from the pool
-    _mockAndExpect(
-      address(_happyPath.pool), abi.encodeWithSelector(IState.ASSET.selector), abi.encode(Constants.NATIVE_ASSET)
-    );
+    vm.expectCall(address(privacyPoolNative), abi.encodeWithSelector(IState.ASSET.selector));
 
     // It call withdraw() on the pool for each proof
     for (uint256 i = 0; i < _happyPath.batchSize; i++) {
-      _mockAndExpect(
-        address(_happyPath.pool),
-        abi.encodeWithSelector(IPrivacyPool.withdraw.selector, _withdrawal, _proofs[i]),
-        abi.encode(true)
+      vm.expectCall(
+        address(privacyPoolNative), abi.encodeWithSelector(IPrivacyPool.withdraw.selector, _withdrawal, _proofs[i])
       );
     }
 
@@ -136,7 +160,7 @@ contract UnitBatchRelayer is Test {
 
     // It emits an event
     vm.expectEmit();
-    emit IBatchRelayer.BatchRelayed(_happyPath.pool, _happyPath.recipient, _afterFees, _fee);
+    emit IBatchRelayer.BatchRelayed(privacyPoolNative, _happyPath.recipient, _afterFees, _fee);
 
     // It transfers the assets to the recipient
     vm.expectCall(address(_happyPath.recipient), _afterFees, '');
@@ -145,7 +169,7 @@ contract UnitBatchRelayer is Test {
     vm.expectCall(address(_happyPath.feeRecipient), _fee, '');
 
     vm.prank(_happyPath.relayer);
-    batchRelayer.batchRelay(_happyPath.pool, _withdrawal, _proofs);
+    batchRelayer.batchRelay(privacyPoolNative, _withdrawal, _proofs);
   }
 
   function test_BatchRelayWhenProofsArrayIsEmpty() external {
@@ -179,5 +203,37 @@ contract UnitBatchRelayer is Test {
       }),
       new ProofLib.WithdrawProof[](1)
     );
+  }
+
+  function test_BatchRelayWhenContractBalanceHasChangedAfterTheBatchRelay(
+    address _relayer,
+    address _feeRecipient,
+    uint256 _amount
+  ) external {
+    _assumeFuzzable(_relayer);
+    _assumeFuzzable(_feeRecipient);
+
+    _amount = bound(_amount, 1, type(uint256).max);
+    IPrivacyPool.Withdrawal memory _withdrawal = IPrivacyPool.Withdrawal({
+      processooor: address(batchRelayer),
+      data: abi.encode(
+        IBatchRelayer.BatchRelayData({
+          recipient: address(batchRelayer), // Recipient is the batch relayer to force the balance change
+          feeRecipient: _feeRecipient,
+          relayFeeBPS: 0,
+          batchSize: 1
+        })
+      )
+    });
+    ProofLib.WithdrawProof[] memory _proofs = new ProofLib.WithdrawProof[](1);
+    _proofs[0] = _createFakeProof(_amount);
+
+    vm.deal(address(privacyPoolNative), _amount);
+
+    // It reverts with BalanceChanged
+    vm.expectRevert(IBatchRelayer.BalanceChanged.selector);
+
+    vm.prank(_relayer);
+    batchRelayer.batchRelay(privacyPoolNative, _withdrawal, _proofs);
   }
 }

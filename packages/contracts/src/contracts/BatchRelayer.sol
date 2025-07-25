@@ -34,6 +34,7 @@ contract BatchRelayer is IBatchRelayer {
     if (_data.relayFeeBPS > MAX_RELAY_FEE_BPS) revert InvalidRelayFeeBPS();
 
     IERC20 _asset = IERC20(_pool.ASSET());
+    uint256 _balanceBefore = _assetBalance(_asset);
 
     // Loop and withdraw each proof
     uint256 _withdrawnAmount;
@@ -50,6 +51,10 @@ contract BatchRelayer is IBatchRelayer {
     _transfer(_asset, _data.recipient, _amountAfterFees);
     // Transfer fees to fee recipient
     _transfer(_asset, _data.feeRecipient, _feeAmount);
+
+    // Check contract balance has not changed after the batch relay
+    uint256 _balanceAfter = _assetBalance(_asset);
+    if (_balanceBefore != _balanceAfter) revert BalanceChanged();
 
     emit BatchRelayed(_pool, _data.recipient, _amountAfterFees, _feeAmount);
   }
@@ -69,6 +74,15 @@ contract BatchRelayer is IBatchRelayer {
     } else {
       _asset.safeTransfer(_recipient, _amount);
     }
+  }
+
+  /**
+   * @notice Fetch asset balance for the Entrypoint
+   * @param _asset The asset address
+   * @return _balance The asset balance
+   */
+  function _assetBalance(IERC20 _asset) internal view returns (uint256 _balance) {
+    _balance = address(this).balance;
   }
 
   /**
