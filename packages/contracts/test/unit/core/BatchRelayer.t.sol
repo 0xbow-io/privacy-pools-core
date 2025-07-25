@@ -37,15 +37,34 @@ contract PrivacyPoolForTest {
   }
 }
 
+contract BatchRelayerForTest is BatchRelayer {
+  constructor(uint256 _maxRelayFeeBPS) BatchRelayer(_maxRelayFeeBPS) {}
+
+  function forTest_transfer(IERC20 _asset, address _recipient, uint256 _amount) external {
+    _transfer(_asset, _recipient, _amount);
+  }
+}
+
+contract ReceiveRevertForTest {
+  // This contract always revert when sending eth
+  receive() external payable {
+    revert('Revert');
+  }
+}
+
 contract UnitBatchRelayer is Test {
   BatchRelayer public batchRelayer;
   uint256 public constant MAX_RELAY_FEE_BPS = 1000; // 10%
   IPrivacyPool public privacyPoolNative;
+  BatchRelayerForTest public batchRelayerForTest;
+  ReceiveRevertForTest public receiveRevertForTest;
 
   function setUp() external {
     batchRelayer = new BatchRelayer(MAX_RELAY_FEE_BPS);
 
     privacyPoolNative = IPrivacyPool(address(new PrivacyPoolForTest(IERC20(Constants.NATIVE_ASSET))));
+    batchRelayerForTest = new BatchRelayerForTest(MAX_RELAY_FEE_BPS);
+    receiveRevertForTest = new ReceiveRevertForTest();
   }
 
   receive() external payable {}
@@ -235,5 +254,50 @@ contract UnitBatchRelayer is Test {
 
     vm.prank(_relayer);
     batchRelayer.batchRelay(privacyPoolNative, _withdrawal, _proofs);
+  }
+
+  function test__transferWhenRecipientIsZero(IERC20 _asset, uint256 _amount) external {
+    _assumeFuzzable(address(_asset));
+
+    // It reverts with ZeroAddress
+    vm.expectRevert(IBatchRelayer.ZeroAddress.selector);
+    batchRelayerForTest.forTest_transfer(_asset, address(0), _amount);
+  }
+
+  modifier whenAssetIsNative() {
+    _;
+  }
+
+  function test__transferWhenTransferFails(uint256 _amount) external whenAssetIsNative {
+    vm.deal(address(batchRelayerForTest), _amount);
+
+    // It reverts with NativeAssetTransferFailed
+    vm.expectRevert(IBatchRelayer.NativeAssetTransferFailed.selector);
+    batchRelayerForTest.forTest_transfer(IERC20(Constants.NATIVE_ASSET), address(receiveRevertForTest), _amount);
+  }
+
+  function test__transferWhenTransferSucceeds(address _recipient, uint256 _amount) external whenAssetIsNative {
+    _assumeFuzzable(_recipient);
+    vm.assume(_recipient != address(0));
+    vm.assume(_recipient != address(receiveRevertForTest));
+    vm.deal(address(batchRelayerForTest), _amount);
+
+    // It transfers the amount to the recipient
+    vm.expectCall(_recipient, _amount, '');
+
+    batchRelayerForTest.forTest_transfer(IERC20(Constants.NATIVE_ASSET), _recipient, _amount);
+  }
+
+  function test__transferWhenAssetIsNotNative(IERC20 _asset, address _recipient, uint256 _amount) external {
+    vm.assume(address(_asset) != Constants.NATIVE_ASSET);
+    _assumeFuzzable(address(_asset));
+    _assumeFuzzable(_recipient);
+
+    // It calls .transfer() on the asset
+    _mockAndExpect(
+      address(_asset), abi.encodeWithSelector(IERC20.transfer.selector, _recipient, _amount), abi.encode(true)
+    );
+
+    batchRelayerForTest.forTest_transfer(_asset, _recipient, _amount);
   }
 }

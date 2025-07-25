@@ -15,3 +15,14 @@ UnitBatchRelayer::batchRelay
 │   └── It reverts with InvalidRelayFeeBPS
 └── When contract balance has changed after the batch relay
     └── It reverts with BalanceChanged
+
+UnitBatchRelayer::_transfer
+├── When recipient is zero
+│   └── It reverts with ZeroAddress
+├── When asset is native
+│   ├── When transfer fails
+│   │   └── It reverts with NativeAssetTransferFailed
+│   └── When transfer succeeds
+│       └── It transfers the amount to the recipient
+└── When asset is not native
+    └── It calls .transfer() on the asset
