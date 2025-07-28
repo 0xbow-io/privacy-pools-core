@@ -19,8 +19,10 @@ UnitBatchRelayer::batchRelay
 │   └── It reverts with EmptyProofs
 ├── When relay fee BPS is greater than max relay fee BPS
 │   └── It reverts with InvalidRelayFeeBPS
-└── When contract balance has changed after the batch relay
-    └── It reverts with BalanceChanged
+├── When contract balance has changed after the batch relay
+│   └── It reverts with BalanceChanged
+└── When batch size is different than the number of proofs
+    └── It reverts with InvalidBatchSize
 
 UnitBatchRelayer::_transfer
 ├── When recipient is zero

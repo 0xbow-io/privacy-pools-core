@@ -316,6 +316,30 @@ contract UnitBatchRelayer is Test {
     batchRelayer.batchRelay(privacyPoolNative, _withdrawal, _proofs);
   }
 
+  function test_BatchRelayWhenBatchSizeIsDifferentThanTheNumberOfProofs(uint8 _proofsSize, uint8 _batchSize) external {
+    _proofsSize = uint8(bound(_proofsSize, 1, type(uint8).max));
+    vm.assume(_proofsSize != _batchSize);
+
+    // It reverts with InvalidBatchSize
+    vm.expectRevert(IBatchRelayer.InvalidBatchSize.selector);
+
+    batchRelayer.batchRelay(
+      IPrivacyPool(address(0)),
+      IPrivacyPool.Withdrawal({
+        processooor: address(0),
+        data: abi.encode(
+          IBatchRelayer.BatchRelayData({
+            recipient: address(0),
+            feeRecipient: address(0),
+            relayFeeBPS: 0,
+            batchSize: _batchSize
+          })
+        )
+      }),
+      new ProofLib.WithdrawProof[](_proofsSize)
+    );
+  }
+
   function test__transferWhenRecipientIsZero(IERC20 _asset, uint256 _amount) external {
     _assumeFuzzable(address(_asset));
 

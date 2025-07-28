@@ -65,6 +65,11 @@ interface IBatchRelayer {
    */
   error BalanceChanged();
 
+  /**
+   * @notice Error thrown when the batch size is different than the number of proofs
+   */
+  error InvalidBatchSize();
+
   /*///////////////////////////////////////////////////////////////
                               FUNCTIONS
   //////////////////////////////////////////////////////////////*/
