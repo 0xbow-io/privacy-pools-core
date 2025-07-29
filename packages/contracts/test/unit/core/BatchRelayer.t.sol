@@ -26,10 +26,12 @@ contract PrivacyPoolForTest {
   }
 
   function _transfer(IERC20 _asset, address _recipient, uint256 _amount) internal {
+    // solhint-disable-next-line custom-errors
     if (_recipient == address(0)) revert('Zero address');
 
     if (_asset == IERC20(Constants.NATIVE_ASSET)) {
       (bool _success,) = _recipient.call{value: _amount}('');
+      // solhint-disable-next-line custom-errors
       if (!_success) revert('Native asset transfer failed');
     } else {
       _asset.safeTransfer(_recipient, _amount);
@@ -48,6 +50,7 @@ contract BatchRelayerForTest is BatchRelayer {
 contract ReceiveRevertForTest {
   // This contract always revert when sending eth
   receive() external payable {
+    // solhint-disable-next-line custom-errors
     revert('Revert');
   }
 }
