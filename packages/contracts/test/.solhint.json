@@ -9,6 +9,7 @@
       }
     ],
     "no-global-import": "off",
+    "custom-errors": "off",
     "max-states-count": "off",
     "ordering": "off",
     "one-contract-per-file": "off"
