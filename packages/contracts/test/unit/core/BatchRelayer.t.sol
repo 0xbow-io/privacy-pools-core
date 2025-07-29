@@ -87,6 +87,7 @@ contract UnitBatchRelayer is Test {
     vm.assume(_address != address(privacyPoolNative));
     vm.assume(_address != address(batchRelayerForTest));
     vm.assume(_address != address(receiveRevertForTest));
+    vm.assume(_address != address(this));
   }
 
   function _mockAndExpect(address _contract, bytes memory _call, bytes memory _return) internal {
@@ -110,6 +111,8 @@ contract UnitBatchRelayer is Test {
     _assumeFuzzable(_happyPath.recipient);
     _assumeFuzzable(_happyPath.relayer);
     _assumeFuzzable(_happyPath.feeRecipient);
+    // Foundry groups expectCalls with same calldata. This is a workaround to avoid this issue.
+    vm.assume(_happyPath.recipient != _happyPath.feeRecipient);
 
     // Reset the total amount
     _happyPath.totalAmount = 0;
