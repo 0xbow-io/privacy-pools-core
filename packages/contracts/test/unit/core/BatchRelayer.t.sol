@@ -192,7 +192,7 @@ contract UnitBatchRelayer is Test {
 
     // It emits an event
     vm.expectEmit();
-    emit IBatchRelayer.BatchRelayed(privacyPoolNative, _happyPath.recipient, _afterFees, _fee);
+    emit IBatchRelayer.BatchRelayed(privacyPoolNative, _happyPath.recipient, _happyPath.feeRecipient, _afterFees, _fee);
 
     // It transfers the assets to the recipient
     vm.expectCall(address(_happyPath.recipient), _afterFees, '');
@@ -250,7 +250,7 @@ contract UnitBatchRelayer is Test {
 
     // It emits an event
     vm.expectEmit();
-    emit IBatchRelayer.BatchRelayed(_pool, _happyPath.recipient, _afterFees, _fee);
+    emit IBatchRelayer.BatchRelayed(_pool, _happyPath.recipient, _happyPath.feeRecipient, _afterFees, _fee);
 
     // It transfers the assets to the recipient
     vm.expectCall(address(_asset), abi.encodeWithSelector(IERC20.transfer.selector, _happyPath.recipient, _afterFees));

@@ -31,10 +31,13 @@ interface IBatchRelayer {
    * @notice Event emitted when a batch is relayed
    * @param _pool The pool that was withdrawn from
    * @param _recipient The recipient of the funds
+   * @param _feeRecipient The fee recipient
    * @param _amountAfterFees The amount after fees are deducted
    * @param _fee The fee that was deducted
    */
-  event BatchRelayed(IPrivacyPool indexed _pool, address _recipient, uint256 _amountAfterFees, uint256 _fee);
+  event BatchRelayed(
+    IPrivacyPool indexed _pool, address _recipient, address _feeRecipient, uint256 _amountAfterFees, uint256 _fee
+  );
 
   /*///////////////////////////////////////////////////////////////
                               ERRORS

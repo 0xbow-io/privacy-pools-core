@@ -57,7 +57,7 @@ contract BatchRelayer is IBatchRelayer {
     uint256 _balanceAfter = _assetBalance(_asset);
     if (_balanceBefore != _balanceAfter) revert BalanceChanged();
 
-    emit BatchRelayed(_pool, _data.recipient, _amountAfterFees, _feeAmount);
+    emit BatchRelayed(_pool, _data.recipient, _data.feeRecipient, _amountAfterFees, _feeAmount);
   }
 
   /**
