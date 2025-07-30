@@ -34,3 +34,13 @@ UnitBatchRelayer::_transfer
 │       └── It transfers the amount to the recipient
 └── When asset is not native
     └── It calls .transfer() on the asset
+
+UnitBatchRelayer::_assetBalance
+├── When asset is native
+│   └── It returns the contract balance
+└── When asset is not native
+    └── It returns the asset balance of the contract
+
+UnitBatchRelayer::_deductFee
+└── When called
+    └── It returns the correct amount

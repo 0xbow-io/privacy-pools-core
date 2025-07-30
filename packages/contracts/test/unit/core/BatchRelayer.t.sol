@@ -43,6 +43,14 @@ contract BatchRelayerForTest is BatchRelayer {
   function forTest_transfer(IERC20 _asset, address _recipient, uint256 _amount) external {
     _transfer(_asset, _recipient, _amount);
   }
+
+  function forTest_assetBalance(IERC20 _asset) external view returns (uint256) {
+    return _assetBalance(_asset);
+  }
+
+  function forTest_deductFee(uint256 _amount, uint256 _relayFeeBPS) external view returns (uint256) {
+    return _deductFee(_amount, _relayFeeBPS);
+  }
 }
 
 contract ReceiveRevertForTest {
@@ -386,5 +394,38 @@ contract UnitBatchRelayer is Test {
     );
 
     batchRelayerForTest.forTest_transfer(_asset, _recipient, _amount);
+  }
+
+  function test__assetBalanceWhenAssetIsNative(uint256 _balance) external {
+    vm.deal(address(batchRelayerForTest), _balance);
+
+    // It returns the contract balance
+    assertEq(batchRelayerForTest.forTest_assetBalance(IERC20(Constants.NATIVE_ASSET)), _balance);
+  }
+
+  function test__assetBalanceWhenAssetIsNotNative(IERC20 _asset, uint256 _balance) external {
+    _assumeFuzzable(address(_asset));
+    vm.assume(address(_asset) != Constants.NATIVE_ASSET);
+
+    _mockAndExpect(
+      address(_asset),
+      abi.encodeWithSelector(IERC20.balanceOf.selector, address(batchRelayerForTest)),
+      abi.encode(_balance)
+    );
+
+    // It returns the asset balance of the contract
+    assertEq(batchRelayerForTest.forTest_assetBalance(_asset), _balance);
+  }
+
+  function test__deductFeeWhenCalled(uint256 _amount, uint256 _feeBPS) external {
+    _feeBPS = bound(_feeBPS, 0, 10_000);
+    _amount = bound(_amount, 0, _feeBPS == 0 ? type(uint256).max : type(uint256).max / _feeBPS);
+
+    // It returns the correct amount
+    assertEq(batchRelayerForTest.forTest_deductFee(_amount, _feeBPS), _amount - ((_amount * _feeBPS) / 10_000));
+
+    assertEq(batchRelayerForTest.forTest_deductFee(_amount, 0), _amount);
+    assertEq(batchRelayerForTest.forTest_deductFee(0, _feeBPS), 0);
+    assertEq(batchRelayerForTest.forTest_deductFee(type(uint256).max / 10_000, 10_000), 0);
   }
 }
