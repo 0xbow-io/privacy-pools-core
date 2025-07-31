@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.28;
 
-import {Script} from 'forge-std/Script.sol';
-import {console} from 'forge-std/console.sol';
 import {IERC20} from '@oz/token/ERC20/ERC20.sol';
 import {ERC20} from '@oz/token/ERC20/ERC20.sol';
+import {Script} from 'forge-std/Script.sol';
+import {console} from 'forge-std/console.sol';
 
 import {Constants} from 'contracts/lib/Constants.sol';
 import {DeployLib} from 'contracts/lib/DeployLib.sol';
@@ -44,7 +44,6 @@ contract DeployComplexPool is Script {
   address public erc20Address;
   string public erc20Symbol;
 
-
   function setUp() public virtual {
     // Read addresses from environment
     entrypoint = Entrypoint(payable(vm.envAddress('ENTRYPOINT_ADDRESS')));
@@ -55,7 +54,6 @@ contract DeployComplexPool is Script {
     // Prompt user for ERC20 details
     _promptForERC20Details();
 
-
     // Display configuration and ask for confirmation
     _displayConfigurationAndConfirm();
   }
@@ -64,37 +62,31 @@ contract DeployComplexPool is Script {
     // Prompt for ERC20 address
     string memory _addressInput = vm.prompt('Enter ERC20 token address:');
     erc20Address = vm.parseAddress(_addressInput);
-    
+
     if (erc20Address == address(0)) {
       revert InvalidERC20Address();
     }
 
     // Prompt for ERC20 symbol
     string memory _symbolInput = vm.prompt('Enter ERC20 token symbol:');
-    
+
     if (bytes(_symbolInput).length == 0) {
       revert InvalidSymbol();
     }
-    
+
     erc20Symbol = _symbolInput;
   }
-
 
   function _displayConfigurationAndConfirm() private {
     string memory _confirmation = vm.prompt(
       string.concat(
-        'Deploy ERC20 Privacy Pool for ',
-        erc20Symbol,
-        ' on chain ',
-        vm.toString(block.chainid),
-        '? (yes/no):'
+        'Deploy ERC20 Privacy Pool for ', erc20Symbol, ' on chain ', vm.toString(block.chainid), '? (yes/no):'
       )
     );
 
     if (keccak256(bytes(_confirmation)) != keccak256(bytes('yes'))) {
       revert ConfirmationMismatch();
     }
-
   }
 
   function run() public virtual {
@@ -112,27 +104,16 @@ contract DeployComplexPool is Script {
 
   function _deployComplexPool() private returns (address) {
     // Encode constructor args
-    bytes memory _constructorArgs = abi.encode(
-      address(entrypoint),
-      withdrawalVerifier,
-      ragequitVerifier,
-      erc20Address
-    );
+    bytes memory _constructorArgs = abi.encode(address(entrypoint), withdrawalVerifier, ragequitVerifier, erc20Address);
 
     // Generate salt for this specific token
-    bytes11 _tokenSalt = bytes11(
-      keccak256(abi.encodePacked(DeployLib.COMPLEX_POOL_SALT, erc20Symbol))
-    );
+    bytes11 _tokenSalt = bytes11(keccak256(abi.encodePacked(DeployLib.COMPLEX_POOL_SALT, erc20Symbol)));
 
     // Deploy pool with Create2
     address _pool = CreateX.deployCreate2(
-      DeployLib.salt(deployer, _tokenSalt),
-      abi.encodePacked(type(PrivacyPoolComplex).creationCode, _constructorArgs)
+      DeployLib.salt(deployer, _tokenSalt), abi.encodePacked(type(PrivacyPoolComplex).creationCode, _constructorArgs)
     );
 
     return _pool;
-
   }
-
 }
-

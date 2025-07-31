@@ -1,14 +1,11 @@
 {
   "rules": {
-    "style-guide-casing": [
-      "warn",
-      {
-        "ignorePublicFunctions":true,
-        "ignoreExternalFunctions":true,
-        "ignoreContracts":true
-      }
-    ],
+    "style-guide-casing": "off",
+    "no-unused-vars": "off",
     "no-global-import": "off",
+    "private-vars-leading-underscore": "off",
+    "state-visibility": "off",
+    "compiler-version": "off",
     "max-states-count": "off",
     "ordering": "off",
     "one-contract-per-file": "off"
