@@ -145,4 +145,33 @@ contract IntegrationBatchRelayerSuccessCases is IntegrationBase {
       NONE
     );
   }
+
+  function test_batchRelayRecipientAndFeeRecipientAreEqual() public {
+    uint256 _bobBalanceBefore = _BOB.balance;
+
+    // Bob withdraws the total amount of Alice's commitment and the fee recipient is also bob
+    WithdrawalParams[] memory _params = new WithdrawalParams[](2);
+    _params[0] = WithdrawalParams({
+      withdrawnAmount: _commitment1.value,
+      newNullifier: 'nullifier_1a',
+      newSecret: 'secret_1a',
+      recipient: _BOB,
+      commitment: _commitment1
+    });
+    _params[1] = WithdrawalParams({
+      withdrawnAmount: _commitment2.value,
+      newNullifier: 'nullifier_2a',
+      newSecret: 'secret_2a',
+      recipient: _BOB,
+      commitment: _commitment2
+    });
+    _withdrawThroughBatchRelayer(
+      address(_batchRelayer),
+      _params,
+      IBatchRelayer.BatchRelayData({recipient: _BOB, feeRecipient: _BOB, relayFeeBPS: FIVE_PERCENT, batchSize: 2}),
+      NONE
+    );
+
+    assertEq(_BOB.balance, _bobBalanceBefore + _commitment1.value + _commitment2.value);
+  }
 }

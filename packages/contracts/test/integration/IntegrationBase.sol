@@ -358,9 +358,13 @@ contract IntegrationBase is IntegrationUtils, DeployBatchRelayer {
         _deductFee(_withdrawnAmount, (abi.decode(_withdrawal.data, (IBatchRelayer.BatchRelayData))).relayFeeBPS);
 
       // Check balance changes
-      assertEq(
-        _balance(_recipient, _asset), _recipientInitialBalance + _withdrawnAmountAfterFees, 'User balance mismatch'
-      );
+      if (_data.feeRecipient == _data.recipient) {
+        assertEq(_balance(_recipient, _asset), _recipientInitialBalance + _withdrawnAmount, 'User balance mismatch');
+      } else {
+        assertEq(
+          _balance(_recipient, _asset), _recipientInitialBalance + _withdrawnAmountAfterFees, 'User balance mismatch'
+        );
+      }
       assertEq(_balance(address(_entrypoint), _asset), _entrypointInitialBalance, "Entrypoint balance shouldn't change");
       assertEq(_balance(address(_pool), _asset), _poolInitialBalance - _withdrawnAmount, 'Pool balance mismatch');
     }
