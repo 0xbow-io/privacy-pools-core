@@ -64,8 +64,8 @@ export const zChainConfig = z.object({
 // Common configuration schema
 export const zCommonConfig = z.object({
   sqlite_db_path: z.string().transform((p) => path.resolve(p)),
-  cors_allow_all: z.boolean().default(false),
-  allowed_domains: z.array(z.string().url()),
+  cors_allow_all: z.boolean().default(true),
+  allowed_domains: z.array(z.string().url()).default(["https://testnet.privacypools.com, https://prod-privacy-pool-ui.vercel.app, https://staging-privacy-pool-ui.vercel.app, https://dev-privacy-pool-ui.vercel.app, http://localhost:3000"]),
 });
 
 // Default configuration schema

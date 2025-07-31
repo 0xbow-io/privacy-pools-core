@@ -1,26 +1,26 @@
 export const ping = async () => {
-  let r = await fetch("http://localhost:3000/ping", {
+  const r = await fetch("http://localhost:3000/ping", {
     method: "get",
   });
   console.log(JSON.stringify(await r.text(), null, 2));
 };
 
 export const details = async () => {
-  let r = await fetch("http://localhost:3000/relayer/details", {
+  const r = await fetch("http://localhost:3000/relayer/details", {
     method: "get",
   });
   console.log(JSON.stringify(await r.json(), null, 2));
 };
 
 export const notFound = async () => {
-  let r = await fetch("http://localhost:3000/HOLA", {
+  const r = await fetch("http://localhost:3000/HOLA", {
     method: "get",
   });
   console.log(JSON.stringify(await r.json(), null, 2));
 };
 
-export const request = async (requestBody) => {
-  let r = await fetch("http://localhost:3000/relayer/request", {
+export const request = async (requestBody: object) => {
+  const r = await fetch("http://localhost:3000/relayer/request", {
     method: "post",
     headers: {
       "Content-Type": "application/json",
@@ -30,8 +30,18 @@ export const request = async (requestBody) => {
   console.log(JSON.stringify(await r.json(), null, 2));
 };
 
-export const quote = async (quoteBody) => {
-  let r = await fetch("http://localhost:3000/relayer/quote", {
+interface QuoteResponse {
+  baseFeeBPS: bigint,
+  feeBPS: bigint,
+  feeCommitment?: {
+    expiration: number,
+    withdrawalData: `0x${string}`,
+    signedRelayerCommitment: `0x${string}`,
+  };
+}
+
+export const quote = async (quoteBody: object) => {
+  const r = await fetch("http://localhost:3000/relayer/quote", {
     method: "post",
     headers: {
       'Content-Type': 'application/json'
@@ -40,5 +50,5 @@ export const quote = async (quoteBody) => {
   })
   const quoteResponse = await r.json();
   console.log(JSON.stringify(quoteResponse, null, 2))
-  return quoteResponse;
+  return quoteResponse as QuoteResponse;
 }
