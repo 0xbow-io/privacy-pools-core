@@ -13,6 +13,6 @@ contract IntegrationBatchRelayerDeployScript is Test {
   function test_deployScript() public {
     IBatchRelayer _batchRelayer = new DeployBatchRelayer().run();
 
-    assertEq(_batchRelayer.MAX_RELAY_FEE_BPS(), 500);
+    assertEq(_batchRelayer.MAX_RELAY_FEE_BPS(), 1000);
   }
 }

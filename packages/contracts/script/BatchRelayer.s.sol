@@ -7,7 +7,7 @@ import {console} from 'forge-std/console.sol';
 import {IBatchRelayer} from 'interfaces/IBatchRelayer.sol';
 
 contract DeployBatchRelayer is Script {
-  uint256 public constant MAX_RELAY_FEE_BPS = 500; // 5%
+  uint256 public constant MAX_RELAY_FEE_BPS = 1000; // 10%
 
   /// @dev Must be called with the `--account` flag which acts as the caller
   function run() public returns (IBatchRelayer _batchRelayer) {
