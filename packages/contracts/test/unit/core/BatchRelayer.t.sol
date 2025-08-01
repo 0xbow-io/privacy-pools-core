@@ -61,17 +61,16 @@ contract ReceiveRevertForTest {
 }
 
 contract UnitBatchRelayer is Test {
-  BatchRelayer public batchRelayer;
   uint256 public constant MAX_RELAY_FEE_BPS = 1000; // 10%
   IPrivacyPool public privacyPoolNative;
-  BatchRelayerForTest public batchRelayerForTest;
+  BatchRelayerForTest public batchRelayer;
   ReceiveRevertForTest public receiveRevertForTest;
 
   function setUp() external {
-    batchRelayer = new BatchRelayer(MAX_RELAY_FEE_BPS);
+    batchRelayer = new BatchRelayerForTest(MAX_RELAY_FEE_BPS);
 
     privacyPoolNative = IPrivacyPool(address(new PrivacyPoolForTest(IERC20(Constants.NATIVE_ASSET))));
-    batchRelayerForTest = new BatchRelayerForTest(MAX_RELAY_FEE_BPS);
+    batchRelayer = new BatchRelayerForTest(MAX_RELAY_FEE_BPS);
     receiveRevertForTest = new ReceiveRevertForTest();
   }
 
@@ -93,7 +92,7 @@ contract UnitBatchRelayer is Test {
     assumeNotPrecompile(_address);
     vm.assume(_address != address(batchRelayer));
     vm.assume(_address != address(privacyPoolNative));
-    vm.assume(_address != address(batchRelayerForTest));
+    vm.assume(_address != address(batchRelayer));
     vm.assume(_address != address(receiveRevertForTest));
     vm.assume(_address != address(this));
   }
@@ -153,10 +152,10 @@ contract UnitBatchRelayer is Test {
   }
 
   function test_ConstructorWhenCalled(uint256 _maxRelayFeeBPS) external {
-    batchRelayer = new BatchRelayer(_maxRelayFeeBPS);
+    BatchRelayer _batchRelayer = new BatchRelayer(_maxRelayFeeBPS);
 
     // It sets the max relay fee BPS
-    assertEq(batchRelayer.MAX_RELAY_FEE_BPS(), _maxRelayFeeBPS);
+    assertEq(_batchRelayer.MAX_RELAY_FEE_BPS(), _maxRelayFeeBPS);
   }
 
   function test_BatchRelayWhenCallingANativeAssetPool(HappyPath memory _happyPath) external happyPath(_happyPath) {
@@ -356,7 +355,7 @@ contract UnitBatchRelayer is Test {
 
     // It reverts with ZeroAddress
     vm.expectRevert(IBatchRelayer.ZeroAddress.selector);
-    batchRelayerForTest.forTest_transfer(_asset, address(0), _amount);
+    batchRelayer.forTest_transfer(_asset, address(0), _amount);
   }
 
   modifier whenAssetIsNative() {
@@ -364,23 +363,23 @@ contract UnitBatchRelayer is Test {
   }
 
   function test__transferWhenTransferFails(uint256 _amount) external whenAssetIsNative {
-    vm.deal(address(batchRelayerForTest), _amount);
+    vm.deal(address(batchRelayer), _amount);
 
     // It reverts with NativeAssetTransferFailed
     vm.expectRevert(IBatchRelayer.NativeAssetTransferFailed.selector);
-    batchRelayerForTest.forTest_transfer(IERC20(Constants.NATIVE_ASSET), address(receiveRevertForTest), _amount);
+    batchRelayer.forTest_transfer(IERC20(Constants.NATIVE_ASSET), address(receiveRevertForTest), _amount);
   }
 
   function test__transferWhenTransferSucceeds(address _recipient, uint256 _amount) external whenAssetIsNative {
     _assumeFuzzable(_recipient);
     vm.assume(_recipient != address(0));
     vm.assume(_recipient != address(receiveRevertForTest));
-    vm.deal(address(batchRelayerForTest), _amount);
+    vm.deal(address(batchRelayer), _amount);
 
     // It transfers the amount to the recipient
     vm.expectCall(_recipient, _amount, '');
 
-    batchRelayerForTest.forTest_transfer(IERC20(Constants.NATIVE_ASSET), _recipient, _amount);
+    batchRelayer.forTest_transfer(IERC20(Constants.NATIVE_ASSET), _recipient, _amount);
   }
 
   function test__transferWhenAssetIsNotNative(IERC20 _asset, address _recipient, uint256 _amount) external {
@@ -393,14 +392,14 @@ contract UnitBatchRelayer is Test {
       address(_asset), abi.encodeWithSelector(IERC20.transfer.selector, _recipient, _amount), abi.encode(true)
     );
 
-    batchRelayerForTest.forTest_transfer(_asset, _recipient, _amount);
+    batchRelayer.forTest_transfer(_asset, _recipient, _amount);
   }
 
   function test__assetBalanceWhenAssetIsNative(uint256 _balance) external {
-    vm.deal(address(batchRelayerForTest), _balance);
+    vm.deal(address(batchRelayer), _balance);
 
     // It returns the contract balance
-    assertEq(batchRelayerForTest.forTest_assetBalance(IERC20(Constants.NATIVE_ASSET)), _balance);
+    assertEq(batchRelayer.forTest_assetBalance(IERC20(Constants.NATIVE_ASSET)), _balance);
   }
 
   function test__assetBalanceWhenAssetIsNotNative(IERC20 _asset, uint256 _balance) external {
@@ -408,13 +407,11 @@ contract UnitBatchRelayer is Test {
     vm.assume(address(_asset) != Constants.NATIVE_ASSET);
 
     _mockAndExpect(
-      address(_asset),
-      abi.encodeWithSelector(IERC20.balanceOf.selector, address(batchRelayerForTest)),
-      abi.encode(_balance)
+      address(_asset), abi.encodeWithSelector(IERC20.balanceOf.selector, address(batchRelayer)), abi.encode(_balance)
     );
 
     // It returns the asset balance of the contract
-    assertEq(batchRelayerForTest.forTest_assetBalance(_asset), _balance);
+    assertEq(batchRelayer.forTest_assetBalance(_asset), _balance);
   }
 
   function test__deductFeeWhenCalled(uint256 _amount, uint256 _feeBPS) external {
@@ -422,10 +419,10 @@ contract UnitBatchRelayer is Test {
     _amount = bound(_amount, 0, _feeBPS == 0 ? type(uint256).max : type(uint256).max / _feeBPS);
 
     // It returns the correct amount
-    assertEq(batchRelayerForTest.forTest_deductFee(_amount, _feeBPS), _amount - ((_amount * _feeBPS) / 10_000));
+    assertEq(batchRelayer.forTest_deductFee(_amount, _feeBPS), _amount - ((_amount * _feeBPS) / 10_000));
 
-    assertEq(batchRelayerForTest.forTest_deductFee(_amount, 0), _amount);
-    assertEq(batchRelayerForTest.forTest_deductFee(0, _feeBPS), 0);
-    assertEq(batchRelayerForTest.forTest_deductFee(type(uint256).max / 10_000, 10_000), 0);
+    assertEq(batchRelayer.forTest_deductFee(_amount, 0), _amount);
+    assertEq(batchRelayer.forTest_deductFee(0, _feeBPS), 0);
+    assertEq(batchRelayer.forTest_deductFee(type(uint256).max / 10_000, 10_000), 0);
   }
 }
