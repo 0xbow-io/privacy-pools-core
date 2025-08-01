@@ -44,10 +44,6 @@ contract BatchRelayerForTest is BatchRelayer {
     _transfer(_asset, _recipient, _amount);
   }
 
-  function forTest_assetBalance(IERC20 _asset) external view returns (uint256) {
-    return _assetBalance(_asset);
-  }
-
   function forTest_deductFee(uint256 _amount, uint256 _relayFeeBPS) external view returns (uint256) {
     return _deductFee(_amount, _relayFeeBPS);
   }
@@ -176,9 +172,6 @@ contract UnitBatchRelayer is Test {
     }
     vm.deal(address(privacyPoolNative), _happyPath.totalAmount);
 
-    // It gets the asset from the pool
-    vm.expectCall(address(privacyPoolNative), abi.encodeWithSelector(IState.ASSET.selector));
-
     // It call withdraw() on the pool for each proof
     for (uint256 i = 0; i < _happyPath.batchSize; i++) {
       vm.expectCall(
@@ -189,15 +182,18 @@ contract UnitBatchRelayer is Test {
     uint256 _fee = _happyPath.totalAmount * _happyPath.relayFeeBPS / 10_000;
     uint256 _afterFees = _happyPath.totalAmount - _fee;
 
-    // It emits an event
-    vm.expectEmit();
-    emit IBatchRelayer.BatchRelayed(privacyPoolNative, _happyPath.recipient, _happyPath.feeRecipient, _afterFees, _fee);
+    // It gets the asset from the pool
+    vm.expectCall(address(privacyPoolNative), abi.encodeWithSelector(IState.ASSET.selector));
 
     // It transfers the assets to the recipient
     vm.expectCall(address(_happyPath.recipient), _afterFees, '');
 
     // It transfers the fees to the fee recipient
     vm.expectCall(address(_happyPath.feeRecipient), _fee, '');
+
+    // It emits an event
+    vm.expectEmit();
+    emit IBatchRelayer.BatchRelayed(privacyPoolNative, _happyPath.recipient, _happyPath.feeRecipient, _afterFees, _fee);
 
     vm.prank(_happyPath.relayer);
     batchRelayer.batchRelay(privacyPoolNative, _withdrawal, _proofs);
@@ -228,13 +224,6 @@ contract UnitBatchRelayer is Test {
       _proofs[i] = _createFakeProof(_happyPath.withdrawnAmounts[i]);
     }
 
-    _mockAndExpect(
-      address(_asset), abi.encodeWithSelector(IERC20.balanceOf.selector, address(batchRelayer)), abi.encode(0)
-    );
-
-    // It gets the asset from the pool
-    _mockAndExpect(address(_pool), abi.encodeWithSelector(IState.ASSET.selector), abi.encode(address(_asset)));
-
     // It call withdraw() on the pool for each proof
     for (uint256 i = 0; i < _happyPath.batchSize; i++) {
       _mockAndExpect(
@@ -247,15 +236,24 @@ contract UnitBatchRelayer is Test {
     uint256 _fee = _happyPath.totalAmount * _happyPath.relayFeeBPS / 10_000;
     uint256 _afterFees = _happyPath.totalAmount - _fee;
 
+    // It gets the asset from the pool
+    _mockAndExpect(address(_pool), abi.encodeWithSelector(IState.ASSET.selector), abi.encode(address(_asset)));
+
+    // It transfers the assets to the recipient
+    _mockAndExpect(
+      address(_asset),
+      abi.encodeWithSelector(IERC20.transfer.selector, _happyPath.recipient, _afterFees),
+      abi.encode(true)
+    );
+
+    // It transfers the fees to the fee recipient
+    _mockAndExpect(
+      address(_asset), abi.encodeWithSelector(IERC20.transfer.selector, _happyPath.feeRecipient, _fee), abi.encode(true)
+    );
+
     // It emits an event
     vm.expectEmit();
     emit IBatchRelayer.BatchRelayed(_pool, _happyPath.recipient, _happyPath.feeRecipient, _afterFees, _fee);
-
-    // It transfers the assets to the recipient
-    vm.expectCall(address(_asset), abi.encodeWithSelector(IERC20.transfer.selector, _happyPath.recipient, _afterFees));
-
-    // It transfers the fees to the fee recipient
-    vm.expectCall(address(_asset), abi.encodeWithSelector(IERC20.transfer.selector, _happyPath.feeRecipient, _fee));
 
     vm.prank(_happyPath.relayer);
     batchRelayer.batchRelay(_pool, _withdrawal, _proofs);
@@ -319,11 +317,10 @@ contract UnitBatchRelayer is Test {
 
     vm.deal(address(privacyPoolNative), _amount);
 
-    // It reverts with BalanceChanged
-    vm.expectRevert(IBatchRelayer.BalanceChanged.selector);
-
+    // It should return successfully
     vm.prank(_relayer);
     batchRelayer.batchRelay(privacyPoolNative, _withdrawal, _proofs);
+    assertEq(address(batchRelayer).balance, _amount);
   }
 
   function test_BatchRelayWhenBatchSizeIsDifferentThanTheNumberOfProofs(uint8 _proofsSize, uint8 _batchSize) external {
@@ -393,25 +390,6 @@ contract UnitBatchRelayer is Test {
     );
 
     batchRelayer.forTest_transfer(_asset, _recipient, _amount);
-  }
-
-  function test__assetBalanceWhenAssetIsNative(uint256 _balance) external {
-    vm.deal(address(batchRelayer), _balance);
-
-    // It returns the contract balance
-    assertEq(batchRelayer.forTest_assetBalance(IERC20(Constants.NATIVE_ASSET)), _balance);
-  }
-
-  function test__assetBalanceWhenAssetIsNotNative(IERC20 _asset, uint256 _balance) external {
-    _assumeFuzzable(address(_asset));
-    vm.assume(address(_asset) != Constants.NATIVE_ASSET);
-
-    _mockAndExpect(
-      address(_asset), abi.encodeWithSelector(IERC20.balanceOf.selector, address(batchRelayer)), abi.encode(_balance)
-    );
-
-    // It returns the asset balance of the contract
-    assertEq(batchRelayer.forTest_assetBalance(_asset), _balance);
   }
 
   function test__deductFeeWhenCalled(uint256 _amount, uint256 _feeBPS) external {

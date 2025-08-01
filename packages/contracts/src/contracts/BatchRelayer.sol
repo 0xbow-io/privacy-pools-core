@@ -35,9 +35,6 @@ contract BatchRelayer is IBatchRelayer {
     if (_data.batchSize != _proofs.length) revert InvalidBatchSize();
     if (_data.relayFeeBPS > MAX_RELAY_FEE_BPS) revert InvalidRelayFeeBPS();
 
-    IERC20 _asset = IERC20(_pool.ASSET());
-    uint256 _balanceBefore = _assetBalance(_asset);
-
     // Withdraw every proof individually, and temporarily pool funds in this contract
     uint256 _withdrawnAmount;
     for (uint256 i = 0; i < _proofs.length; i++) {
@@ -50,12 +47,9 @@ contract BatchRelayer is IBatchRelayer {
     uint256 _feeAmount = _withdrawnAmount - _amountAfterFees;
 
     // Split the total of pooled funds between recipient and relayer's chosen address
+    IERC20 _asset = IERC20(_pool.ASSET());
     _transfer(_asset, _data.recipient, _amountAfterFees);
     _transfer(_asset, _data.feeRecipient, _feeAmount);
-
-    // Ensure no funds remain in the contract
-    uint256 _balanceAfter = _assetBalance(_asset);
-    if (_balanceBefore != _balanceAfter) revert BalanceChanged();
 
     emit BatchRelayed(_pool, _data.recipient, _data.feeRecipient, _amountAfterFees, _feeAmount);
   }
@@ -74,19 +68,6 @@ contract BatchRelayer is IBatchRelayer {
       if (!_success) revert NativeAssetTransferFailed();
     } else {
       _asset.safeTransfer(_recipient, _amount);
-    }
-  }
-
-  /**
-   * @notice Fetch asset balance for the Entrypoint
-   * @param _asset The asset address
-   * @return _balance The asset balance
-   */
-  function _assetBalance(IERC20 _asset) internal view returns (uint256 _balance) {
-    if (_asset == IERC20(Constants.NATIVE_ASSET)) {
-      _balance = address(this).balance;
-    } else {
-      _balance = _asset.balanceOf(address(this));
     }
   }
 
