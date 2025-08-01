@@ -11,9 +11,9 @@ interface IBatchRelayer {
 
   /**
    * @notice Struct for the batch relay data
-   * @param recipient The final receiver of funds
-   * @param feeRecipient The fee receiver
-   * @param relayFeeBPS The relay fee in basis points
+   * @param recipient The intended receiver of funds
+   * @param feeRecipient The fee receiver. Chosen by the relayer, may be the same address initiating the transaction.
+   * @param relayFeeBPS The fee paid to `feeRecipient`, specified in basis points
    * @param batchSize The number of withdrawals expected
    */
   struct BatchRelayData {
@@ -30,13 +30,17 @@ interface IBatchRelayer {
   /**
    * @notice Event emitted when a batch is relayed
    * @param _pool The pool that was withdrawn from
-   * @param _recipient The recipient of the funds
+   * @param _recipient The recipient of the funds. May not be the relayer's address
    * @param _feeRecipient The fee recipient
-   * @param _amountAfterFees The amount after fees are deducted
+   * @param _amountAfterFees The amount sent to intended recipient after fees are deducted
    * @param _fee The fee that was deducted
    */
   event BatchRelayed(
-    IPrivacyPool indexed _pool, address _recipient, address _feeRecipient, uint256 _amountAfterFees, uint256 _fee
+    IPrivacyPool indexed _pool,
+    address indexed _recipient,
+    address indexed _feeRecipient,
+    uint256 _amountAfterFees,
+    uint256 _fee
   );
 
   /*///////////////////////////////////////////////////////////////

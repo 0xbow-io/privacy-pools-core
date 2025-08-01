@@ -53,7 +53,6 @@ contract IntegrationBatchRelayerFailCases is IntegrationBase {
       commitment: _commitment2
     });
     _withdrawThroughBatchRelayer(
-      address(_batchRelayer),
       _params,
       IBatchRelayer.BatchRelayData({recipient: _BOB, feeRecipient: _RELAYER, relayFeeBPS: FIVE_PERCENT, batchSize: 1}),
       IBatchRelayer.InvalidBatchSize.selector
@@ -82,7 +81,7 @@ contract IntegrationBatchRelayerFailCases is IntegrationBase {
     vm.prank(_POSTMAN);
     _entrypoint.updateRoot(_shadowASPMerkleTree._root(), 'ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid');
 
-    // Generate proof from alice commitment
+    // Generate proof from alice's commitment
     (, _proofs[0]) = _computeNewCommitmentAndProof(
       uint256(keccak256(abi.encode(_bobWithdrawal, _ethPool.SCOPE()))) % SNARK_SCALAR_FIELD,
       WithdrawalParams({
@@ -94,7 +93,7 @@ contract IntegrationBatchRelayerFailCases is IntegrationBase {
       })
     );
 
-    // Generate proof from carl commitment
+    // Generate proof from carl's commitment
     (, _proofs[1]) = _computeNewCommitmentAndProof(
       uint256(keccak256(abi.encode(_carlWithdrawal, _ethPool.SCOPE()))) % SNARK_SCALAR_FIELD,
       WithdrawalParams({

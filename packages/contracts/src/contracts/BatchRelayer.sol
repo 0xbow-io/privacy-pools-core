@@ -31,13 +31,14 @@ contract BatchRelayer is IBatchRelayer {
 
     BatchRelayData memory _data = abi.decode(_withdrawal.data, (BatchRelayData));
 
+    // This ensures the relayer is not able to submit an incomplete batch
     if (_data.batchSize != _proofs.length) revert InvalidBatchSize();
     if (_data.relayFeeBPS > MAX_RELAY_FEE_BPS) revert InvalidRelayFeeBPS();
 
     IERC20 _asset = IERC20(_pool.ASSET());
     uint256 _balanceBefore = _assetBalance(_asset);
 
-    // Loop and withdraw each proof
+    // Withdraw every proof individually, and temporarily pool funds in this contract
     uint256 _withdrawnAmount;
     for (uint256 i = 0; i < _proofs.length; i++) {
       _pool.withdraw(_withdrawal, _proofs[i]);
@@ -48,12 +49,11 @@ contract BatchRelayer is IBatchRelayer {
     uint256 _amountAfterFees = _deductFee(_withdrawnAmount, _data.relayFeeBPS);
     uint256 _feeAmount = _withdrawnAmount - _amountAfterFees;
 
-    // Transfer withdrawn funds to recipient
+    // Split the total of pooled funds between recipient and relayer's chosen address
     _transfer(_asset, _data.recipient, _amountAfterFees);
-    // Transfer fees to fee recipient
     _transfer(_asset, _data.feeRecipient, _feeAmount);
 
-    // Check contract balance has not changed after the batch relay
+    // Ensure no funds remain in the contract
     uint256 _balanceAfter = _assetBalance(_asset);
     if (_balanceBefore != _balanceAfter) revert BalanceChanged();
 

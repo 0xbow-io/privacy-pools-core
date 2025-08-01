@@ -32,7 +32,7 @@ import {BatchRelayer} from 'contracts/BatchRelayer.sol';
 import {IBatchRelayer} from 'interfaces/IBatchRelayer.sol';
 import {DeployBatchRelayer} from 'script/BatchRelayer.s.sol';
 
-contract IntegrationBase is IntegrationUtils, DeployBatchRelayer {
+contract IntegrationBase is IntegrationUtils {
   using InternalLeanIMT for LeanIMTData;
 
   /*///////////////////////////////////////////////////////////////
@@ -86,7 +86,6 @@ contract IntegrationBase is IntegrationUtils, DeployBatchRelayer {
                               SETUP
   //////////////////////////////////////////////////////////////*/
 
-  //asd
   function setUp() public virtual {
     vm.createSelectFork(vm.rpcUrl('mainnet'));
 
@@ -151,10 +150,10 @@ contract IntegrationBase is IntegrationUtils, DeployBatchRelayer {
     // Register DAI pool
     _entrypoint.registerPool(_DAI, IPrivacyPool(address(_daiPool)), _MIN_DEPOSIT, _VETTING_FEE_BPS, _MAX_RELAY_FEE_BPS);
 
-    // Deploy Batch Relayer
-    _batchRelayer = BatchRelayer(payable(address(_deployBatchRelayer())));
-
     vm.stopPrank();
+
+    // Deploy Batch Relayer
+    _batchRelayer = BatchRelayer(payable(address((new DeployBatchRelayer()).run())));
   }
 
   function _computeNewCommitmentAndProof(
@@ -299,6 +298,14 @@ contract IntegrationBase is IntegrationUtils, DeployBatchRelayer {
 
     // Withdraw
     _commitment = _withdraw(_RELAYER, _pool, _withdrawal, _params, false, _revertReason);
+  }
+
+  function _withdrawThroughBatchRelayer(
+    WithdrawalParams[] memory _params,
+    IBatchRelayer.BatchRelayData memory _data,
+    bytes4 _revertReason
+  ) internal returns (Commitment[] memory _commitments) {
+    _withdrawThroughBatchRelayer(address(_batchRelayer), _params, _data, _revertReason);
   }
 
   function _withdrawThroughBatchRelayer(
