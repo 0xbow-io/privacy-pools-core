@@ -33,6 +33,12 @@ export async function relayQuoteHandler(
     extraGas = false;
   }
 
+  // XXX: Block extraGas for FraxUSD
+  const FRAXUSD_ADDRESS = "0xCAcd6fd266aF91b8AeD52aCCc382b4e165586E29";
+  if (extraGas && getAddress(asset) === getAddress(FRAXUSD_ADDRESS)) {
+    return next(QuoterError.assetNotSupported(`Extra gas feature not supported for FraxUSD`));
+  }
+
   let quote: QuoteFee;
   try {
     quote = await quoteService.quoteFeeBPSNative({
