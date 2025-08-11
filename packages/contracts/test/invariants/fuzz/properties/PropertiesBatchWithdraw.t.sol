@@ -33,11 +33,17 @@ contract PropertiesBatchWithdraw is HandlersParent {
     GhostDeposit[] memory _deposits = new GhostDeposit[](_numberOfCommitments);
     _deposits = ghost_depositsOf[_caller];
 
+    uint256 _totalValue = 0;
+    for (uint256 i = 0; i < _numberOfCommitments; i++) {
+      _totalValue += _deposits[i].depositAmount; // deposit minus vetting fee
+    }
+
     IBatchRelayer.BatchRelayData memory _data = IBatchRelayer.BatchRelayData({
       recipient: _caller,
       feeRecipient: ghost_processingFeeRecipient,
       relayFeeBPS: FEE_PROCESSING,
-      batchSize: uint8(_numberOfCommitments)
+      batchSize: uint8(_numberOfCommitments),
+      totalValue: _totalValue
     });
 
     IPrivacyPool.Withdrawal memory _withdrawal =
