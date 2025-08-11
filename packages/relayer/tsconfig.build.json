@@ -4,6 +4,7 @@
     "declarationMap": true,
     "declaration": true,
     "outDir": "dist",
+    "rootDir": "src",
     /* Base Options: */
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -26,5 +27,5 @@
     "lib": ["es2022"]
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "test"]
+  "exclude": ["node_modules", "dist", "test", "coverage"]
 }

@@ -3,7 +3,7 @@ services:
     image: us-central1-docker.pkg.dev/oxbow-406621/privacy-pools-core/staging/relayer
     serviceAccount: relayer-staging
     command: node
-    args: ["dist/src/index.js"]
+    args: ["dist/index.js"]
     environment:
       - name: CONFIG_PATH
         value: /etc/secrets/config.json
