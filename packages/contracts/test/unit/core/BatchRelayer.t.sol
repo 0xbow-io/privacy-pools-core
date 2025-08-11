@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 import {IERC20} from '@oz/interfaces/IERC20.sol';
 import {SafeERC20} from '@oz/token/ERC20/utils/SafeERC20.sol';
+import {ReentrancyGuard} from '@oz/utils/ReentrancyGuard.sol';
 import {BatchRelayer} from 'contracts/BatchRelayer.sol';
 import {Constants} from 'contracts/lib/Constants.sol';
 import {ProofLib} from 'contracts/lib/ProofLib.sol';
@@ -53,6 +54,16 @@ contract ReceiveRevertForTest {
   // This contract always revert when sending eth
   receive() external payable {
     revert('Revert');
+  }
+}
+
+contract ReentrantForTest {
+  fallback() external payable {
+    IBatchRelayer(msg.sender).batchRelay(
+      IPrivacyPool(address(0)),
+      IPrivacyPool.Withdrawal({processooor: address(0), data: ''}),
+      new ProofLib.WithdrawProof[](0)
+    );
   }
 }
 
@@ -162,7 +173,8 @@ contract UnitBatchRelayer is Test {
           recipient: _happyPath.recipient,
           feeRecipient: _happyPath.feeRecipient,
           relayFeeBPS: _happyPath.relayFeeBPS,
-          batchSize: _happyPath.batchSize
+          batchSize: _happyPath.batchSize,
+          totalValue: _happyPath.totalAmount
         })
       )
     });
@@ -215,7 +227,8 @@ contract UnitBatchRelayer is Test {
           recipient: _happyPath.recipient,
           feeRecipient: _happyPath.feeRecipient,
           relayFeeBPS: _happyPath.relayFeeBPS,
-          batchSize: _happyPath.batchSize
+          batchSize: _happyPath.batchSize,
+          totalValue: _happyPath.totalAmount
         })
       )
     });
@@ -284,7 +297,8 @@ contract UnitBatchRelayer is Test {
             recipient: address(0),
             feeRecipient: address(0),
             relayFeeBPS: _relayFeeBPS,
-            batchSize: 1
+            batchSize: 1,
+            totalValue: 10 ether
           })
         )
       }),
@@ -308,7 +322,8 @@ contract UnitBatchRelayer is Test {
           recipient: address(batchRelayer), // Recipient is the batch relayer to force the balance change
           feeRecipient: _feeRecipient,
           relayFeeBPS: 0,
-          batchSize: 1
+          batchSize: 1,
+          totalValue: _amount
         })
       )
     });
@@ -339,11 +354,71 @@ contract UnitBatchRelayer is Test {
             recipient: address(0),
             feeRecipient: address(0),
             relayFeeBPS: 0,
-            batchSize: _batchSize
+            batchSize: _batchSize,
+            totalValue: 10 ether
           })
         )
       }),
       new ProofLib.WithdrawProof[](_proofsSize)
+    );
+  }
+
+  function test_BatchRelayWhenTotalValueIsDifferentThanTheSumOfTheValuesOfEachWithdrawal(
+    address _relayer,
+    address _feeRecipient,
+    uint256 _amount
+  ) external {
+    _assumeFuzzable(_relayer);
+    _assumeFuzzable(_feeRecipient);
+
+    _amount = bound(_amount, 1, type(uint256).max);
+    IPrivacyPool.Withdrawal memory _withdrawal = IPrivacyPool.Withdrawal({
+      processooor: address(batchRelayer),
+      data: abi.encode(
+        IBatchRelayer.BatchRelayData({
+          recipient: address(batchRelayer), // Recipient is the batch relayer to force the balance change
+          feeRecipient: _feeRecipient,
+          relayFeeBPS: 0,
+          batchSize: 1,
+          totalValue: _amount - 1
+        })
+      )
+    });
+    ProofLib.WithdrawProof[] memory _proofs = new ProofLib.WithdrawProof[](1);
+    _proofs[0] = _createFakeProof(_amount);
+
+    vm.deal(address(privacyPoolNative), _amount);
+
+    // It reverts with InvalidTotalValue
+    vm.expectRevert(IBatchRelayer.InvalidTotalValue.selector);
+
+    vm.prank(_relayer);
+    batchRelayer.batchRelay(privacyPoolNative, _withdrawal, _proofs);
+  }
+
+  function test_BatchRelayWhenTheCallIsReentrant() external {
+    ProofLib.WithdrawProof[] memory _proofs = new ProofLib.WithdrawProof[](1);
+    _proofs[0] = _createFakeProof(0);
+
+    IPrivacyPool _fakePool = IPrivacyPool(address(new ReentrantForTest()));
+
+    // It reverts
+    vm.expectRevert(ReentrancyGuard.ReentrancyGuardReentrantCall.selector);
+    batchRelayer.batchRelay(
+      _fakePool,
+      IPrivacyPool.Withdrawal({
+        processooor: address(0),
+        data: abi.encode(
+          IBatchRelayer.BatchRelayData({
+            recipient: address(0),
+            feeRecipient: address(0),
+            relayFeeBPS: 0,
+            batchSize: 1,
+            totalValue: 0
+          })
+        )
+      }),
+      _proofs
     );
   }
 

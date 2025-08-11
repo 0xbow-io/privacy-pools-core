@@ -49,7 +49,13 @@ contract IntegrationBatchRelayerSuccessCases is IntegrationBase {
     });
     _withdrawThroughBatchRelayer(
       _params,
-      IBatchRelayer.BatchRelayData({recipient: _BOB, feeRecipient: _RELAYER, relayFeeBPS: FIVE_PERCENT, batchSize: 2}),
+      IBatchRelayer.BatchRelayData({
+        recipient: _BOB,
+        feeRecipient: _RELAYER,
+        relayFeeBPS: FIVE_PERCENT,
+        batchSize: 2,
+        totalValue: _commitment1.value + _commitment2.value
+      }),
       NONE
     );
   }
@@ -73,7 +79,13 @@ contract IntegrationBatchRelayerSuccessCases is IntegrationBase {
     });
     _withdrawThroughBatchRelayer(
       _params,
-      IBatchRelayer.BatchRelayData({recipient: _BOB, feeRecipient: _RELAYER, relayFeeBPS: FIVE_PERCENT, batchSize: 2}),
+      IBatchRelayer.BatchRelayData({
+        recipient: _BOB,
+        feeRecipient: _RELAYER,
+        relayFeeBPS: FIVE_PERCENT,
+        batchSize: 2,
+        totalValue: _commitment2.value
+      }),
       NONE
     );
   }
@@ -97,7 +109,13 @@ contract IntegrationBatchRelayerSuccessCases is IntegrationBase {
     });
     _withdrawThroughBatchRelayer(
       _params,
-      IBatchRelayer.BatchRelayData({recipient: _BOB, feeRecipient: _RELAYER, relayFeeBPS: FIVE_PERCENT, batchSize: 2}),
+      IBatchRelayer.BatchRelayData({
+        recipient: _BOB,
+        feeRecipient: _RELAYER,
+        relayFeeBPS: FIVE_PERCENT,
+        batchSize: 2,
+        totalValue: 0
+      }),
       NONE
     );
   }
@@ -106,10 +124,12 @@ contract IntegrationBatchRelayerSuccessCases is IntegrationBase {
   function test_batchRelayZeroFees() public {
     uint256 _relayerBalanceBefore = _RELAYER.balance;
 
+    uint256 _totalValue = 10_000 / FIVE_PERCENT;
+
     // Bob withdraws a very small amount of the commitment, not enouth to pay for the relayer fee
     WithdrawalParams[] memory _params = new WithdrawalParams[](1);
     _params[0] = WithdrawalParams({
-      withdrawnAmount: 10_000 / FIVE_PERCENT,
+      withdrawnAmount: _totalValue,
       newNullifier: 'nullifier_1a',
       newSecret: 'secret_1a',
       recipient: _BOB,
@@ -117,7 +137,13 @@ contract IntegrationBatchRelayerSuccessCases is IntegrationBase {
     });
     _withdrawThroughBatchRelayer(
       _params,
-      IBatchRelayer.BatchRelayData({recipient: _BOB, feeRecipient: _RELAYER, relayFeeBPS: FIVE_PERCENT, batchSize: 1}),
+      IBatchRelayer.BatchRelayData({
+        recipient: _BOB,
+        feeRecipient: _RELAYER,
+        relayFeeBPS: FIVE_PERCENT,
+        batchSize: 1,
+        totalValue: _totalValue
+      }),
       NONE
     );
 
@@ -136,7 +162,13 @@ contract IntegrationBatchRelayerSuccessCases is IntegrationBase {
     });
     _withdrawThroughBatchRelayer(
       _params,
-      IBatchRelayer.BatchRelayData({recipient: _BOB, feeRecipient: _RELAYER, relayFeeBPS: FIVE_PERCENT, batchSize: 1}),
+      IBatchRelayer.BatchRelayData({
+        recipient: _BOB,
+        feeRecipient: _RELAYER,
+        relayFeeBPS: FIVE_PERCENT,
+        batchSize: 1,
+        totalValue: _commitment1.value
+      }),
       NONE
     );
   }
@@ -163,7 +195,13 @@ contract IntegrationBatchRelayerSuccessCases is IntegrationBase {
     _withdrawThroughBatchRelayer(
       address(_batchRelayer),
       _params,
-      IBatchRelayer.BatchRelayData({recipient: _BOB, feeRecipient: _BOB, relayFeeBPS: FIVE_PERCENT, batchSize: 2}),
+      IBatchRelayer.BatchRelayData({
+        recipient: _BOB,
+        feeRecipient: _BOB,
+        relayFeeBPS: FIVE_PERCENT,
+        batchSize: 2,
+        totalValue: _commitment1.value + _commitment2.value
+      }),
       NONE
     );
 

@@ -21,8 +21,12 @@ UnitBatchRelayer::batchRelay
 │   └── It reverts with InvalidRelayFeeBPS
 ├── When contract balance has changed after the batch relay
 │   └── It should return successfully
-└── When batch size is different than the number of proofs
-    └── It reverts with InvalidBatchSize
+├── When batch size is different than the number of proofs
+│   └── It reverts with InvalidBatchSize
+├── When total value is different than the sum of the values of each withdrawal
+│   └── It reverts with InvalidTotalValue
+└── When the call is reentrant
+    └── It reverts
 
 UnitBatchRelayer::_transfer
 ├── When recipient is zero

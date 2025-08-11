@@ -3,12 +3,13 @@ pragma solidity 0.8.28;
 
 import {IERC20} from '@oz/interfaces/IERC20.sol';
 import {SafeERC20} from '@oz/token/ERC20/utils/SafeERC20.sol';
+import {ReentrancyGuard} from '@oz/utils/ReentrancyGuard.sol';
 import {Constants} from 'contracts/lib/Constants.sol';
 import {ProofLib} from 'contracts/lib/ProofLib.sol';
 import {IBatchRelayer} from 'interfaces/IBatchRelayer.sol';
 import {IPrivacyPool} from 'interfaces/IPrivacyPool.sol';
 
-contract BatchRelayer is IBatchRelayer {
+contract BatchRelayer is IBatchRelayer, ReentrancyGuard {
   using SafeERC20 for IERC20;
   using ProofLib for ProofLib.WithdrawProof;
 
@@ -24,23 +25,26 @@ contract BatchRelayer is IBatchRelayer {
   /// @inheritdoc IBatchRelayer
   function batchRelay(
     IPrivacyPool _pool,
-    IPrivacyPool.Withdrawal memory _withdrawal,
-    ProofLib.WithdrawProof[] memory _proofs
-  ) external {
-    if (_proofs.length == 0) revert EmptyProofs();
+    IPrivacyPool.Withdrawal calldata _withdrawal,
+    ProofLib.WithdrawProof[] calldata _proofs
+  ) external nonReentrant {
+    uint256 _length = _proofs.length;
+    if (_length == 0) revert EmptyProofs();
 
     BatchRelayData memory _data = abi.decode(_withdrawal.data, (BatchRelayData));
 
     // This ensures the relayer is not able to submit an incomplete batch
-    if (_data.batchSize != _proofs.length) revert InvalidBatchSize();
+    if (_data.batchSize != _length) revert InvalidBatchSize();
     if (_data.relayFeeBPS > MAX_RELAY_FEE_BPS) revert InvalidRelayFeeBPS();
 
     // Withdraw every proof individually, and temporarily pool funds in this contract
     uint256 _withdrawnAmount;
-    for (uint256 i = 0; i < _proofs.length; i++) {
+    for (uint256 i = 0; i < _length; i++) {
       _pool.withdraw(_withdrawal, _proofs[i]);
       _withdrawnAmount += _proofs[i].withdrawnValue();
     }
+
+    if (_withdrawnAmount != _data.totalValue) revert InvalidTotalValue();
 
     // Deduct fees
     uint256 _amountAfterFees = _deductFee(_withdrawnAmount, _data.relayFeeBPS);

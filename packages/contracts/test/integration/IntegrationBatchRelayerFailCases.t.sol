@@ -54,7 +54,13 @@ contract IntegrationBatchRelayerFailCases is IntegrationBase {
     });
     _withdrawThroughBatchRelayer(
       _params,
-      IBatchRelayer.BatchRelayData({recipient: _BOB, feeRecipient: _RELAYER, relayFeeBPS: FIVE_PERCENT, batchSize: 1}),
+      IBatchRelayer.BatchRelayData({
+        recipient: _BOB,
+        feeRecipient: _RELAYER,
+        relayFeeBPS: FIVE_PERCENT,
+        batchSize: 1,
+        totalValue: _commitment1.value
+      }),
       IBatchRelayer.InvalidBatchSize.selector
     );
   }
@@ -62,10 +68,20 @@ contract IntegrationBatchRelayerFailCases is IntegrationBase {
   function test_batchRelayReplaceWithUnrelatedWithdrawal() public {
     ProofLib.WithdrawProof[] memory _proofs = new ProofLib.WithdrawProof[](2);
 
-    IBatchRelayer.BatchRelayData memory _bobRelayData =
-      IBatchRelayer.BatchRelayData({recipient: _BOB, feeRecipient: _RELAYER, relayFeeBPS: FIVE_PERCENT, batchSize: 2});
-    IBatchRelayer.BatchRelayData memory _carlRelayData =
-      IBatchRelayer.BatchRelayData({recipient: _CARL, feeRecipient: _RELAYER, relayFeeBPS: FIVE_PERCENT, batchSize: 2});
+    IBatchRelayer.BatchRelayData memory _bobRelayData = IBatchRelayer.BatchRelayData({
+      recipient: _BOB,
+      feeRecipient: _RELAYER,
+      relayFeeBPS: FIVE_PERCENT,
+      batchSize: 2,
+      totalValue: 30 ether
+    });
+    IBatchRelayer.BatchRelayData memory _carlRelayData = IBatchRelayer.BatchRelayData({
+      recipient: _CARL,
+      feeRecipient: _RELAYER,
+      relayFeeBPS: FIVE_PERCENT,
+      batchSize: 2,
+      totalValue: 30 ether
+    });
 
     IPrivacyPool.Withdrawal memory _bobWithdrawal =
       IPrivacyPool.Withdrawal({processooor: address(_batchRelayer), data: abi.encode(_bobRelayData)});
@@ -124,8 +140,53 @@ contract IntegrationBatchRelayerFailCases is IntegrationBase {
     _withdrawThroughBatchRelayer(
       address(_entrypoint),
       _params,
-      IBatchRelayer.BatchRelayData({recipient: _BOB, feeRecipient: _RELAYER, relayFeeBPS: FIVE_PERCENT, batchSize: 1}),
+      IBatchRelayer.BatchRelayData({
+        recipient: _BOB,
+        feeRecipient: _RELAYER,
+        relayFeeBPS: FIVE_PERCENT,
+        batchSize: 1,
+        totalValue: _commitment1.value
+      }),
       IPrivacyPool.InvalidProcessooor.selector
+    );
+  }
+
+  function test_batchRelayTotalValueMismatch() public {
+    // Carl deposits 10 ETH
+    Commitment memory _commitment3 = _deposit(
+      DepositParams({depositor: _CARL, asset: _ETH, amount: 10 ether, nullifier: 'nullifier_3', secret: 'secret_3'})
+    );
+
+    // Push ASP root with label included
+    vm.prank(_POSTMAN);
+    _entrypoint.updateRoot(_shadowASPMerkleTree._root(), 'ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid');
+
+    // Bob withdraws the total amount of both Alice's commitments, but relayer replaces the second withdrawal with an empty one
+    WithdrawalParams[] memory _params = new WithdrawalParams[](2);
+    _params[0] = WithdrawalParams({
+      withdrawnAmount: _commitment1.value,
+      newNullifier: 'nullifier_1a',
+      newSecret: 'secret_1a',
+      recipient: _BOB,
+      commitment: _commitment1
+    });
+    _params[1] = WithdrawalParams({
+      withdrawnAmount: 0,
+      newNullifier: 'nullifier_2a',
+      newSecret: 'secret_2a',
+      recipient: _BOB,
+      commitment: _commitment3
+    });
+    _withdrawThroughBatchRelayer(
+      _params,
+      IBatchRelayer.BatchRelayData({
+        recipient: _BOB,
+        feeRecipient: _RELAYER,
+        relayFeeBPS: FIVE_PERCENT,
+        batchSize: 2,
+        totalValue: _commitment1.value + _commitment2.value
+      }),
+      IBatchRelayer.InvalidTotalValue.selector
     );
   }
 }
