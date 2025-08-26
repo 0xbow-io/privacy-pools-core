@@ -488,7 +488,12 @@ export class AccountService {
 
       const depositMap = new Map<Hash, DepositEvent>();
       for (const event of depositEvents) {
-        depositMap.set(event.precommitment, event);
+        const existingEvent = depositMap.get(event.precommitment);
+
+        // If no existing event, or current event is older (earlier block), use current event
+        if (!existingEvent || event.blockNumber < existingEvent.blockNumber) {
+          depositMap.set(event.precommitment, event);
+        }
       }
 
       return depositMap;
