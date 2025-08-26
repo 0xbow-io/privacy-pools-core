@@ -621,7 +621,12 @@ export class AccountService {
     scope: Hash,
     depositEvents: Map<Hash, DepositEvent>
   ): void {
-    for (let index = BigInt(0); index < depositEvents.size; index++) {
+    const MAX_CONSECUTIVE_MISSES = 10; // Large enough to avoid and tx failures
+
+    const foundIndices = new Set<bigint>();
+    let consecutiveMisses = 0;
+
+    for (let index = BigInt(0); ; index++) {
       // Generate nullifier, secret, and precommitment for this index
       const { nullifier, secret, precommitment } = this.createDepositSecrets(
         scope,
@@ -632,8 +637,17 @@ export class AccountService {
       const event = depositEvents.get(precommitment);
 
       if (!event) {
-        break; // No more deposits found, exit the loop
+        consecutiveMisses++;
+        if (consecutiveMisses >= MAX_CONSECUTIVE_MISSES) {
+          break;
+        }
+        continue;
       }
+
+      // Can reset counter in case if user had any tx failures for
+      // newer deposits
+      consecutiveMisses = 0;
+      foundIndices.add(index);
 
       // Create a new pool account for this deposit
       this.addPoolAccount(
@@ -645,6 +659,8 @@ export class AccountService {
         event.blockNumber,
         event.transactionHash
       );
+
+      this.logger.debug(`Found deposit at index ${index} for scope ${scope}`);
     }
   }
 
