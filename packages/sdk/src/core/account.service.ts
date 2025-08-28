@@ -621,7 +621,7 @@ export class AccountService {
     scope: Hash,
     depositEvents: Map<Hash, DepositEvent>
   ): void {
-    const MAX_CONSECUTIVE_MISSES = 10; // Large enough to avoid and tx failures
+    const MAX_CONSECUTIVE_MISSES = 10; // Large enough to avoid tx failures
 
     const foundIndices = new Set<bigint>();
     let consecutiveMisses = 0;
