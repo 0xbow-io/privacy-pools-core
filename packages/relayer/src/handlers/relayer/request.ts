@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import { CONFIG, getChainConfig } from "../../config/index.js";
+import { CONFIG, getChainConfig, isExceptionToken } from "../../config/index.js";
 import { ConfigError, ValidationError, RelayerError } from "../../exceptions/base.exception.js";
 import {
   RelayerResponse,
@@ -9,7 +9,6 @@ import { web3Provider } from "../../providers/index.js";
 import { zRelayRequest } from "../../schemes/relayer/request.scheme.js";
 import { privacyPoolRelayer } from "../../services/index.js";
 import { RequestMashall } from "../../types.js";
-import { getAddress } from "viem";
 
 /**
  * Converts a RelayRequestBody into a WithdrawalPayload.
@@ -88,11 +87,9 @@ export async function relayRequestHandler(
     const maxGasPrice = getChainConfig(chainId)?.max_gas_price;
     const currentGasPrice = await web3Provider.getGasPrice(chainId);
 
-    // XXX: Block extraGas for FraxUSD
-    const FRAXUSD_ADDRESS = "0xCAcd6fd266aF91b8AeD52aCCc382b4e165586E29";
-
-    if (withdrawalPayload.feeCommitment?.extraGas && getAddress(withdrawalPayload.feeCommitment?.asset) == getAddress(FRAXUSD_ADDRESS)) {
-      throw RelayerError.assetNotSupported(`Extra gas feature not supported for FraxUSD`);
+    // XXX: Block extraGas for EXCEPTION_TOKENS
+    if (withdrawalPayload.feeCommitment?.extraGas && isExceptionToken(withdrawalPayload.feeCommitment?.asset)) {
+      throw RelayerError.assetNotSupported(`Extra gas feature not supported for ${withdrawalPayload.feeCommitment?.asset}`);
     }
 
     if (maxGasPrice !== undefined && currentGasPrice > maxGasPrice) {

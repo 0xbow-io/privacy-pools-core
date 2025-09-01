@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { getAddress } from "viem";
-import { getAssetConfig, getFeeReceiverAddress, getSignerPrivateKey } from "../../config/index.js";
+import { getAssetConfig, getFeeReceiverAddress, getSignerPrivateKey, isExceptionToken } from "../../config/index.js";
 import { QuoterError } from "../../exceptions/base.exception.js";
 import { web3Provider } from "../../providers/index.js";
 import { quoteService } from "../../services/index.js";
@@ -33,10 +33,9 @@ export async function relayQuoteHandler(
     extraGas = false;
   }
 
-  // XXX: Block extraGas for FraxUSD
-  const FRAXUSD_ADDRESS = "0xCAcd6fd266aF91b8AeD52aCCc382b4e165586E29";
-  if (extraGas && getAddress(asset) === getAddress(FRAXUSD_ADDRESS)) {
-    return next(QuoterError.assetNotSupported(`Extra gas feature not supported for FraxUSD`));
+  // XXX: Block extraGas for EXCEPTION_TOKENS
+  if (extraGas && isExceptionToken(asset)) {
+    return next(QuoterError.assetNotSupported(`Extra gas feature not supported for ${asset}`));
   }
 
   let quote: QuoteFee;
