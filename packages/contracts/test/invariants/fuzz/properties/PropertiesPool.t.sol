@@ -5,7 +5,7 @@ import {HandlersParent} from '../handlers/HandlersParent.t.sol';
 
 import {Actors} from '../helpers/Actors.sol';
 import {ArrayUtils} from '../helpers/FuzzUtils.sol';
-import {Constants, IPrivacyPool, ProofLib} from 'contracts/PrivacyPool.sol';
+import {IPrivacyPool, ProofLib} from 'contracts/PrivacyPool.sol';
 
 import {TreeBuilder} from '../helpers/TreeBuilder.sol';
 
@@ -28,7 +28,7 @@ contract PropertiesPool is HandlersParent {
     uint256 _balanceCurrentActorBefore = token.balanceOf(address(_randomDepositor));
 
     // Action
-    (bool success, bytes memory result) = currentActor().call(
+    (bool success, ) = currentActor().call(
       address(entrypoint), 0, abi.encodeCall(entrypoint.relay, (_withdrawal, _proof, tokenPool.SCOPE()))
     );
 
@@ -75,7 +75,7 @@ contract PropertiesPool is HandlersParent {
     uint256 _balanceCurrentActorBefore = token.balanceOf(address(currentActor()));
 
     // Action
-    (bool success, bytes memory result) = currentActor().call(
+    (bool success, ) = currentActor().call(
       address(entrypoint), 0, abi.encodeCall(entrypoint.relay, (_withdrawal, _proof, tokenPool.SCOPE()))
     );
 
@@ -127,7 +127,7 @@ contract PropertiesPool is HandlersParent {
     uint256 _rootBefore = tokenPool.currentRoot();
 
     // Action
-    (bool success, bytes memory result) =
+    (bool success, ) =
       _randomDepositor.call(address(tokenPool), 0, abi.encodeCall(tokenPool.ragequit, (_proof)));
 
     // Post-condition

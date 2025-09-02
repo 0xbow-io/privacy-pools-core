@@ -125,7 +125,7 @@ contract HandlersEntrypoint is Setup {
   }
 
   function _buildProof(
-    uint256 _commitment,
+    uint256 /*_commitment*/,
     uint256 _nullifier,
     uint256 _deposit,
     uint256 _poolRoot,
@@ -154,7 +154,7 @@ contract HandlersEntrypoint is Setup {
 
   function _buildRagequitProof(
     uint256 _commitment,
-    uint256 _precommitment,
+    uint256 /*_precommitment*/,
     uint256 _nullifier,
     uint256 _value,
     uint256 _label

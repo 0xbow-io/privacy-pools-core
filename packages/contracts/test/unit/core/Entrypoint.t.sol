@@ -7,12 +7,10 @@ import {Initializable} from '@oz/proxy/utils/Initializable.sol';
 import {ERC20, IERC20} from '@oz/token/ERC20/ERC20.sol';
 import {UnsafeUpgrades} from '@upgrades/Upgrades.sol';
 
-import {ReentrancyGuardUpgradeable} from '@oz-upgradeable/utils/ReentrancyGuardUpgradeable.sol';
 import {IERC1967} from '@oz/interfaces/IERC1967.sol';
 
 import {IPrivacyPool} from 'contracts/PrivacyPool.sol';
 
-import {Constants} from 'contracts/lib/Constants.sol';
 import {ProofLib} from 'contracts/lib/ProofLib.sol';
 import {IState} from 'interfaces/IState.sol';
 

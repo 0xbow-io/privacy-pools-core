@@ -21,7 +21,7 @@ The circuit ensures the withdrawal is valid by verifying:
 
 - The user knows the preimage of the commitment
 - The commitment exists in the state tree
-- The comimtment label is included in the ASP tree
+- The commitment label is included in the ASP tree
 - The withdrawal amount is valid and matches the commitment
 
 ### LeanIMT Circuit

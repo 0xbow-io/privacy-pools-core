@@ -13,7 +13,6 @@ import {CommitmentVerifier} from 'contracts/verifiers/CommitmentVerifier.sol';
 import {WithdrawalVerifier} from 'contracts/verifiers/WithdrawalVerifier.sol';
 
 import {ERC1967Proxy} from '@oz/proxy/ERC1967/ERC1967Proxy.sol';
-import {UnsafeUpgrades} from '@upgrades/Upgrades.sol';
 
 import {IntegrationUtils} from './Utils.sol';
 import {IERC20} from '@oz/interfaces/IERC20.sol';
@@ -21,9 +20,6 @@ import {IERC20} from '@oz/interfaces/IERC20.sol';
 import {ProofLib} from 'contracts/lib/ProofLib.sol';
 import {InternalLeanIMT, LeanIMTData} from 'lean-imt/InternalLeanIMT.sol';
 
-import {PoseidonT2} from 'poseidon/PoseidonT2.sol';
-import {PoseidonT3} from 'poseidon/PoseidonT3.sol';
-import {PoseidonT4} from 'poseidon/PoseidonT4.sol';
 
 import {ICreateX} from 'interfaces/external/ICreateX.sol';
 import {Constants} from 'test/helper/Constants.sol';

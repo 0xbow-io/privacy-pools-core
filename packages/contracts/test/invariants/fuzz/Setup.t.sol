@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.0;
 
-import {Entrypoint, IEntrypoint} from 'contracts/Entrypoint.sol';
+import {Entrypoint} from 'contracts/Entrypoint.sol';
 import {IPrivacyPool} from 'contracts/PrivacyPool.sol';
 
 import {PrivacyPoolComplex} from 'contracts/implementations/PrivacyPoolComplex.sol';
 import {PrivacyPoolSimple} from 'contracts/implementations/PrivacyPoolSimple.sol';
 
-import {ProofLib} from 'contracts/lib/ProofLib.sol';
-import {InternalLeanIMT, LeanIMTData} from 'lean-imt/InternalLeanIMT.sol';
 
 import {Constants} from 'test/helper/Constants.sol';
 
