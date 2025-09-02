@@ -1,6 +1,6 @@
 forge-std/=../../node_modules/forge-std/src
 halmos-cheatcodes=../../node_modules/halmos-cheatcodes
-lean-imt/=../../node_modules/@zk-kit/lean-imt.sol\/
+lean-imt/=../../node_modules/@zk-kit/lean-imt.sol/
 @oz/=node_modules/@openzeppelin/contracts
 @oz-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable
 @upgrades/=../../node_modules/@openzeppelin/foundry-upgrades/src/
