@@ -1,26 +1,15 @@
-import { poseidon } from "maci-crypto/build/ts/hashing.js";
-import { Hash, Secret } from "../types/commitment.js";
-import { Hex, bytesToNumber } from "viem";
-import { mnemonicToAccount } from "viem/accounts";
-import { DataService } from "./data.service.js";
-import {
-  AccountCommitment,
-  PoolAccount,
-  PoolInfo,
-  PrivacyPoolAccount,
-} from "../types/account.js";
-import {
-  DepositEvent,
-  PoolEventsError,
-  PoolEventsResult,
-  RagequitEvent,
-  WithdrawalEvent,
-} from "../types/events.js";
+import {poseidon} from "maci-crypto/build/ts/hashing.js";
+import {Hash, Secret} from "../types/commitment.js";
+import {bytesToNumber, Hex} from "viem";
+import {mnemonicToAccount} from "viem/accounts";
+import {DataService} from "./data.service.js";
+import {AccountCommitment, PoolAccount, PoolInfo, PrivacyPoolAccount,} from "../types/account.js";
+import {DepositEvent, PoolEventsError, PoolEventsResult, RagequitEvent, WithdrawalEvent,} from "../types/events.js";
 
-import { Logger } from "../utils/logger.js";
-import { AccountError } from "../errors/account.error.js";
-import { ErrorCode } from "../errors/base.error.js";
-import { EventError } from "../errors/events.error.js";
+import {Logger, LogLevel} from "../utils/logger.js";
+import {AccountError} from "../errors/account.error.js";
+import {ErrorCode} from "../errors/base.error.js";
+import {EventError} from "../errors/events.error.js";
 
 type AccountServiceConfig =
   | {
@@ -56,7 +45,7 @@ export class AccountService {
     private readonly dataService: DataService,
     config: AccountServiceConfig
   ) {
-    this.logger = new Logger({ prefix: "Account" });
+    this.logger = new Logger({ prefix: "Account", level: LogLevel.DEBUG });
     if ("mnemonic" in config) {
       this.account = this._initializeAccount(config.mnemonic);
     } else {
@@ -325,6 +314,13 @@ export class AccountService {
   ): PoolAccount {
     const precommitment = this._hashPrecommitment(nullifier, secret);
     const commitment = this._hashCommitment(value, label, precommitment);
+
+    this.logger.debug(`Commitment calculation details`, {
+        value,
+        label,
+        precommitment,
+        commitment,
+    })
 
     const newAccount: PoolAccount = {
       label,
