@@ -1,9 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
+import { z } from "zod";
 import { ConfigError, RelayerError } from "../exceptions/base.exception.js";
 import { zConfig } from "./schemas.js";
 import { AssetConfig, ChainConfig } from "./types.js";
 import { getAddress } from "viem";
+import { createModuleLogger } from "../logger/index.js";
+
+const logger = createModuleLogger(Config);
+
+function Config() { }; // XXX: Dummy function to instantiate the logger 
 
 /**
  * Reads the configuration file from the path specified in the CONFIG_PATH environment variable
@@ -15,7 +21,7 @@ import { getAddress } from "viem";
 function readConfigFile(): Record<string, unknown> {
   let configPathString = process.env["CONFIG_PATH"];
   if (!configPathString) {
-    console.warn("CONFIG_PATH is not set, using default path: ./config.json");
+    logger.warn("CONFIG_PATH is not set, using default path", { defaultPath: "./config.json" });
     configPathString = "./config.json";
   }
   if (!fs.existsSync(configPathString)) {
@@ -27,7 +33,39 @@ function readConfigFile(): Record<string, unknown> {
 }
 
 // Parse the configuration file
-const config = zConfig.parse(readConfigFile());
+const config = zConfig
+  .refine(c => { warnings(c); return true; })
+  .parse(readConfigFile());
+
+function warnings(config: z.infer<typeof zConfig>) {
+  for (const chainConfig of config.chains) {
+    const { chain_id: chainId } = chainConfig;
+
+    // Log warnings for implicit defaults
+    if (!chainConfig.fee_receiver_address && config.defaults.fee_receiver_address) {
+      logger.warn(`Using default fee_receiver_address for chain id: ${chainId}`, { chainId });
+    }
+
+    if (!chainConfig.signer_private_key && config.defaults.signer_private_key) {
+      logger.warn(`Using default signer_private_key for chain id: ${chainId}`, { chainId });
+    }
+
+    if (!chainConfig.entrypoint_address && config.defaults.entrypoint_address) {
+      logger.warn(`Using default entrypoint_address for chain id: ${chainId}`, { chainId });
+    }
+
+    if (!chainConfig.max_gas_price) {
+      logger.warn(`No max_gas_price set for chain id: ${chainId}`, { chainId });
+    }
+
+    const { signer_private_key, ...publicConfig } = chainConfig;  // eslint-disable-line @typescript-eslint/no-unused-vars
+    logger.debug(`Resolved config for ${chainId}`, {
+      ...publicConfig,
+      fee_receiver_address: config.defaults.fee_receiver_address,
+      entrypoint_address: config.defaults.entrypoint_address,
+    });
+  }
+}
 
 // Export the configuration
 export const CONFIG = config;
@@ -52,19 +90,19 @@ export function getChainConfig(chainId: number): ChainConfig {
 
   // Log warnings for implicit defaults
   if (!chainConfig.fee_receiver_address && CONFIG.defaults.fee_receiver_address) {
-    console.warn(`[CONFIG WARNING] Using default fee_receiver_address for chain ${chainId}`);
+    logger.warn(`Using default fee_receiver_address for chain id: ${chainId}`, { chainId });
   }
 
   if (!chainConfig.signer_private_key && CONFIG.defaults.signer_private_key) {
-    console.warn(`[CONFIG WARNING] Using default signer_private_key for chain ${chainId}`);
+    logger.warn(`Using default signer_private_key for chain id: ${chainId}`, { chainId });
   }
 
   if (!chainConfig.entrypoint_address && CONFIG.defaults.entrypoint_address) {
-    console.warn(`[CONFIG WARNING] Using default entrypoint_address for chain ${chainId}`);
+    logger.warn(`Using default entrypoint_address for chain id: ${chainId}`, { chainId });
   }
 
   if (!chainConfig.max_gas_price) {
-    console.warn(`[CONFIG WARNING] There's no max_gas_price set for chain ${chainId}`);
+    logger.warn(`No max_gas_price set for chain id: ${chainId}`, { chainId });
   }
 
   return chainConfig;

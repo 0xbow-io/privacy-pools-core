@@ -47,6 +47,7 @@
     "sqlite": "5.1.1",
     "sqlite3": "5.1.7",
     "viem": "2.22.14",
+    "winston": "^3.18.3",
     "zod": "3.24.1"
   },
   "devDependencies": {

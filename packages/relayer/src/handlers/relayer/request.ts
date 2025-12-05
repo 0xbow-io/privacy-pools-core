@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import { CONFIG, getChainConfig, isExceptionToken } from "../../config/index.js";
+import { CONFIG, getAssetConfig, getChainConfig, isExceptionToken } from "../../config/index.js";
 import { ConfigError, ValidationError, RelayerError } from "../../exceptions/base.exception.js";
 import {
   RelayerResponse,
@@ -8,7 +8,11 @@ import {
 import { web3Provider } from "../../providers/index.js";
 import { zRelayRequest } from "../../schemes/relayer/request.scheme.js";
 import { privacyPoolRelayer } from "../../services/index.js";
-import { RequestMashall } from "../../types.js";
+import { RequestMarshall } from "../../types.js";
+import { createModuleLogger } from "../../logger/index.js";
+import { decodeWithdrawalData } from "../../utils.js";
+
+const logger = createModuleLogger(relayRequestHandler);
 
 /**
  * Converts a RelayRequestBody into a WithdrawalPayload.
@@ -99,11 +103,36 @@ export async function relayRequestHandler(
     const requestResponse: RelayerResponse =
       await privacyPoolRelayer.handleRequest(withdrawalPayload, chainId);
 
+    const response = new RequestMarshall(requestResponse);
+
+    const { recipient, relayFeeBPS } = decodeWithdrawalData(withdrawalPayload.withdrawal.data);
+    const feeCommitment = withdrawalPayload.feeCommitment!;
+    const baseFeeBPS = getAssetConfig(chainId, feeCommitment.asset).fee_bps;
+
+    const logPayload = {
+      chain_id: chainId,
+      fee_commitment: feeCommitment,
+      gas_price: currentGasPrice, 
+      recieving_address: recipient, 
+      tx_reciept: response
+    }
+
+    logger.info("Request generated", logPayload); 
+
+    if (relayFeeBPS >= baseFeeBPS * 2n) {
+      logger.warn(
+        "Generated quote might be too high for requested amount",
+        logPayload
+      );
+    }
+
     res
       .status(200)
-      .json(res.locals.marshalResponse(new RequestMashall(requestResponse)));
+      .json(res.locals.marshalResponse(response));
     next();
   } catch (error) {
     next(error);
   }
 }
+
+

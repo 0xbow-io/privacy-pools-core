@@ -39,7 +39,7 @@ export class DetailsMarshall extends RelayerMarshall {
   }
 }
 
-export class RequestMashall extends RelayerMarshall {
+export class RequestMarshall extends RelayerMarshall {
   constructor(readonly response: RelayerResponse) {
     super();
   }

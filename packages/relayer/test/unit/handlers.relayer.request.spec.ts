@@ -43,7 +43,16 @@ vi.mock("../../src/config/index.js", () => {
           min_withdraw_amount: 200n
         }
       ]
-    })
+    }),
+    getAssetConfig: vi.fn().mockReturnValue({
+      asset_address: "0x1111111111111111111111111111111111111111",
+      asset_name: "TEST", 
+      fee_bps: 1000n,
+      min_withdraw_amount: 200n
+    }),
+    getFeeReceiverAddress: vi.fn().mockReturnValue("0x1212121212121212121212121212121212121212"),
+    getSignerPrivateKey: vi.fn().mockReturnValue("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"),
+    isExceptionToken: vi.fn().mockReturnValue(false)
   };
 });
 
@@ -51,11 +60,19 @@ import { relayRequestHandler } from "../../src/handlers/index.js";
 import { ConfigError, ValidationError, ErrorCode } from "../../src/exceptions/base.exception.js";
 import { privacyPoolRelayer } from "../../src/services/index.js";
 import { web3Provider } from "../../src/providers/index.js";
+import { encodeWithdrawalData } from "../../src/utils.js";
+
+// Create valid withdrawal data
+const validWithdrawalData = encodeWithdrawalData({
+  recipient: "0x1111111111111111111111111111111111111111",
+  feeRecipient: "0x1212121212121212121212121212121212121212", 
+  relayFeeBPS: 1000n
+});
 
 const withdrawalPayload = {
   withdrawal: {
     processooor: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
-    data: "0xfeeMismatch",
+    data: validWithdrawalData,
   },
   proof: {
     pi_a: ["0", "0", "0"],
@@ -71,6 +88,14 @@ const withdrawalPayload = {
   publicSignals: ["0", "0", "0", "0", "0", "0", "0", "0"],
   chainId: 31337,
   scope: "0",
+  feeCommitment: {
+    withdrawalData: validWithdrawalData,
+    asset: "0x1111111111111111111111111111111111111111",
+    expiration: Date.now() + 60000,
+    amount: "1000",
+    extraGas: false,
+    signedRelayerCommitment: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1b",
+  },
 };
 
 function newResMock() {

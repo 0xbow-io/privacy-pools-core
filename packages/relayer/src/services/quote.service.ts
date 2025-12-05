@@ -18,6 +18,7 @@ export interface QuoteFee {
   relayTxCost: bigint;
   extraGasTxCost?: bigint;
   extraGasFundAmount?: bigint;
+  out?: bigint;
 };
 
 export class QuoteService {
@@ -63,7 +64,8 @@ export class QuoteService {
       gasPrice,
       relayTxCost: this.relayTxCost,
       ...extraGasDetail,
-      path: quote.path
+      path: quote.path,
+      out: quote.num
     };
   }
 
