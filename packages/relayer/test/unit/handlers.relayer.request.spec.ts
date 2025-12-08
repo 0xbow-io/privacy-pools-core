@@ -3,59 +3,6 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 vi.mock("../../src/services/privacyPoolRelayer.service.js");
 vi.mock("../../src/providers/web3.provider.js");
 
-// Mock the config module first
-vi.mock("../../src/config/index.js", () => {
-  return {
-    CONFIG: {
-      defaults: {
-        fee_receiver_address: "0x1212121212121212121212121212121212121212",
-        entrypoint_address: "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
-        signer_private_key: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-      },
-      chains: [
-        {
-          chain_id: 31337,
-          chain_name: "localhost",
-          rpc_url: "http://localhost:8545",
-          max_gas_price: "5",
-          supported_assets: [
-            {
-              asset_address: "0x1111111111111111111111111111111111111111",
-              asset_name: "TEST",
-              fee_bps: 1000n,
-              min_withdraw_amount: 200n
-            }
-          ]
-        }
-      ],
-      sqlite_db_path: ":memory:"
-    },
-    getChainConfig: vi.fn().mockReturnValue({
-      chain_id: 31337,
-      chain_name: "localhost",
-      rpc_url: "http://localhost:8545",
-      max_gas_price: "5",
-      supported_assets: [
-        {
-          asset_address: "0x1111111111111111111111111111111111111111",
-          asset_name: "TEST",
-          fee_bps: 1000n,
-          min_withdraw_amount: 200n
-        }
-      ]
-    }),
-    getAssetConfig: vi.fn().mockReturnValue({
-      asset_address: "0x1111111111111111111111111111111111111111",
-      asset_name: "TEST", 
-      fee_bps: 1000n,
-      min_withdraw_amount: 200n
-    }),
-    getFeeReceiverAddress: vi.fn().mockReturnValue("0x1212121212121212121212121212121212121212"),
-    getSignerPrivateKey: vi.fn().mockReturnValue("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"),
-    isExceptionToken: vi.fn().mockReturnValue(false)
-  };
-});
-
 import { relayRequestHandler } from "../../src/handlers/index.js";
 import { ConfigError, ValidationError, ErrorCode } from "../../src/exceptions/base.exception.js";
 import { privacyPoolRelayer } from "../../src/services/index.js";
@@ -132,7 +79,7 @@ describe("relayRequestHandler", () => {
 
   it("gas price below max is ok", async () => {
     const req = { body: { ...withdrawalPayload } };
-    vi.spyOn(web3Provider, "getGasPrice").mockResolvedValue(2n);  // max_gas_price == 5
+    vi.spyOn(web3Provider, "getGasPrice").mockResolvedValue(2000000000n);  // max_gas_price == 5000000000
     vi.spyOn(privacyPoolRelayer, "handleRequest").mockResolvedValue(undefined);
     await relayRequestHandler(req, resMock, nextMock);
     expect(nextMock.mock.calls[0][0]).toEqual(undefined)
@@ -141,7 +88,7 @@ describe("relayRequestHandler", () => {
 
   it("gas price above max is rejected", async () => {
     const req = { body: { ...withdrawalPayload } };
-    vi.spyOn(web3Provider, "getGasPrice").mockResolvedValue(10n);  // max_gas_price == 5
+    vi.spyOn(web3Provider, "getGasPrice").mockResolvedValue(10000000000n);  // max_gas_price == 5000000000
     vi.spyOn(privacyPoolRelayer, "handleRequest").mockResolvedValue(undefined);
     await relayRequestHandler(req, resMock, nextMock);
     const error = nextMock.mock.calls[0][0]

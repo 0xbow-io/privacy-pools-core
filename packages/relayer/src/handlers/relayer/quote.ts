@@ -1,23 +1,21 @@
-import { NextFunction, Request, Response } from "express";
-import { getAddress } from "viem";
+import { NextFunction, Response } from "express";
+import { Address, getAddress } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import {
-  getAssetConfig,
-  getFeeReceiverAddress,
-  getSignerPrivateKey,
   isExceptionToken,
+  RelayerConfig
 } from "../../config/index.js";
 import { QuoterError } from "../../exceptions/base.exception.js";
+import { createModuleLogger } from "../../logger/index.js";
+import { QuoteRequest } from "../../middlewares/index.js";
 import { web3Provider } from "../../providers/index.js";
 import { quoteService } from "../../services/index.js";
+import { QuoteFee } from "../../services/quote.service.js";
 import { QuoteMarshall } from "../../types.js";
 import {
   encodeWithdrawalData,
-  isFeeReceiverSameAsSigner,
   isNative
 } from "../../utils.js";
-import { privateKeyToAccount } from "viem/accounts";
-import { QuoteFee } from "../../services/quote.service.js";
-import { createModuleLogger } from "../../logger/index.js";
 
 // const TIME_20_SECS = 20 * 1000;
 const TIME_60_SECS = 60 * 1000;
@@ -26,24 +24,20 @@ const logger = createModuleLogger(relayQuoteHandler);
 const EXPIRATION_TIME = TIME_60_SECS;
 
 export async function relayQuoteHandler(
-  req: Request,
+  req: QuoteRequest,
   res: Response,
   next: NextFunction,
 ) {
-  const chainId = Number(req.body.chainId!);
-  const amountIn = BigInt(req.body.amount!.toString());
-  const asset = getAddress(req.body.asset!.toString());
+
+  const chainId = req.body.chainId;
+  const amountIn = req.body.amount;
+  const asset = req.body.asset;
   let extraGas = Boolean(req.body.extraGas);
 
-  const config = getAssetConfig(chainId, asset);
-  if (config === undefined)
-    return next(
-      QuoterError.assetNotSupported(
-        `Asset ${asset} for chain ${chainId} is not supported`,
-      ),
-    );
-
-  const baseFeeBPS = config.fee_bps!;
+  const chain = new RelayerConfig().chain(chainId);
+  const [assetConfig, _] = await chain.assetConfig(asset);
+  if (assetConfig === undefined)
+    return next(QuoterError.assetNotSupported(`Asset ${asset} for chain ${chainId} is not supported`));
 
   if (isNative(asset)) {
     extraGas = false;
@@ -64,19 +58,19 @@ export async function relayQuoteHandler(
       chainId,
       amountIn,
       assetAddress: asset,
-      baseFeeBPS,
-      extraGas: extraGas,
+      baseFeeBPS: assetConfig.fee_bps,
+      extraGas,
     });
   } catch (e) {
     return next(e);
   }
 
-  const { 
-    feeBPS, 
-    gasPrice, 
-    extraGasFundAmount, 
-    relayTxCost, 
-    extraGasTxCost 
+  const {
+    feeBPS,
+    gasPrice,
+    extraGasFundAmount,
+    relayTxCost,
+    extraGasTxCost
   } = quote;
 
 
@@ -94,20 +88,18 @@ export async function relayQuoteHandler(
   };
 
   const quoteResponse = new QuoteMarshall({
-    baseFeeBPS,
+    baseFeeBPS: assetConfig.fee_bps,
     feeBPS,
     gasPrice,
     detail,
   });
 
   if (recipient) {
-    let feeReceiverAddress: `0x${string}`;
-    const finalFeeReceiverAddress = getAddress(getFeeReceiverAddress(chainId));
+    let feeReceiverAddress: Address;
+    const finalFeeReceiverAddress = await chain.feeReceiverAddress();
     if (extraGas) {
-      const signer = privateKeyToAccount(
-        getSignerPrivateKey(chainId) as `0x${string}`,
-      );
-      if (isFeeReceiverSameAsSigner(chainId)) {
+      const signer = privateKeyToAccount(await chain.signerPrivateKey());
+      if (await chain.isFeeReceiverSameAsSigner()) {
         feeReceiverAddress = finalFeeReceiverAddress;
       } else {
         feeReceiverAddress = signer.address;
@@ -141,30 +133,29 @@ export async function relayQuoteHandler(
       extraGas,
       amount: amountIn,
     });
-
-
   }
-    const logPayload = {
-      quote_request: { 
-        chain_id: chainId,
-        asset,
-        gas_price: gasPrice,
-        value_in: amountIn,
-        value_out: quote.out!,
-        detail,
-        fee_bps: feeBPS,
-        base_fee_bps: baseFeeBPS
-      },
-    };
 
-    logger.info("Quote generated", logPayload); 
+  const logPayload = {
+    quote_request: {
+      chain_id: chainId,
+      asset,
+      gas_price: gasPrice,
+      value_in: amountIn,
+      value_out: quote.out!,
+      detail,
+      fee_bps: feeBPS,
+      base_fee_bps: assetConfig.fee_bps
+    },
+  };
 
-    if (feeBPS >= baseFeeBPS * 2n) {
-      logger.warn(
-        "Generated quote might be too high for requested amount",
-        logPayload
-      );
-    }
+  logger.info("Quote generated", logPayload);
 
-  res.status(200).json(res.locals.marshalResponse(quoteResponse)); 
+  if (feeBPS >= assetConfig.fee_bps * 2n) {
+    logger.warn(
+      "Generated quote might be too high for requested amount",
+      logPayload
+    );
+  }
+
+  res.status(200).json(res.locals.marshalResponse(quoteResponse));
 }

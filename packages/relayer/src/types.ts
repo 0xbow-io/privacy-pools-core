@@ -2,6 +2,13 @@ import { Address } from "viem/accounts";
 import { RelayerResponse } from "./interfaces/relayer/request.js";
 import { QuoteResponse } from "./interfaces/relayer/quote.js";
 import { FeeCommitment } from "./interfaces/relayer/common.js";
+import { SafeConfig } from "./config/types.js";
+
+export type PrivateKey = `0x${string}`;
+
+// export type ToString<T> = T extends string | number ? `${T}` : never
+// export type ChainId = ToString< string | number > & { readonly __brand: "ChainId" };
+export type ChainId = number & { readonly __brand: "ChainId" };
 
 export abstract class RelayerMarshall {
   abstract toJSON(): object;
@@ -73,6 +80,28 @@ export class QuoteMarshall extends RelayerMarshall {
       gasPrice: this.response.gasPrice.toString(),
       feeCommitment: this.response.feeCommitment,
       detail,
+    };
+  }
+}
+
+export type ConfigChangeResponse = SafeConfig; 
+
+export class ConfigChangeMarshall extends RelayerMarshall{
+  constructor(readonly response: ConfigChangeResponse) {
+    super();
+  }
+  override toJSON(): object {
+    return {
+      ...this.response,
+      chains: this.response.chains.map( chainConfig => ({
+        ...chainConfig,
+        max_gas_price: chainConfig.max_gas_price?.toString(),
+        supported_assets: chainConfig.supported_assets!.map(asset => ({
+          ...asset,
+          fee_bps: asset.fee_bps.toString(),
+          min_withdraw_amount: asset.min_withdraw_amount.toString()
+        }))
+      })),
     };
   }
 }

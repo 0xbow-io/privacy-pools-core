@@ -42,9 +42,9 @@ export function ChainContext(chainId: number, privateKey: `0x${string}`): IChain
       return cachedPool;
     const [
       poolAddress,
-      _minimumDepositAmount,  // eslint-disable-line @typescript-eslint/no-unused-vars
-      _vettingFeeBPS,  // eslint-disable-line @typescript-eslint/no-unused-vars
-      _maxRelayFeeBPS  // eslint-disable-line @typescript-eslint/no-unused-vars
+      _minimumDepositAmount,
+      _vettingFeeBPS,
+      _maxRelayFeeBPS
     ] = await entrypoint.read.assetConfig([asset]);
     const pool = getContract({
       address: poolAddress,

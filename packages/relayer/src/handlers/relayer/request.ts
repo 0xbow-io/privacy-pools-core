@@ -1,15 +1,16 @@
-import { NextFunction, Request, Response } from "express";
-import { CONFIG, getAssetConfig, getChainConfig, isExceptionToken } from "../../config/index.js";
-import { ConfigError, ValidationError, RelayerError } from "../../exceptions/base.exception.js";
+import { NextFunction, Response } from "express";
+import { isExceptionToken, RelayerConfig } from "../../config/index.js";
+import { ConfigError, RelayerError, ValidationError } from "../../exceptions/base.exception.js";
 import {
   RelayerResponse,
   WithdrawalPayload,
 } from "../../interfaces/relayer/request.js";
-import { web3Provider } from "../../providers/index.js";
-import { zRelayRequest } from "../../schemes/relayer/request.scheme.js";
-import { privacyPoolRelayer } from "../../services/index.js";
-import { RequestMarshall } from "../../types.js";
 import { createModuleLogger } from "../../logger/index.js";
+import { RelayRequest } from "../../middlewares/relayer/request.js";
+import { web3Provider } from "../../providers/index.js";
+import { RelayBody } from "../../schemes/relayer/request.scheme.js";
+import { privacyPoolRelayer } from "../../services/index.js";
+import { ChainId, RequestMarshall } from "../../types.js";
 import { decodeWithdrawalData } from "../../utils.js";
 
 const logger = createModuleLogger(relayRequestHandler);
@@ -21,7 +22,7 @@ const logger = createModuleLogger(relayRequestHandler);
  * @returns {WithdrawalPayload} - The formatted withdrawal payload.
  */
 function relayRequestBodyToWithdrawalPayload(
-  body: ReturnType<typeof zRelayRequest['parse']>,
+  body: RelayBody,
 ): WithdrawalPayload {
   return {
     ...body,
@@ -37,16 +38,6 @@ function relayRequestBodyToWithdrawalPayload(
 }
 
 /**
- * Checks if a chain ID is supported.
- * 
- * @param {number} chainId - The chain ID to check.
- * @returns {boolean} - Whether the chain is supported.
- */
-function isChainSupported(chainId: number): boolean {
-  return CONFIG.chains.some(chain => chain.chain_id === chainId);
-}
-
-/**
  * Parses and validates the withdrawal request body.
  *
  * @param {Request["body"]} body - The request body to parse.
@@ -54,23 +45,18 @@ function isChainSupported(chainId: number): boolean {
  * @throws {ValidationError} - If the input data is invalid.
  * @throws {ConfigError} - If the chain is not supported.
  */
-function parseWithdrawal(body: Request["body"]): { payload: WithdrawalPayload, chainId: number; } {
+async function parseWithdrawal(body: RelayRequest["body"]): Promise<{ payload: WithdrawalPayload, chainId: ChainId; }> {
+  const payload = relayRequestBodyToWithdrawalPayload(body);
 
-  const { data, error, success } = zRelayRequest.safeParse(body);
-
-  if (!success) {
-    throw ValidationError.invalidInput({ error, message: "Error parsing payload" });
-  }
-
-  const payload = relayRequestBodyToWithdrawalPayload(data);
+  const chainId = body.chainId;
+  const chain = new RelayerConfig().chain(chainId);
+  const isChainSupportedThough = await chain.isChainSupported(chainId);
 
   // Check if the chain is supported early
-  if (!isChainSupported(data.chainId)) {
-    throw ValidationError.invalidInput({ message: `Chain with ID ${data.chainId} not supported.` });
+  if (!isChainSupportedThough) {
+    throw ValidationError.invalidInput({ message: `Chain with ID ${chainId} not supported.` });
   }
-
-  return { payload, chainId: data.chainId };
-
+  return { payload, chainId };
 }
 
 /**
@@ -81,23 +67,25 @@ function parseWithdrawal(body: Request["body"]): { payload: WithdrawalPayload, c
  * @param {NextFunction} next - The next middleware function.
  */
 export async function relayRequestHandler(
-  req: Request,
+  req: RelayRequest,
   res: Response,
   next: NextFunction,
 ) {
   try {
-    const { payload: withdrawalPayload, chainId } = parseWithdrawal(req.body);
+    const { payload: withdrawalPayload, chainId } = await parseWithdrawal(req.body);
 
-    const maxGasPrice = getChainConfig(chainId)?.max_gas_price;
+    const chain = new RelayerConfig().chain(chainId);
+    const config = await chain.config();
+    const maxGasPrice = config.max_gas_price;
     const currentGasPrice = await web3Provider.getGasPrice(chainId);
 
     // XXX: Block extraGas for EXCEPTION_TOKENS
     if (withdrawalPayload.feeCommitment?.extraGas && isExceptionToken(withdrawalPayload.feeCommitment?.asset)) {
-      throw RelayerError.assetNotSupported(`Extra gas feature not supported for ${withdrawalPayload.feeCommitment?.asset}`);
+      return next(RelayerError.assetNotSupported(`Extra gas feature not supported for ${withdrawalPayload.feeCommitment?.asset}`));
     }
 
     if (maxGasPrice !== undefined && currentGasPrice > maxGasPrice) {
-      throw ConfigError.maxGasPrice(`Current gas price ${currentGasPrice} is higher than max price ${maxGasPrice}`);
+      return next(ConfigError.maxGasPrice(`Current gas price ${currentGasPrice} is higher than max price ${maxGasPrice}`));
     }
 
     const requestResponse: RelayerResponse =
@@ -107,19 +95,19 @@ export async function relayRequestHandler(
 
     const { recipient, relayFeeBPS } = decodeWithdrawalData(withdrawalPayload.withdrawal.data);
     const feeCommitment = withdrawalPayload.feeCommitment!;
-    const baseFeeBPS = getAssetConfig(chainId, feeCommitment.asset).fee_bps;
+    const [assetConfig, _] = await chain.assetConfig(feeCommitment.asset);
 
     const logPayload = {
       chain_id: chainId,
       fee_commitment: feeCommitment,
-      gas_price: currentGasPrice, 
-      recieving_address: recipient, 
+      gas_price: currentGasPrice,
+      recieving_address: recipient,
       tx_reciept: response
-    }
+    };
 
-    logger.info("Request generated", logPayload); 
+    logger.info("Request generated", logPayload);
 
-    if (relayFeeBPS >= baseFeeBPS * 2n) {
+    if (relayFeeBPS >= assetConfig!.fee_bps * 2n) {
       logger.warn(
         "Generated quote might be too high for requested amount",
         logPayload
@@ -134,5 +122,3 @@ export async function relayRequestHandler(
     next(error);
   }
 }
-
-

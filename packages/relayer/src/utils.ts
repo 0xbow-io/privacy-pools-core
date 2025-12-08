@@ -17,8 +17,12 @@ import {
   WithdrawPublicSignals,
 } from "./interfaces/relayer/request.js";
 import { FeeDataAbi } from "./types/abi.types.js";
-import { getFeeReceiverAddress, getSignerPrivateKey } from "./config/index.js";
-import { privateKeyToAccount } from "viem/accounts";
+import { ChainId } from "./types.js";
+
+
+export const JSONStringifyBigInt = (json_string: object) => {
+  return JSON.stringify(json_string, (_: string, v: unknown) => typeof v === 'bigint' ? v.toString() : v, 2);
+};
 
 interface WithdrawalData {
   recipient: Address,
@@ -85,7 +89,7 @@ export function parseSignals(
  * @returns {Chain} - The Chain object
  */
 export function createChainObject(chainConfig: {
-  chain_id: number;
+  chain_id: ChainId;
   chain_name: string;
   rpc_url: string;
   native_currency?: { name: string; symbol: string; decimals: number; };
@@ -111,12 +115,6 @@ export function isViemError(error: unknown): error is ViemError {
     ContractFunctionRevertedError.prototype.constructor.name,
   ];
   return viemErrorNames.includes(error?.constructor?.name || "");
-}
-
-export function isFeeReceiverSameAsSigner(chainId: number) {
-  const feeReceiverAddress = getFeeReceiverAddress(chainId);
-  const signerAddress = privateKeyToAccount(getSignerPrivateKey(chainId) as `0x${string}`).address;
-  return feeReceiverAddress.toLowerCase() === signerAddress.toLowerCase();
 }
 
 export function isNative(asset: `0x${string}`) {

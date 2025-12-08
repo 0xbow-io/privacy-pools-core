@@ -1,18 +1,16 @@
-import { Chain, createPublicClient, createWalletClient, Hex, http, PublicClient, verifyTypedData, WalletClient } from "viem";
+import { createPublicClient, createWalletClient, http, PublicClient, verifyTypedData, WalletClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import {
-  CONFIG,
-  getSignerPrivateKey
-} from "../config/index.js";
+import { RelayerConfig } from "../config/index.js";
 import { FeeCommitment } from "../interfaces/relayer/common.js";
 import { createChainObject } from "../utils.js";
+import { ChainId } from "../types.js";
 
 interface IWeb3Provider {
-  client(chainId: number): PublicClient;
-  getGasPrice(chainId: number): Promise<bigint>;
+  client(chainId: ChainId): Promise<PublicClient>;
+  getGasPrice(chainId: ChainId): Promise<bigint>;
 }
 
-const domain = (chainId: number) => ({
+const domain = (chainId: ChainId) => ({
   name: "Privacy Pools Relayer",
   version: "1",
   chainId,
@@ -32,57 +30,52 @@ const RelayerCommitmentTypes = {
  * Class representing the provider for interacting with several chains
  */
 export class Web3Provider implements IWeb3Provider {
-  chains: { [key: number]: Chain; };
-  clients: { [key: number]: PublicClient; };
-  signers: { [key: number]: WalletClient; };
+  constructor() {}
 
-  constructor() {
-    this.chains = Object.fromEntries(CONFIG.chains.map(chainConfig => {
-      return [chainConfig.chain_id, createChainObject(chainConfig)];
-    }));
-    this.clients = Object.fromEntries(Object.entries(this.chains).map(([chainId, chain]) => {
-      return [
-        chainId,
-        createPublicClient({
-          chain,
-          transport: http(chain.rpcUrls.default.http[0])
-        })];
-    }));
-    this.signers = Object.fromEntries(Object.entries(this.chains).map(([chainId, chain]) => {
-      const account = privateKeyToAccount(getSignerPrivateKey(Number(chainId)) as `0x${string}`);
-      return [
-        Number(chainId),
-        createWalletClient({
-          account,
-          chain,
-          transport: http(chain.rpcUrls.default.http[0])
-        })];
-    }));
-
-  }
-
-  client(chainId: number): PublicClient {
-    const client = this.clients[chainId];
+  /*
+   * Create a Client object for a specific chainId
+   *
+   **/
+  async client(chainId: ChainId): Promise<PublicClient> {
+    const config = new RelayerConfig();
+    const chainConfig = await config.chain(chainId).config();
+    const chain = createChainObject(chainConfig); 
+    const client = createPublicClient({ 
+      chain, 
+      transport: http(chain.rpcUrls.default.http[0])
+    });
     if (client === undefined) {
       throw Error(`Web3ProviderError::UnsupportedChainId(${chainId})`);
     }
     else return client;
   }
 
-  signer(chainId: number): WalletClient {
-    const signer = this.signers[chainId];
+  async signer(chainId: ChainId): Promise<WalletClient> {
+    const config = new RelayerConfig().chain(chainId);
+    const chainConfig = await config.config();
+    const chain = createChainObject(chainConfig);  
+    const pkey = await config.signerPrivateKey();
+    const account = privateKeyToAccount(pkey);
+    const signer = createWalletClient({
+      account,
+      chain,
+      transport: http(chain.rpcUrls.default.http[0])
+    });
     if (signer === undefined) {
       throw Error(`Web3ProviderError::UnsupportedChainId(${chainId})`);
-    }
+    } 
     else return signer;
   }
 
-  async getGasPrice(chainId: number): Promise<bigint> {
-    return await this.client(chainId).getGasPrice();
+  async getGasPrice(chainId: ChainId): Promise<bigint> {
+    const client = await this.client(chainId);
+    return client.getGasPrice();
   }
 
-  async signRelayerCommitment(chainId: number, commitment: Omit<FeeCommitment, 'signedRelayerCommitment'>) {
-    const signer = privateKeyToAccount(getSignerPrivateKey(chainId) as Hex);
+  async signRelayerCommitment(chainId: ChainId, commitment: Omit<FeeCommitment, 'signedRelayerCommitment'>) {
+    const chain = new RelayerConfig().chain(chainId);
+    const pkey = await chain.signerPrivateKey();
+    const signer = privateKeyToAccount(pkey);
     const { withdrawalData, expiration, extraGas, amount, asset } = commitment;
     return signer.signTypedData({
       domain: domain(chainId),
@@ -98,8 +91,10 @@ export class Web3Provider implements IWeb3Provider {
     });
   }
 
-  async verifyRelayerCommitment(chainId: number, commitment: FeeCommitment): Promise<boolean> {
-    const signer = privateKeyToAccount(getSignerPrivateKey(chainId) as Hex);
+  async verifyRelayerCommitment(chainId: ChainId, commitment: FeeCommitment): Promise<boolean> {
+    const chain = new RelayerConfig().chain(chainId);
+    const pkey = await chain.signerPrivateKey();
+    const signer = privateKeyToAccount(pkey);
     const { withdrawalData, asset, expiration, amount, extraGas, signedRelayerCommitment } = commitment;
     return verifyTypedData({
       address: signer.address,

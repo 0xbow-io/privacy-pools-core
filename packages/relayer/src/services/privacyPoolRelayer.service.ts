@@ -1,15 +1,11 @@
 /**
  * Handles withdrawal requests within the Privacy Pool relayer.
  */
-import { Address, getAddress } from "viem";
-import {
-  getAssetConfig,
-  getEntrypointAddress,
-  getFeeReceiverAddress,
-  getSignerPrivateKey
-} from "../config/index.js";
+import { getAddress } from "viem";
+import { RelayerConfig } from "../config/index.js";
 import {
   BlockchainError,
+  ConfigError,
   RelayerError,
   WithdrawalValidationError,
   ZkError,
@@ -21,7 +17,7 @@ import {
 import { db, SdkProvider, UniswapProvider, web3Provider } from "../providers/index.js";
 import { RelayerDatabase } from "../types/db.types.js";
 import { SdkProviderInterface } from "../types/sdk.types.js";
-import { decodeWithdrawalData, isFeeReceiverSameAsSigner, isNative, isViemError, parseSignals } from "../utils.js";
+import { decodeWithdrawalData, isNative, isViemError, parseSignals } from "../utils.js";
 import { quoteService } from "./index.js";
 import { Web3Provider } from "../providers/web3.provider.js";
 import { FeeCommitment } from "../interfaces/relayer/common.js";
@@ -29,6 +25,7 @@ import { uniswapProvider } from "../providers/index.js";
 import { WRAPPED_NATIVE_TOKEN_ADDRESS } from "../providers/uniswap/constants.js";
 import { Withdrawal, WithdrawalProof } from "@0xbow/privacy-pools-core-sdk";
 import { privateKeyToAccount } from "viem/accounts";
+import { ChainId } from "../types.js";
 
 /**
  * Class representing the Privacy Pool Relayer, responsible for processing withdrawal requests.
@@ -59,7 +56,7 @@ export class PrivacyPoolRelayer {
    * @param {number} chainId - The chain ID to process the request on.
    * @returns {Promise<RelayerResponse>} - A promise resolving to the relayer response.
    */
-  async handleRequest(req: WithdrawalPayload, chainId: number): Promise<RelayerResponse> {
+  async handleRequest(req: WithdrawalPayload, chainId: ChainId): Promise<RelayerResponse> {
     const requestId = crypto.randomUUID();
     const timestamp = Date.now();
 
@@ -139,7 +136,7 @@ export class PrivacyPoolRelayer {
     }
   }
 
-  async swapForNativeAndFund(scope: bigint, withdrawal: Withdrawal, proof: WithdrawalProof, chainId: number, relayTx: string) {
+  async swapForNativeAndFund(scope: bigint, withdrawal: Withdrawal, proof: WithdrawalProof, chainId: ChainId, relayTx: string) {
 
     const { assetAddress } = await this.sdkProvider.scopeData(scope, chainId);
     if (isNative(assetAddress)) {
@@ -147,17 +144,23 @@ export class PrivacyPoolRelayer {
       return;
     }
 
-    const relayReceipt = await web3Provider.client(chainId).waitForTransactionReceipt({ hash: relayTx as `0x${string}` });
+    const client = await web3Provider.client(chainId);
+    const relayReceipt = await client.waitForTransactionReceipt({ hash: relayTx as `0x${string}` });
     const { gasUsed: relayGasUsed, effectiveGasPrice: relayGasPrice } = relayReceipt;
 
-    const assetConfig = getAssetConfig(chainId, assetAddress);
-    const feeReceiver = getFeeReceiverAddress(chainId) as Address;
+
+    const chain = new RelayerConfig().chain(chainId);
+    const [ assetConfig, error ] = await chain.assetConfig(assetAddress);
+    if (error) {
+      throw ConfigError.default(error);
+    } 
+    const feeReceiver = await chain.feeReceiverAddress();
     const { recipient, relayFeeBPS } = decodeWithdrawalData(withdrawal.data);
     const withdrawnValue = parseSignals(proof.publicSignals).withdrawnValue;
     const gasPrice = await web3Provider.getGasPrice(chainId);
 
     const feeGross = withdrawnValue * relayFeeBPS / 10_000n;
-    const feeBase = withdrawnValue * assetConfig.fee_bps / 10_000n;
+    const feeBase = withdrawnValue * assetConfig!.fee_bps / 10_000n;
 
     const relayerGasRefundValue = gasPrice * quoteService.extraGasTxCost + relayGasPrice * relayGasUsed;
 
@@ -220,11 +223,21 @@ export class PrivacyPoolRelayer {
    * @throws {WithdrawalValidationError} - If validation fails.
    * @throws {ValidationError} - If public signals are malformed.
    */
-  protected async validateWithdrawal(wp: WithdrawalPayload, chainId: number) {
-    const entrypointAddress = getEntrypointAddress(chainId);
-    const feeReceiverAddress = getFeeReceiverAddress(chainId);
-    const signerAddress = privateKeyToAccount(getSignerPrivateKey(chainId) as `0x${string}`).address;
+  protected async validateWithdrawal(wp: WithdrawalPayload, chainId: ChainId) {
+    const chain = new RelayerConfig().chain(chainId);
+    const [
+      entrypointAddress, 
+      feeReceiverAddress, 
+      signerPrivateKey, 
+    ] = await Promise.all([
 
+      chain.entrypointAddress(),
+      chain.feeReceiverAddress(),
+      chain.signerPrivateKey(),
+    ]);
+
+    const signerAddress = privateKeyToAccount(signerPrivateKey).address;
+    
     const extraGas = wp.feeCommitment?.extraGas ?? false;
 
     // If there's a fee commitment, then we use it's withdrawalData as source of truth to check against the proof.
@@ -250,7 +263,7 @@ export class PrivacyPoolRelayer {
       );
     }
 
-    if (extraGas && !isFeeReceiverSameAsSigner(chainId)) {
+    if (extraGas && !await chain.isFeeReceiverSameAsSigner()) {
       if (getAddress(feeRecipient) !== getAddress(signerAddress)) {
         throw WithdrawalValidationError.feeReceiverMismatch(
           `Fee recipient with extraGas mismatch: expected "${signerAddress}", got "${feeRecipient}".`,
@@ -276,12 +289,10 @@ export class PrivacyPoolRelayer {
     const { assetAddress } = await this.sdkProvider.scopeData(wp.scope, chainId);
 
     // Get asset configuration for this chain and asset
-    const assetConfig = getAssetConfig(chainId, assetAddress);
+    const [assetConfig, error]  = await chain.assetConfig(assetAddress);
 
-    if (!assetConfig) {
-      throw WithdrawalValidationError.assetNotSupported(
-        `Asset ${assetAddress} is not supported on chain ${chainId}.`
-      );
+    if (error) {
+      throw WithdrawalValidationError.assetNotSupported(error);
     }
 
     if (wp.feeCommitment) {
@@ -318,7 +329,7 @@ export class PrivacyPoolRelayer {
         chainId,
         amountIn: proofSignals.withdrawnValue,
         assetAddress,
-        baseFeeBPS: assetConfig.fee_bps,
+        baseFeeBPS: assetConfig!.fee_bps,
         extraGas
       });
 
@@ -330,9 +341,9 @@ export class PrivacyPoolRelayer {
 
     }
 
-    if (proofSignals.withdrawnValue < assetConfig.min_withdraw_amount) {
+    if (proofSignals.withdrawnValue < assetConfig!.min_withdraw_amount) {
       throw WithdrawalValidationError.withdrawnValueTooSmall(
-        `Withdrawn value too small: expected minimum "${assetConfig.min_withdraw_amount}", got "${proofSignals.withdrawnValue}".`,
+        `Withdrawn value too small: expected minimum "${assetConfig!.min_withdraw_amount}", got "${proofSignals.withdrawnValue}".`,
       );
     }
 
@@ -344,6 +355,6 @@ function commitmentExpired(feeCommitment: FeeCommitment): boolean {
   return feeCommitment.expiration < Number(new Date());
 }
 
-async function validFeeCommitment(chainId: number, feeCommitment: FeeCommitment): Promise<boolean> {
+async function validFeeCommitment(chainId: ChainId, feeCommitment: FeeCommitment): Promise<boolean> {
   return web3Provider.verifyRelayerCommitment(chainId, feeCommitment);
 }

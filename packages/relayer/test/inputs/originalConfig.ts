@@ -1,4 +1,4 @@
-{
+export const originalConfig = {
   "defaults": {
     "fee_receiver_address": "0x1212121212121212121212121212121212121212",
     "entrypoint_address": "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
@@ -21,8 +21,6 @@
     }
   ],
   "sqlite_db_path": ":memory:",
-  "allowed_domains": [
-    "http://localhost:3000"
-  ],
+  "allowed_domains": ["http://localhost:3000"],
   "cors_allow_all": true
-}
+};

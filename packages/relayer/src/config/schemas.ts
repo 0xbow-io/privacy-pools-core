@@ -1,25 +1,6 @@
 import { z } from "zod";
-import { getAddress } from "viem";
 import path from "node:path";
-
-const zNonNegativeBigInt = z
-  .string()
-  .or(z.number())
-  .pipe(z.coerce.bigint().nonnegative());
-
-// Address validation schema
-export const zAddress = z
-  .string()
-  .regex(/^0x[0-9a-fA-F]+/)
-  .length(42)
-  .transform((v) => getAddress(v));
-
-// Private key validation schema
-export const zPkey = z
-  .string()
-  .regex(/^0x[0-9a-fA-F]+/)
-  .length(66)
-  .transform((v) => v as `0x${string}`);
+import { zAddress, zChainId, zNonNegativeBigInt, zPrivateKey } from "../schemes/shared.schemes.js";
 
 // Fee BPS validation schema
 export const zFeeBps = z
@@ -48,18 +29,24 @@ export const zNativeCurrency = z.object({
   decimals: z.number().default(18)
 });
 
-// Chain configuration schema
-export const zChainConfig = z.object({
-  chain_id: z.string().or(z.number()).pipe(z.coerce.number().positive()),
+export const zSecretConfig = z.object({
+  fee_receiver_address: zAddress,
+  signer_private_key: zPrivateKey,
+});
+
+export const zVariableChainConfig = z.object({
+  chain_id: zChainId,
   chain_name: z.string(),
   rpc_url: z.string().url(),
   max_gas_price: zNonNegativeBigInt.optional(),
-  fee_receiver_address: zAddress.optional(),
-  signer_private_key: zPkey.optional(),
   entrypoint_address: zAddress.optional(),
   supported_assets: z.array(zAssetConfig).optional(),
   native_currency: zNativeCurrency.optional(),
 });
+
+export const zRawChainConfig = zVariableChainConfig
+  .merge(zSecretConfig.partial())
+  .strict();
 
 // Common configuration schema
 export const zCommonConfig = z.object({
@@ -70,19 +57,53 @@ export const zCommonConfig = z.object({
 
 // Default configuration schema
 export const zDefaultConfig = z.object({
-  fee_receiver_address: zAddress,
-  signer_private_key: zPkey,
-  entrypoint_address: zAddress,
+  fee_receiver_address: zAddress.optional(),
+  signer_private_key: zPrivateKey.optional(),
+  entrypoint_address: zAddress.optional(),
 });
 
-// Complete configuration schema
-export const zConfig = z
+// Raw configuration schema (with optional fields)
+export const zRawConfig = z
   .object({
-    defaults: zDefaultConfig,
-    chains: z.array(zChainConfig),
+    defaults: zDefaultConfig.optional(),
+    chains: z.array(zRawChainConfig),
     sqlite_db_path: zCommonConfig.shape.sqlite_db_path,
     cors_allow_all: zCommonConfig.shape.cors_allow_all,
     allowed_domains: zCommonConfig.shape.allowed_domains,
   })
-  .strict()
-  .readonly();
+  .strict();
+
+export const zUpdateChainConfig = z.object({
+  chain_id: zChainId,
+  chain_name: z.string().optional(),
+  rpc_url: z.string().url().optional(),
+  max_gas_price: zNonNegativeBigInt.optional(),
+  entrypoint_address: zAddress.optional(),
+  supported_assets: z.array(zAssetConfig).optional(),
+  native_currency: zNativeCurrency.optional(),
+}).readonly();
+
+export type UpdateConfigBody = z.infer<typeof zUpdateChainConfig>;
+
+export const validateConfigUpdateBody = (data: unknown) => {
+  const result = zUpdateChainConfig.safeParse(data);
+  return {
+    ...result,
+    errors: result.success ? null : result.error.errors,
+  };
+};
+
+export const zDeleteConfigBody = z.object({
+  chain_id: zChainId,
+  asset_addresses: zAddress.or(z.array(zAddress).min(1, { message: 'Array must contain at least one asset address' })),
+});
+
+export type DeleteConfigBody = z.infer<typeof zDeleteConfigBody>;
+
+export const validateConfigDeleteBody = (data: unknown) => {
+  const result = zDeleteConfigBody.safeParse(data);
+  return {
+    ...result,
+    errors: result.success ? null : result.error.errors,
+  };
+};

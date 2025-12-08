@@ -1,4 +1,4 @@
-import { app } from "./app.js";
+import { createApp } from "./app.js";
 import { db } from "./providers/db.provider.js";
 import { createModuleLogger } from "./logger/index.js";
 
@@ -7,14 +7,16 @@ const port = 3000;
 
 async function main() {
   logger.info('Initializing Privacy Pools Relayer', { port });
-  
+
   await db.init();
   logger.info('Database initialized successfully');
-  
+  const app = await createApp();
+
   // Start the server
   app.listen(port, () => {
     logger.info(`Server running at http://localhost:${port}`, { port });
   });
+
 }
 
 main().catch((e) => {

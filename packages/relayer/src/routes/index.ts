@@ -5,28 +5,47 @@ import {
   relayRequestHandler,
 } from "../handlers/index.js";
 import {
+    DetailsRequest,
   validateDetailsMiddleware,
   validateQuoteMiddleware,
   validateRelayRequestMiddleware
 } from "../middlewares/relayer/request.js";
+import { validateConfigDeleteMiddleware, validateConfigUpdateMiddleware } from "../middlewares/admin/config.middleware.js";
+import { configUpdateHandler } from "../handlers/admin/config.update.handler.js";
+import { configDeleteHandler } from "../handlers/admin/config.delete.handler.js";
 
 // Router setup
-const relayerRouter = Router();
+export const relayerRouter = (): Router => {
+  const router = Router();
 
-relayerRouter.get("/details", [
-  validateDetailsMiddleware,
-  relayerDetailsHandler
-]);
+  router.get("/details",
+    validateDetailsMiddleware,
+    (req, res, next) => relayerDetailsHandler(req as DetailsRequest, res, next)
+  );
 
-relayerRouter.post("/request", [
-  validateRelayRequestMiddleware,
-  relayRequestHandler,
-]);
+  router.post("/request", 
+    validateRelayRequestMiddleware,
+    relayRequestHandler
+  );
 
-relayerRouter.post("/quote", [
-  validateQuoteMiddleware,
-  relayQuoteHandler
-]);
+  router.post("/quote", 
+    validateQuoteMiddleware,
+    relayQuoteHandler
+  );
+  return router;
+}
 
+export const adminRouter = (): Router => {
+  const router = Router();
 
-export { relayerRouter };
+  router.patch("/config",
+    validateConfigUpdateMiddleware,
+    configUpdateHandler
+  );
+
+  router.delete("/config", 
+    validateConfigDeleteMiddleware,
+    configDeleteHandler
+  );
+  return router;
+};

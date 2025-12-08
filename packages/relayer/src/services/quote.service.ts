@@ -1,8 +1,9 @@
 import { Address } from "viem";
 import { quoteProvider, web3Provider } from "../providers/index.js";
+import { ChainId } from "../types.js";
 
 interface QuoteFeeBPSParams {
-  chainId: number,
+  chainId: ChainId,
   assetAddress: Address,
   amountIn: bigint,
   baseFeeBPS: bigint,

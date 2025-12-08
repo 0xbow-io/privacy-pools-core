@@ -3,10 +3,9 @@ import { FeeAmount } from '@uniswap/v3-sdk';
 import { Account, Address, getAddress, getContract, GetContractReturnType, PublicClient, WriteContractParameters } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
-import { getSignerPrivateKey } from "../../config/index.js";
 import { BlockchainError, RelayerError } from '../../exceptions/base.exception.js';
 import { web3Provider } from '../../providers/index.js';
-import { isFeeReceiverSameAsSigner, isViemError } from '../../utils.js';
+import { isViemError } from '../../utils.js';
 import { IERC20MinimalABI } from './abis/erc20.abi.js';
 import { FactoryV3ABI } from './abis/factoryV3.abi.js';
 import { QuoterV2ABI } from './abis/quoterV2.abi.js';
@@ -16,9 +15,11 @@ import { Command, CommandPair, encodeInstruction, Instruction, Permit2Params } f
 import { FeeTiers, getPermit2Address, getQuoterAddress, getRouterAddress, getV3Factory, INTERMEDIATE_TOKENS, WRAPPED_NATIVE_TOKEN_ADDRESS } from './constants.js';
 import { createPermit2 } from './createPermit.js';
 import { encodePath, hopsFromAddressRoute } from './pools.js';
+import { ChainId } from '../../types.js';
+import { RelayerConfig } from '../../config/index.js';
 
 export type UniswapQuote = {
-  chainId: number;
+  chainId: ChainId;
   addressIn: string;
   addressOut: string;
   amountIn: bigint;
@@ -38,7 +39,7 @@ interface SwapWithRefundParams {
   tokenIn: `0x${string}`;
   feeGross: bigint;
   refundAmount: bigint;
-  chainId: number;
+  chainId: ChainId;
   feeBase: bigint;
 }
 
@@ -68,11 +69,11 @@ export class UniswapProvider {
 
   static readonly ZERO_ADDRESS = ZERO_ADDRESS;
 
-  async getTokenInfo(chainId: number, address: Address): Promise<Token> {
+  async getTokenInfo(chainId: ChainId, address: Address): Promise<Token> {
     const contract = getContract({
       address,
       abi: IERC20MinimalABI,
-      client: web3Provider.client(chainId)
+      client: await web3Provider.client(chainId)
     });
     const [decimals, symbol] = await Promise.all([
       contract.read.decimals(),
@@ -81,7 +82,7 @@ export class UniswapProvider {
     return new Token(chainId, address, Number(decimals), symbol);
   }
 
-  getFactory(chainId: number) {
+  async getFactory(chainId: ChainId) {
     const factoryAddress = getV3Factory(chainId);
     if (!factoryAddress) {
       throw RelayerError.unknown(`No Uniswap V3 factory address configured for chain ${chainId}`);
@@ -89,27 +90,27 @@ export class UniswapProvider {
     return getContract({
       address: factoryAddress,
       abi: FactoryV3ABI,
-      client: web3Provider.client(chainId)
+      client: await web3Provider.client(chainId)
     });
   }
 
-  getQuoter(chainId: number) {
+  async getQuoter(chainId: ChainId) {
     return getContract({
       address: getQuoterAddress(chainId),
       abi: QuoterV2ABI,
-      client: web3Provider.client(chainId)
+      client: await web3Provider.client(chainId)
     });
   }
 
-  getPool(chainId: number, poolAddress: `0x${string}`): GetContractReturnType<typeof v3PoolABI, PublicClient> {
+  async getPool(chainId: ChainId, poolAddress: `0x${string}`): Promise<GetContractReturnType<typeof v3PoolABI, PublicClient>> {
     return getContract({
       abi: v3PoolABI,
       address: getAddress(poolAddress),
-      client: web3Provider.client(chainId),
+      client: await web3Provider.client(chainId),
     });
   }
 
-  async quoteNativeToken(chainId: number, addressIn: Address, amountIn: bigint): Promise<Quote> {
+  async quoteNativeToken(chainId: ChainId, addressIn: Address, amountIn: bigint): Promise<Quote> {
     const weth = WRAPPED_NATIVE_TOKEN_ADDRESS[chainId]!;
     // First try direct quote
     try {
@@ -147,8 +148,8 @@ export class UniswapProvider {
     }
   }
 
-  private async poolHasLiquidity(chainId: number, poolAddress: `0x${string}`) {
-    const pool = this.getPool(chainId, poolAddress);
+  private async poolHasLiquidity(chainId: ChainId, poolAddress: `0x${string}`) {
+    const pool = await this.getPool(chainId, poolAddress);
     const [liq, slot0] = await Promise.all([
       pool.read.liquidity(),
       pool.read.slot0()
@@ -164,8 +165,8 @@ export class UniswapProvider {
     return true;
   }
 
-  async findLowestFeePoolForPair(chainId: number, addressIn: string, addressOut: string): Promise<FeeAmount> {
-    const factory = this.getFactory(chainId);
+  async findLowestFeePoolForPair(chainId: ChainId, addressIn: string, addressOut: string): Promise<FeeAmount> {
+    const factory = await this.getFactory(chainId);
     let fee: FeeAmount | undefined;
     for (const candidateFee of FeeTiers) {
       const pool = await factory.read.getPool([
@@ -191,7 +192,7 @@ export class UniswapProvider {
   async quote({ chainId, addressIn, addressOut, amountIn }: UniswapQuote) {
     const tokenIn = await this.getTokenInfo(chainId, addressIn as Address);
     const tokenOut = await this.getTokenInfo(chainId, addressOut as Address);
-    const quoterContract = this.getQuoter(chainId);
+    const quoterContract = await this.getQuoter(chainId);
 
     const fee = await this.findLowestFeePoolForPair(chainId, addressIn, addressOut);
     try {
@@ -225,12 +226,12 @@ export class UniswapProvider {
     }
   }
 
-  async quoteMultiHop({ chainId, amountIn, path }: { chainId: number, amountIn: bigint, path: Address[]; }): Promise<Quote> {
+  async quoteMultiHop({ chainId, amountIn, path }: { chainId: ChainId, amountIn: bigint, path: Address[]; }): Promise<Quote> {
     if (path.length < 2) {
       throw RelayerError.unknown('Path must contain at least 2 addresses');
     }
 
-    const quoterContract = this.getQuoter(chainId);
+    const quoterContract = await this.getQuoter(chainId);
 
     // Get token info for input and output
     const [tokenIn, tokenOut] = await Promise.all([
@@ -300,11 +301,13 @@ export class UniswapProvider {
     }
   }
 
-  async approvePermit2forERC20(tokenIn: `0x${string}`, chainId: number) {
+  async approvePermit2forERC20(tokenIn: `0x${string}`, chainId: ChainId) {
     //  0) - (this is done only once) - Approve Permit2 to move Relayer's ERC20
-    const relayer = privateKeyToAccount(getSignerPrivateKey(chainId) as `0x${string}`);
+    const config = new RelayerConfig().chain(chainId);
+    const pkey = await config.signerPrivateKey();
+    const relayer = privateKeyToAccount(pkey);
     const PERMIT2_ADDRESS = getPermit2Address(chainId);
-    const client = web3Provider.client(chainId);
+    const client = await web3Provider.client(chainId);
     const erc20 = getContract({
       abi: IERC20MinimalABI,
       address: tokenIn,
@@ -411,12 +414,14 @@ export class UniswapProvider {
   }: SwapWithRefundParams & { encodedPath: `0x${string}`; }): Promise<WriteContractParameters> {
 
     await this.approvePermit2forERC20(tokenIn, chainId);
+    const config = new RelayerConfig().chain(chainId);
 
     const minAmountOut = refundAmount;
     const ROUTER_ADDRESS = getRouterAddress(chainId);
     const PERMIT2_ADDRESS = getPermit2Address(chainId);
-    const relayer = privateKeyToAccount(getSignerPrivateKey(chainId) as `0x${string}`);
-    const client = web3Provider.client(chainId);
+    const pkey = await config.signerPrivateKey();
+    const relayer = privateKeyToAccount(pkey);
+    const client = await web3Provider.client(chainId);
 
     const router = getContract({
       abi: UniversalRouterABI,
@@ -436,7 +441,7 @@ export class UniswapProvider {
     });
 
     let instructions;
-    if (isFeeReceiverSameAsSigner(chainId)) {
+    if (await config.isFeeReceiverSameAsSigner()) {
       // If feeReceiver is the same as signer, moving coins around is easier
       instructions = UniswapProvider.createInstructionsIfFeeReceiverIsRelayer({
         relayer,
@@ -502,7 +507,7 @@ export class UniswapProvider {
 
   }
 
-  async findSingleOrMultiHopPath(chainId: number, tokenIn: `0x${string}`) {
+  async findSingleOrMultiHopPath(chainId: ChainId, tokenIn: `0x${string}`) {
     const weth = WRAPPED_NATIVE_TOKEN_ADDRESS[chainId]!;
 
     let path: (`0x${string}` | number)[] = [];
@@ -556,7 +561,7 @@ export class UniswapProvider {
     const path = await this.findSingleOrMultiHopPath(chainId, tokenIn);
     const encodedPath = encodePath(path);
     const writeContractParams = await this.simulateSwapExactInputForWeth({ ...params, encodedPath });
-    const relayer = web3Provider.signer(chainId);
+    const relayer = await web3Provider.signer(chainId);
     const txHash = await relayer.writeContract(writeContractParams);
     return txHash;
   }

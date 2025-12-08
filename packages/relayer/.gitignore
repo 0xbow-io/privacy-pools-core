@@ -1,5 +1,6 @@
 **/dist
 .npmrc
+*.tsbuildinfo
 
 ## Relayer configuration file
 config.json

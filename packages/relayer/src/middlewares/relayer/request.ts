@@ -1,8 +1,12 @@
 import { NextFunction, Request, Response } from "express";
 import { ValidationError } from "../../exceptions/base.exception.js";
-import { validateDetailsQuerystring } from "../../schemes/relayer/details.scheme.js";
-import { zRelayRequest } from "../../schemes/relayer/request.scheme.js";
-import { validateQuoteBody } from "../../schemes/relayer/quote.scheme.js";
+import { DetailsQuery, validateDetailsQuerystring } from "../../schemes/relayer/details.scheme.js";
+import { QuoteBody, validateQuoteBody } from "../../schemes/relayer/quote.scheme.js";
+import { RelayBody, validateRelayRequestBody } from "../../schemes/relayer/request.scheme.js";
+
+export interface DetailsRequest extends Request { parsedQuery: DetailsQuery };
+export interface RelayRequest extends Request { body: RelayBody };
+export interface QuoteRequest extends Request { body: QuoteBody };
 
 // Middleware to validate the details querying
 export function validateDetailsMiddleware(
@@ -10,13 +14,13 @@ export function validateDetailsMiddleware(
   res: Response,
   next: NextFunction,
 ) {
-  const isValid = validateDetailsQuerystring(req.query);
-  if (!isValid) {
-    const messages: string[] = [];
-    validateDetailsQuerystring.errors?.forEach(e => e?.message ? messages.push(e.message) : undefined);
-    next(ValidationError.invalidQuerystring({ message: messages.join("\n") }));
+  const result = validateDetailsQuerystring(req.query);
+  if (!result.success) {
+    const messages = result.errors?.filter(({message}) => message !== undefined).map(({message}) => message)
+    next(ValidationError.invalidQuerystring({ message: messages!.join("\n") }));
     return;
   }
+  (req as DetailsRequest).parsedQuery = result.data;
   next();
 }
 
@@ -26,14 +30,15 @@ export function validateRelayRequestMiddleware(
   res: Response,
   next: NextFunction,
 ) {
-  const { success, error } = zRelayRequest.safeParse(req.body);
-  if (!success) {
-    next(ValidationError.invalidInput({ message: error.errors.map(i => `${i.path.join('.')}: ${i.message}`).join("\n") }));
+  const result = validateRelayRequestBody(req.body);
+  if (!result.success) {
+    const messages = result.errors?.filter(({message}) => message !== undefined).map(({message}) => message)
+    next(ValidationError.invalidInput({ message: messages!.join("\n") }));
     return;
   }
+  req.body = result.data;
   next();
 }
-
 
 // Middleware to validate the quote
 export function validateQuoteMiddleware(
@@ -41,12 +46,12 @@ export function validateQuoteMiddleware(
   res: Response,
   next: NextFunction,
 ) {
-  const isValid = validateQuoteBody(req.body);
-  if (!isValid) {
-    const messages: string[] = [];
-    validateQuoteBody.errors?.forEach(e => e?.message ? messages.push(e.message) : undefined);
-    next(ValidationError.invalidInput({ message: messages.join("\n") }));
+  const result = validateQuoteBody(req.body);
+  if (!result.success) {
+    const messages = result.errors?.filter(({message}) => message !== undefined).map(({message}) => message)
+    next(ValidationError.invalidInput({ message: messages!.join("\n") }));
     return;
   }
+  req.body = result.data;
   next();
 }
