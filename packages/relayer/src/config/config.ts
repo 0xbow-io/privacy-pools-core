@@ -90,13 +90,12 @@ class ChainConfig extends ConfigReader {
     const defaultsFeeRecieverAddress = config.defaults?.fee_receiver_address;
     const configFeeRecieverAddress = chainConfig.fee_receiver_address;
     const envFeeRecieverAddress = process.env["FEE_RECIEVER_ADDRESS"];
-    logger.debug(">>>> fee_receiver_address", {
+    logger.debug("fee_receiver_address", {
       chain_id: this.chainId,
       defaultsFeeRecieverAddress,
       configFeeRecieverAddress,
       envFeeRecieverAddress
     });
-    logger.debug("<<<< chainConfig", chainConfig);
 
     const logPayload = (feeReceiver: string) => ({ chain_id: this.chainId, fee_receiver_address: feeReceiver });
 
@@ -125,12 +124,17 @@ class ChainConfig extends ConfigReader {
    * @throws {ConfigError} If the configuration is not initialized
    */
   async signerPrivateKey(): Promise<PrivateKey> {
-    const cr = new ConfigReader(this.filePath);
-    const config = await cr.parseConfig();
+    const [config, chainConfig] = await this.config();
 
     const defaultsSignerPrivateKey = config.defaults?.signer_private_key;
-    const configSignerPrivateKey = config.chains[this.chainId]?.signer_private_key;
+    const configSignerPrivateKey = chainConfig.signer_private_key;
     const envSignerPrivateKey = process.env["SIGNER_PRIVATE_KEY"] as PrivateKey | undefined;
+
+    logger.debug("signer_private_key", {
+      defaultsSignerPrivateKey: defaultsSignerPrivateKey === undefined,
+      configSignerPrivateKey: configSignerPrivateKey === undefined,
+      envSignerPrivateKey: envSignerPrivateKey === undefined
+    });
 
     const logPayload = () => ({ chain_id: this.chainId });
 
@@ -176,17 +180,17 @@ class ChainConfig extends ConfigReader {
 
   async max_gas_price(): Promise<bigint | undefined> {
     const [_, chainConfig] = await this.config();
-    return chainConfig.max_gas_price
+    return chainConfig.max_gas_price;
   }
 
   async rpc_url(): Promise<string> {
     const [_, chainConfig] = await this.config();
-    return chainConfig.rpc_url
+    return chainConfig.rpc_url;
   }
 
   async chain_name(): Promise<string> {
     const [_, chainConfig] = await this.config();
-    return chainConfig.chain_name
+    return chainConfig.chain_name;
   }
 
   /**
