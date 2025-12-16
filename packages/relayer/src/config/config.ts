@@ -69,13 +69,13 @@ class ChainConfig extends ConfigReader {
    * @returns {Promise<ChainConfig>} The parsed chain configuration object
    * @throws {ConfigError} If the configuration is not initialized
    */
-  async config(): Promise<RawChainConfig> {
+  async config(): Promise<[RawConfig, RawChainConfig]> {
     const config = await this.parseConfig();
-    const result = config.chains.find(chain => chain.chain_id === this.chainId);
-    if (result === undefined) {
+    const chainConfig = config.chains.find(chain => chain.chain_id === this.chainId);
+    if (chainConfig === undefined) {
       throw ConfigError.default(`ChainConfig for chain_id: ${this.chainId} not found`);
     }
-    return result;
+    return [config, chainConfig];
   }
 
   /**
@@ -85,11 +85,18 @@ class ChainConfig extends ConfigReader {
    * @throws {ConfigError} If the configuration is not initialized
    */
   async feeReceiverAddress(): Promise<Address> {
-    const config = await this.parseConfig();
+    const [config, chainConfig] = await this.config();
 
     const defaultsFeeRecieverAddress = config.defaults?.fee_receiver_address;
-    const configFeeRecieverAddress = config.chains[this.chainId]?.fee_receiver_address;
+    const configFeeRecieverAddress = chainConfig.fee_receiver_address;
     const envFeeRecieverAddress = process.env["FEE_RECIEVER_ADDRESS"];
+    logger.debug(">>>> fee_receiver_address", {
+      chain_id: this.chainId,
+      defaultsFeeRecieverAddress,
+      configFeeRecieverAddress,
+      envFeeRecieverAddress
+    });
+    logger.debug("<<<< chainConfig", chainConfig);
 
     const logPayload = (feeReceiver: string) => ({ chain_id: this.chainId, fee_receiver_address: feeReceiver });
 
@@ -151,8 +158,7 @@ class ChainConfig extends ConfigReader {
    * @returns {Address} The entrypoint address
    */
   async entrypointAddress(): Promise<Address> {
-    const chainConfig = await this.config();
-    const config = await this.parseConfig();
+    const [config, chainConfig] = await this.config();
     const entrypointAddress = chainConfig.entrypoint_address ?? config.defaults?.entrypoint_address;
     if (entrypointAddress === undefined) {
       throw ConfigError.default(`entrypoint_address for chain_id: ${this.chainId} not found`);
@@ -168,6 +174,21 @@ class ChainConfig extends ConfigReader {
     return feeReceiverAddress.toLowerCase() === signerAddress.toLowerCase();
   }
 
+  async max_gas_price(): Promise<bigint | undefined> {
+    const [_, chainConfig] = await this.config();
+    return chainConfig.max_gas_price
+  }
+
+  async rpc_url(): Promise<string> {
+    const [_, chainConfig] = await this.config();
+    return chainConfig.rpc_url
+  }
+
+  async chain_name(): Promise<string> {
+    const [_, chainConfig] = await this.config();
+    return chainConfig.chain_name
+  }
+
   /**
    * Gets the asset configuration for a specific asset address on a specific chain.
    * 
@@ -175,7 +196,7 @@ class ChainConfig extends ConfigReader {
    * @returns {Promise<[AssetConfig, undefined] | [undefined, string]>} The asset configuration or error message
    */
   async assetConfig(assetAddress: Address): Promise<[Readonly<AssetConfig>, undefined] | [undefined, string]> {
-    const chainConfig = await this.config();
+    const [_, chainConfig] = await this.config();
 
     logger.debug(`getting config for: ${assetAddress} on chain ${this.chainId}`);
 

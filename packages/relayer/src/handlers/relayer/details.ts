@@ -24,8 +24,6 @@ export async function relayerDetailsHandler(
 
     const chain = new RelayerConfig().chain(chainId)
 
-    const chainConfig = await chain.config();
-
     const feeReceiverAddress = await chain.feeReceiverAddress();
 
     const [assetConfig, error] = await chain.assetConfig(assetAddress);
@@ -42,7 +40,7 @@ export async function relayerDetailsHandler(
           feeBPS: assetConfig!.fee_bps,
           feeReceiverAddress,
           chainId,
-          maxGasPrice: chainConfig.max_gas_price,
+          maxGasPrice: await chain.max_gas_price(),
           assetAddress: assetAddress,
           minWithdrawAmount: assetConfig!.min_withdraw_amount
         })
