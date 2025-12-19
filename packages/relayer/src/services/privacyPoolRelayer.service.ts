@@ -69,13 +69,17 @@ export class PrivacyPoolRelayer {
 
       const isValidWithdrawalProof = await this.verifyProof(req.proof);
       if (!isValidWithdrawalProof) {
+        logger.error("Relay HandleRequest error: Invalid Proof")
         throw ZkError.invalidProof();
       }
 
       // We do early check, before relaying
       if (extraGas) {
-        if (!WRAPPED_NATIVE_TOKEN_ADDRESS[chainId])
-          throw RelayerError.unknown(`Missing wrapped native token for chain ${chainId}`);
+        if (!WRAPPED_NATIVE_TOKEN_ADDRESS[chainId]) {
+          const errorMsg = `Missing wrapped native token for chain ${chainId}`;
+          logger.error(errorMsg)
+          throw RelayerError.unknown(errorMsg);
+        }
       }
 
       const response = await this.broadcastWithdrawal(req, chainId);
@@ -153,9 +157,9 @@ export class PrivacyPoolRelayer {
     const chainConfig = new RelayerConfig().chain(chainId);
     const [ assetConfig, error ] = await chainConfig.assetConfig(assetAddress);
     if (error) {
+      logger.error(error)
       throw ConfigError.default(error);
     } 
-
 
     const { recipient, relayFeeBPS } = decodeWithdrawalData(withdrawal.data);
     const withdrawnValue = parseSignals(proof.publicSignals).withdrawnValue;
@@ -167,19 +171,20 @@ export class PrivacyPoolRelayer {
     const feeBase = withdrawnValue * assetConfig!.fee_bps / 10_000n;
 
     const relayerGasRefundValue = gasPrice * quoteService.extraGasTxCost + relayGasPrice * relayGasUsed;
+    const amountToSwap = feeGross - feeBase;
 
     const relayer = await web3Provider.signer(chainId);
 
     if (!relayer.account) {
       const error = "Send error: Signer account not found";
-      logger.error(error)
+      logger.error(error);
       throw Error(error);
     }
-
-    // TODO this is where swap would be:
+    
+    // send the user their extraGas funds
     const sendParams = {
       to: recipient as `0x${string}`,
-      value: relayerGasRefundValue,
+      value: feeGross, // TODO not sure??
       account: relayer.account,
       chain: relayer.chain
     };
@@ -205,6 +210,7 @@ export class PrivacyPoolRelayer {
     const chain = new RelayerConfig().chain(chainId);
     const [ assetConfig, error ] = await chain.assetConfig(assetAddress);
     if (error) {
+      logger.error(error);
       throw ConfigError.default(error);
     } 
     const feeReceiver = await chain.feeReceiverAddress();
@@ -256,6 +262,7 @@ export class PrivacyPoolRelayer {
     try {
       return await this.sdkProvider.broadcastWithdrawal(withdrawal, chainId);
     } catch (error) {
+      logger.error(error);
       if (isViemError(error)) {
         const { metaMessages, shortMessage } = error;
         throw BlockchainError.txError((metaMessages ? metaMessages[0] : undefined) || shortMessage);
@@ -293,37 +300,42 @@ export class PrivacyPoolRelayer {
     // If there's a fee commitment, then we use it's withdrawalData as source of truth to check against the proof.
     const withdrawalData = wp.feeCommitment ? wp.feeCommitment.withdrawalData : wp.withdrawal.data;
     if ((wp.feeCommitment !== undefined) && (wp.feeCommitment.withdrawalData !== wp.withdrawal.data)) {
-      throw WithdrawalValidationError.relayerCommitmentRejected(
-        `Signed commitment does not match withdrawal data, exiting early: commitment data ${wp.feeCommitment.withdrawalData}, request data ${wp.withdrawal.data}`,
-      );
+      const error = 
+        `Signed commitment does not match withdrawal data, exiting early: commitment data ${wp.feeCommitment.withdrawalData}, request data ${wp.withdrawal.data}`;
+      logger.error(error);
+      throw WithdrawalValidationError.relayerCommitmentRejected(error);
     }
 
     const { feeRecipient, relayFeeBPS } = decodeWithdrawalData(withdrawalData);
     const proofSignals = parseSignals(wp.proof.publicSignals);
 
-    if ((wp.feeCommitment !== undefined) && (wp.feeCommitment.amount !== proofSignals.withdrawnValue)) {
-      throw WithdrawalValidationError.withdrawnValueTooSmall(
-        `WithdrawnValue mismatch: expected "${wp.feeCommitment.amount}", got "${proofSignals.withdrawnValue}".`,
-      );
+    if ((wp.feeCommitment !== undefined) && (wp.feeCommitment.amount > proofSignals.withdrawnValue)) {
+      const error = 
+        `WithdrawnValue too small: expected "${wp.feeCommitment.amount}", got "${proofSignals.withdrawnValue}".`;
+      logger.error(error);
+      throw WithdrawalValidationError.withdrawnValueTooSmall(error);
     }
 
     if (wp.withdrawal.processooor !== entrypointAddress) {
-      throw WithdrawalValidationError.processooorMismatch(
-        `Processooor mismatch: expected "${entrypointAddress}", got "${wp.withdrawal.processooor}".`,
-      );
+      const error = 
+        `Processooor mismatch: expected "${entrypointAddress}", got "${wp.withdrawal.processooor}".`;
+      logger.error(error);
+      throw WithdrawalValidationError.processooorMismatch(error);
     }
 
     if (extraGas && !await chain.isFeeReceiverSameAsSigner()) {
       if (getAddress(feeRecipient) !== getAddress(signerAddress)) {
-        throw WithdrawalValidationError.feeReceiverMismatch(
-          `Fee recipient with extraGas mismatch: expected "${signerAddress}", got "${feeRecipient}".`,
-        );
+        const error = 
+          `Fee recipient with extraGas mismatch: expected "${signerAddress}", got "${feeRecipient}".`;
+        logger.error(error);
+        throw WithdrawalValidationError.feeReceiverMismatch(error);
       }
     } else {
       if (getAddress(feeRecipient) !== feeReceiverAddress) {
-        throw WithdrawalValidationError.feeReceiverMismatch(
-          `Fee recipient mismatch: expected "${feeReceiverAddress}", got "${feeRecipient}".`,
-        );
+        const error = 
+          `Fee recipient mismatch: expected "${feeReceiverAddress}", got "${feeRecipient}".`;
+        logger.error(error);
+        throw WithdrawalValidationError.feeReceiverMismatch(error);
       }
     }
 
@@ -331,9 +343,10 @@ export class PrivacyPoolRelayer {
       this.sdkProvider.calculateContext({ processooor: wp.withdrawal.processooor, data: withdrawalData }, wp.scope),
     );
     if (proofSignals.context !== withdrawalContext) {
-      throw WithdrawalValidationError.contextMismatch(
-        `Context mismatch: expected "${withdrawalContext.toString(16)}", got "${proofSignals.context.toString(16)}".`,
-      );
+      const error = 
+        `Context mismatch: expected "${withdrawalContext.toString(16)}", got "${proofSignals.context.toString(16)}".`;
+      logger.error(error);
+      throw WithdrawalValidationError.contextMismatch(error);
     }
 
     const { assetAddress } = await this.sdkProvider.scopeData(wp.scope, chainId);
@@ -342,35 +355,39 @@ export class PrivacyPoolRelayer {
     const [assetConfig, error]  = await chain.assetConfig(assetAddress);
 
     if (error) {
+      logger.error(error);
       throw WithdrawalValidationError.assetNotSupported(error);
     }
 
     if (wp.feeCommitment) {
 
       if (wp.feeCommitment.asset != assetAddress) {
-        throw WithdrawalValidationError.relayerCommitmentRejected(
-          `Asset in commitment does not match withdrawal scope asset: expected ${wp.feeCommitment.asset}, received ${assetAddress}`,
-        );
+        const error = 
+          `Asset in commitment does not match withdrawal scope asset: expected ${wp.feeCommitment.asset}, received ${assetAddress}`;
+        logger.error(error);
+        throw WithdrawalValidationError.relayerCommitmentRejected(error);
       }
 
       // TODO: remove this check beacuse we should already have errored out at the begining
       const { relayFeeBPS: commitmentRelayFeeBPS } = decodeWithdrawalData(wp.feeCommitment.withdrawalData);
       if (relayFeeBPS !== commitmentRelayFeeBPS) {
-        throw WithdrawalValidationError.relayerCommitmentRejected(
-          `Proof relay fee does not match signed commitment: pi:=${relayFeeBPS}, commitment:=${commitmentRelayFeeBPS}`,
-        );
+        const error = 
+          `Proof relay fee does not match signed commitment: pi:=${relayFeeBPS}, commitment:=${commitmentRelayFeeBPS}`;
+        logger.error(error);
+        throw WithdrawalValidationError.relayerCommitmentRejected(error);
       }
 
       if (commitmentExpired(wp.feeCommitment)) {
-        throw WithdrawalValidationError.relayerCommitmentRejected(
-          `Relay fee commitment expired, please quote again`,
-        );
+        const error = 
+          `Relay fee commitment expired, please quote again`;
+        logger.error(error);
+        throw WithdrawalValidationError.relayerCommitmentRejected(error);
       }
 
       if (!await validFeeCommitment(chainId, wp.feeCommitment)) {
-        throw WithdrawalValidationError.relayerCommitmentRejected(
-          `Invalid relayer commitment`,
-        );
+        const error = `Invalid relayer commitment`;
+        logger.error(error);
+        throw WithdrawalValidationError.relayerCommitmentRejected(error);
       }
 
     } else {
@@ -384,17 +401,19 @@ export class PrivacyPoolRelayer {
       });
 
       if (relayFeeBPS < currentFeeBPS.feeBPS) {
-        throw WithdrawalValidationError.feeTooLow(
-          `Relay fee too low: expected at least "${currentFeeBPS}", got "${relayFeeBPS}".`,
-        );
+        const error = 
+          `Relay fee too low: expected at least "${currentFeeBPS}", got "${relayFeeBPS}".`;
+        logger.error(error);
+        throw WithdrawalValidationError.feeTooLow(error);
       }
 
     }
 
     if (proofSignals.withdrawnValue < assetConfig!.min_withdraw_amount) {
-      throw WithdrawalValidationError.withdrawnValueTooSmall(
-        `Withdrawn value too small: expected minimum "${assetConfig!.min_withdraw_amount}", got "${proofSignals.withdrawnValue}".`,
-      );
+        const error = 
+          `Withdrawn value too small: expected minimum "${assetConfig!.min_withdraw_amount}", got "${proofSignals.withdrawnValue}".`;
+        logger.error(error);
+      throw WithdrawalValidationError.withdrawnValueTooSmall(error);
     }
 
   }
