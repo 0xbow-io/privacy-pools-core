@@ -26,6 +26,7 @@ import { WRAPPED_NATIVE_TOKEN_ADDRESS } from "../providers/uniswap/constants.js"
 import { Withdrawal, WithdrawalProof } from "@0xbow/privacy-pools-core-sdk";
 import { privateKeyToAccount } from "viem/accounts";
 import { ChainId } from "../types.js";
+import { createModuleLogger } from "../logger/index.js";
 
 /**
  * Class representing the Privacy Pool Relayer, responsible for processing withdrawal requests.
@@ -78,10 +79,10 @@ export class PrivacyPoolRelayer {
       }
 
       const response = await this.broadcastWithdrawal(req, chainId);
-      // const response = { hash: "0x" }
 
       let txSwap;
       if (extraGas) {
+        // TODO HERE MAN
         txSwap = await this.swapForNativeAndFund(req.scope, req.withdrawal, req.proof, chainId, response.hash);
       }
 
@@ -136,6 +137,58 @@ export class PrivacyPoolRelayer {
     }
   }
 
+  async fundExtraGas(scope: bigint, withdrawal: Withdrawal, proof: WithdrawalProof, chainId: ChainId, relayTx: string) {
+
+    const { assetAddress } = await this.sdkProvider.scopeData(scope, chainId);
+    if (isNative(assetAddress)) {
+      // this should NEVER EVER happen 
+      logger.error("Tried to send extraGas with native asset?????")
+      return;
+    }
+
+    const client = await web3Provider.client(chainId);
+    const relayReceipt = await client.waitForTransactionReceipt({ hash: relayTx as `0x${string}` });
+    const { gasUsed: relayGasUsed, effectiveGasPrice: relayGasPrice } = relayReceipt;
+
+    const chainConfig = new RelayerConfig().chain(chainId);
+    const [ assetConfig, error ] = await chainConfig.assetConfig(assetAddress);
+    if (error) {
+      throw ConfigError.default(error);
+    } 
+
+
+    const { recipient, relayFeeBPS } = decodeWithdrawalData(withdrawal.data);
+    const withdrawnValue = parseSignals(proof.publicSignals).withdrawnValue;
+    const gasPrice = await web3Provider.getGasPrice(chainId);
+
+    // don't need any of these three since we are keeping the diff?
+    const feeReceiver = await chainConfig.feeReceiverAddress(); 
+    const feeGross = withdrawnValue * relayFeeBPS / 10_000n;
+    const feeBase = withdrawnValue * assetConfig!.fee_bps / 10_000n;
+
+    const relayerGasRefundValue = gasPrice * quoteService.extraGasTxCost + relayGasPrice * relayGasUsed;
+
+    const relayer = await web3Provider.signer(chainId);
+
+    if (!relayer.account) {
+      const error = "Send error: Signer account not found";
+      logger.error(error)
+      throw Error(error);
+    }
+
+    // TODO this is where swap would be:
+    const sendParams = {
+      to: recipient as `0x${string}`,
+      value: relayerGasRefundValue,
+      account: relayer.account,
+      chain: relayer.chain
+    };
+
+    const txHash = await relayer.sendTransaction(sendParams);
+    
+    return txHash;
+  }
+
   async swapForNativeAndFund(scope: bigint, withdrawal: Withdrawal, proof: WithdrawalProof, chainId: ChainId, relayTx: string) {
 
     const { assetAddress } = await this.sdkProvider.scopeData(scope, chainId);
@@ -165,7 +218,6 @@ export class PrivacyPoolRelayer {
     const relayerGasRefundValue = gasPrice * quoteService.extraGasTxCost + relayGasPrice * relayGasUsed;
 
     const txHash = await this.uniswapProvider.swapExactInputForWeth({
-    // const txHash = await cowProvider.swapExactInputForWeth({ //TODO swaps are arbitrum for now 
       chainId,
       feeGross,
       feeBase,
@@ -348,6 +400,8 @@ export class PrivacyPoolRelayer {
   }
 
 }
+
+const logger = createModuleLogger(PrivacyPoolRelayer);
 
 function commitmentExpired(feeCommitment: FeeCommitment): boolean {
   return feeCommitment.expiration < Number(new Date());

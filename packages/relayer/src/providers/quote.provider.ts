@@ -70,7 +70,6 @@ export class QuoteProvider {
         getAddress(addressIn) === getAddress(FXUSD_ADDRESS)
       )
     ) {
-      console.log("quoting native token in USDC")
       return this.quoteNativeTokenInStablesUniswap(chainId, amountIn);
     } else if (chainId === 1 && getAddress(addressIn) === getAddress(WOETH_ADDRESS)) {
       return this.quoteNativeTokenInWoeth(chainId, addressIn, amountIn);
