@@ -94,7 +94,7 @@ export async function relayRequestHandler(
 
     const { recipient, relayFeeBPS } = decodeWithdrawalData(withdrawalPayload.withdrawal.data);
     const feeCommitment = withdrawalPayload.feeCommitment!;
-    const [assetConfig, _] = await chain.assetConfig(feeCommitment.asset);
+    const assetConfig = await chain.assetConfig(feeCommitment.asset);
 
     const logPayload = {
       chain_id: chainId,
@@ -106,7 +106,7 @@ export async function relayRequestHandler(
 
     logger.info("Request generated", logPayload);
 
-    if (relayFeeBPS >= assetConfig!.fee_bps * 2n) {
+    if (relayFeeBPS >= assetConfig.fee_bps * 2n) {
       logger.warn(
         "Generated quote might be too high for requested amount",
         logPayload

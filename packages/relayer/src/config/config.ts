@@ -197,17 +197,17 @@ class ChainConfig extends ConfigReader {
    * Gets the asset configuration for a specific asset address on a specific chain.
    * 
    * @param {Address} assetAddress - The asset address
-   * @returns {Promise<[AssetConfig, undefined] | [undefined, string]>} The asset configuration or error message
+   * @returns {Promise<AssetConfig>} The asset configuration
    */
-  async assetConfig(assetAddress: Address): Promise<[Readonly<AssetConfig>, undefined] | [undefined, string]> {
+  async assetConfig(assetAddress: Address): Promise<Readonly<AssetConfig>> {
     const [_, chainConfig] = await this.config();
 
     logger.debug(`getting config for: ${assetAddress} on chain ${this.chainId}`);
 
     if (!chainConfig.supported_assets) {
-      const err = "No supported assets found in config";
+      const err = `No supported assets found in config for chain ${this.chainId}`;
       logger.error(err);
-      return [undefined, err];
+      throw ConfigError.unsupportedAsset({message: err});
     }
 
     const assetConfig = chainConfig.supported_assets.find(
@@ -217,10 +217,10 @@ class ChainConfig extends ConfigReader {
     if (assetConfig === undefined) {
       const err = `Asset not supported: ${assetAddress} on chain ${this.chainId}`;
       logger.warn(err);
-      return [undefined, err];
+      throw ConfigError.unsupportedAsset({message: err});
     }
 
-    return [assetConfig, undefined];
+    return assetConfig;
   }
 
   /**

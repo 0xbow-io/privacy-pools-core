@@ -29,6 +29,9 @@
     "lint": "eslint \"{src,test}/**/*.{js,ts,json}\"",
     "lint:fix": "eslint \"{src,test}/**/*.{js,ts,json}\" --fix",
     "test": "vitest run --config vitest.config.ts --passWithNoTests",
+    "test:details": "vitest run test/routes/details.test.ts --config vitest.config.ts",
+    "test:quote": "vitest run test/routes/quote.test.ts --config vitest.config.ts",
+    "test:relay": "vitest run test/routes/relay.test.ts --config vitest.config.ts",
     "test:cov": "vitest run --config vitest.config.ts --coverage",
     "docker:build": "cd ../circuits && yarn present && cd ../relayer && docker-compose build --no-cache",
     "docker:run": "docker-compose up"

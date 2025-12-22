@@ -166,6 +166,15 @@ export class ConfigError extends RelayerError {
   }
 
   /**
+   * Creates an error for unsupported asset validation failures.
+   */
+  public static unsupportedAsset(
+    details?: Record<string, unknown> | string,
+  ): ConfigError {
+    return new ConfigError("Asset not supported", ErrorCode.ASSET_NOT_SUPPORTED, details);
+  }
+
+  /**
    * Creates an error for gas price spikes
    */
   public static maxGasPrice(

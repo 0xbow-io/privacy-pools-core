@@ -86,8 +86,9 @@ export class PrivacyPoolRelayer {
 
       let txSwap;
       if (extraGas) {
-        // TODO HERE MAN
-        txSwap = await this.swapForNativeAndFund(req.scope, req.withdrawal, req.proof, chainId, response.hash);
+        // TODO HERE
+        txSwap = await this.sendExtraGas(req.scope, req.withdrawal, req.proof, chainId, response.hash);
+        // txSwap = await this.swapForNativeAndFund(req.scope, req.withdrawal, req.proof, chainId, response.hash);
       }
 
       await this.db.updateBroadcastedRequest(requestId, response.hash);
@@ -141,7 +142,7 @@ export class PrivacyPoolRelayer {
     }
   }
 
-  async fundExtraGas(scope: bigint, withdrawal: Withdrawal, proof: WithdrawalProof, chainId: ChainId, relayTx: string) {
+  async sendExtraGas(scope: bigint, withdrawal: Withdrawal, proof: WithdrawalProof, chainId: ChainId, relayTx: string) {
 
     const { assetAddress } = await this.sdkProvider.scopeData(scope, chainId);
     if (isNative(assetAddress)) {
@@ -155,23 +156,24 @@ export class PrivacyPoolRelayer {
     const { gasUsed: relayGasUsed, effectiveGasPrice: relayGasPrice } = relayReceipt;
 
     const chainConfig = new RelayerConfig().chain(chainId);
-    const [ assetConfig, error ] = await chainConfig.assetConfig(assetAddress);
-    if (error) {
-      logger.error(error)
-      throw ConfigError.default(error);
-    } 
+    const assetConfig = await chainConfig.assetConfig(assetAddress);
+
 
     const { recipient, relayFeeBPS } = decodeWithdrawalData(withdrawal.data);
     const withdrawnValue = parseSignals(proof.publicSignals).withdrawnValue;
     const gasPrice = await web3Provider.getGasPrice(chainId);
 
     // don't need any of these three since we are keeping the diff?
-    const feeReceiver = await chainConfig.feeReceiverAddress(); 
-    const feeGross = withdrawnValue * relayFeeBPS / 10_000n;
-    const feeBase = withdrawnValue * assetConfig!.fee_bps / 10_000n;
+    // const feeReceiver = await chainConfig.feeReceiverAddress(); 
+    const feeGross = withdrawnValue * relayFeeBPS / 10_000n; // full extra gas amount
+    const feeBase = withdrawnValue * assetConfig.fee_bps / 10_000n; // relay fee
 
     const relayerGasRefundValue = gasPrice * quoteService.extraGasTxCost + relayGasPrice * relayGasUsed;
-    const amountToSwap = feeGross - feeBase;
+    const amountToSend = feeGross - feeBase - relayerGasRefundValue; 
+    // TODO I think this is the correct amount
+    // since the refund is supposed to be kept by relayer
+    // we have to remove it from the grossFeeBPS, 
+    // along with the base fee from the previous relay 
 
     const relayer = await web3Provider.signer(chainId);
 
@@ -183,8 +185,8 @@ export class PrivacyPoolRelayer {
     
     // send the user their extraGas funds
     const sendParams = {
-      to: recipient as `0x${string}`,
-      value: feeGross, // TODO not sure??
+      to: recipient,
+      value: amountToSend,
       account: relayer.account,
       chain: relayer.chain
     };
@@ -208,18 +210,14 @@ export class PrivacyPoolRelayer {
 
 
     const chain = new RelayerConfig().chain(chainId);
-    const [ assetConfig, error ] = await chain.assetConfig(assetAddress);
-    if (error) {
-      logger.error(error);
-      throw ConfigError.default(error);
-    } 
+    const assetConfig = await chain.assetConfig(assetAddress);
     const feeReceiver = await chain.feeReceiverAddress();
     const { recipient, relayFeeBPS } = decodeWithdrawalData(withdrawal.data);
     const withdrawnValue = parseSignals(proof.publicSignals).withdrawnValue;
     const gasPrice = await web3Provider.getGasPrice(chainId);
 
     const feeGross = withdrawnValue * relayFeeBPS / 10_000n;
-    const feeBase = withdrawnValue * assetConfig!.fee_bps / 10_000n;
+    const feeBase = withdrawnValue * assetConfig.fee_bps / 10_000n;
 
     const relayerGasRefundValue = gasPrice * quoteService.extraGasTxCost + relayGasPrice * relayGasUsed;
 
@@ -352,12 +350,7 @@ export class PrivacyPoolRelayer {
     const { assetAddress } = await this.sdkProvider.scopeData(wp.scope, chainId);
 
     // Get asset configuration for this chain and asset
-    const [assetConfig, error]  = await chain.assetConfig(assetAddress);
-
-    if (error) {
-      logger.error(error);
-      throw WithdrawalValidationError.assetNotSupported(error);
-    }
+    const assetConfig = await chain.assetConfig(assetAddress);
 
     if (wp.feeCommitment) {
 
@@ -396,7 +389,7 @@ export class PrivacyPoolRelayer {
         chainId,
         amountIn: proofSignals.withdrawnValue,
         assetAddress,
-        baseFeeBPS: assetConfig!.fee_bps,
+        baseFeeBPS: assetConfig.fee_bps,
         extraGas
       });
 
@@ -409,9 +402,9 @@ export class PrivacyPoolRelayer {
 
     }
 
-    if (proofSignals.withdrawnValue < assetConfig!.min_withdraw_amount) {
+    if (proofSignals.withdrawnValue < assetConfig.min_withdraw_amount) {
         const error = 
-          `Withdrawn value too small: expected minimum "${assetConfig!.min_withdraw_amount}", got "${proofSignals.withdrawnValue}".`;
+          `Withdrawn value too small: expected minimum "${assetConfig.min_withdraw_amount}", got "${proofSignals.withdrawnValue}".`;
         logger.error(error);
       throw WithdrawalValidationError.withdrawnValueTooSmall(error);
     }

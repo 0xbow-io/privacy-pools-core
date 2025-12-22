@@ -33,11 +33,13 @@ export async function relayQuoteHandler(
     const amountIn = req.body.amount;
     const asset = req.body.asset;
     let extraGas = Boolean(req.body.extraGas);
+ 
+    logger.info("Quote generated", {
+
+    });
 
     const chain = new RelayerConfig().chain(chainId);
-    const [assetConfig, _] = await chain.assetConfig(asset);
-    if (assetConfig === undefined)
-      return next(QuoterError.assetNotSupported(`Asset ${asset} for chain ${chainId} is not supported`));
+    const assetConfig = await chain.assetConfig(asset);
 
     if (isNative(asset)) {
       extraGas = false;
