@@ -1,29 +1,10 @@
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
 import { ASSET_NOT_SUPPORTED_ERROR_BODY, INVALID_ERROR_BODY, INVALID_ERROR_PARAMS } from '../inputs/errors.js';
 import { App } from 'supertest/types.js';
 import { createApp } from '../../src/app.js';
 import { originalConfig } from '../inputs/originalConfig.js';
-import { JSONStringifyBigInt } from '../../src/utils.js';
 import { getAddress } from 'viem';
-
-// mock readConfig to return our test data instead of reading from filesystem
-vi.mock('node:fs/promises', () => ({
-  access: vi.fn().mockResolvedValue(undefined),
-  readFile: vi.fn().mockImplementation(() => {
-    // adapt TestConfig to RawConfig format by adding defaults
-    const adaptedConfig = {
-      ...originalConfig,
-      defaults: {
-        fee_receiver_address: originalConfig.chains[0].fee_receiver_address,
-        signer_private_key: originalConfig.chains[0].signer_private_key,
-        entrypoint_address: originalConfig.chains[0].entrypoint_address
-      }
-    };
-    return Promise.resolve(JSONStringifyBigInt(adaptedConfig));
-  }),
-  writeFile: vi.fn().mockResolvedValue(undefined)
-}));
 
 
 describe.each(originalConfig.chains)('Details Route - Chain $chain_name ($chain_id)', (chainConfig) => {

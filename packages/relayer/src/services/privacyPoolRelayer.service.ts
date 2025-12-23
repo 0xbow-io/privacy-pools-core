@@ -169,7 +169,25 @@ export class PrivacyPoolRelayer {
     const feeBase = withdrawnValue * assetConfig.fee_bps / 10_000n; // relay fee
 
     const relayerGasRefundValue = gasPrice * quoteService.extraGasTxCost + relayGasPrice * relayGasUsed;
-    const amountToSend = feeGross - feeBase - relayerGasRefundValue; 
+    const amountToSend = feeGross - feeBase - relayerGasRefundValue; //TODO value send should always be the same 
+
+    // relay -> total spent relaying = x gwei
+    //
+    // (fee with extra gas on)   100 USDC       feeBPS  decimals  = grossFeeAmount
+    // feeGross =               100_000_000  *   650  / 10_000   = y USDC 
+    //
+    // (relay cost)                                               = relayFeeAmount
+    // feeBase =                100_000_000   *   50  / 10_000   = z USDC
+    //
+    // (cost of send tx)
+    // relayerGasRefundValue = (gas price in wei) * (gwei for tx) + (relay gas price) * (relay gas used)
+    //
+    // rn actual cost of sending = total fee - relay cost - send tx cost 
+    //
+    // so maybe it should actually be:
+    //
+    // const amountToSend = feeGross - feeBase - relayerGasRefundValue; //TODO value send should always be the same 
+
     // TODO I think this is the correct amount
     // since the refund is supposed to be kept by relayer
     // we have to remove it from the grossFeeBPS, 

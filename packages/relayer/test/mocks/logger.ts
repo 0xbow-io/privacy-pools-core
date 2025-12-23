@@ -10,7 +10,7 @@ export const mockLogger = {
 };
 
 // Mock the logger module
-vi.mock('../../src/utils/logger.js', () => ({
-  logger: mockLogger,
+vi.mock('../../src/logger/index.js', () => ({
+  createModuleLogger: vi.fn(() => mockLogger),
   default: mockLogger,
 }));

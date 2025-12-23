@@ -12,3 +12,8 @@ export const ASSET_NOT_SUPPORTED_ERROR_BODY = {
   code: "ASSET_NOT_SUPPORTED",
   message: "Asset not supported",
 }
+
+export const QUOTER_ERROR_BODY = {
+  code: "ASSET_NOT_SUPPORTED",
+  message: "Asset not supported",
+}

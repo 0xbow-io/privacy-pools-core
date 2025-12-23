@@ -175,7 +175,7 @@ export const chainOptimismSepolia =
       },
       {
         "asset_address": "0x4200000000000000000000000000000000000006",
-        "asset_name": "ETH",
+        "asset_name": "WETH",
         "fee_bps": "10",
         "min_withdraw_amount": "0"
       }
@@ -201,7 +201,7 @@ export const chainOptimismMainnet =
         },
         {
           "asset_address": "0x4200000000000000000000000000000000000006",
-          "asset_name": "ETH",
+          "asset_name": "WETH",
           "fee_bps": "10",
           "min_withdraw_amount": "0"
         }
@@ -253,7 +253,7 @@ export const chainBaseMainnet =
       },
       {
         "asset_address": "0x4200000000000000000000000000000000000006",
-        "asset_name": "ETH",
+        "asset_name": "WETH",
         "fee_bps": "10",
         "min_withdraw_amount": "0"
       }
@@ -279,7 +279,7 @@ export const chainArbitrumMainnet =
       },
       {
         "asset_address": "0x4200000000000000000000000000000000000006",
-        "asset_name": "ETH",
+        "asset_name": "WETH",
         "fee_bps": "10",
         "min_withdraw_amount": "0"
       },
