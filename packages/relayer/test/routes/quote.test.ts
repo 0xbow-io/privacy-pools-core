@@ -107,6 +107,23 @@ describe.each(originalConfig.chains)('Quote Route - Chain $chain_name ($chain_id
       expect(response.body.detail.relayTxCost).toBeDefined();
     });
 
+    it('handles request with no extraGas', async () => {
+      const response = await request(app)
+        .post('/relayer/quote')
+        .send({
+          chainId: VALID_CHAIN_ID,
+          asset: VALID_ASSET.asset_address,
+          amount: "1234"
+        });
+
+      expect(response.status).toBe(200); // extraGas is optional
+      expect(response.body.baseFeeBPS).toBeDefined();
+      expect(response.body.feeBPS).toBeDefined();
+      expect(response.body.feeCommitment).toBeUndefined();
+      expect(response.body.detail).toBeDefined();
+      expect(response.body.detail.relayTxCost).toBeDefined();
+    });
+
   });
 
   describe.concurrent('crappy-path', () => {
@@ -149,20 +166,6 @@ describe.each(originalConfig.chains)('Quote Route - Chain $chain_name ($chain_id
       expect(response.body.details.message).toBe(detailsMessage);
     });
 
-    it('handles request with no extraGas', async () => {
-      const response = await request(app)
-        .post('/relayer/quote')
-        .send({
-          chainId: VALID_CHAIN_ID,
-          asset: VALID_ASSET.asset_address,
-          amount: "1234"
-        });
-
-      expect(response.status).toBe(200); // extraGas is optional
-
-      expect(response.body.feeCommitment).toBeDefined();
-      expect(response.body.detail).toBeDefined();
-    });
 
     it('handles request with no amount', async () => {
       const response = await request(app)
