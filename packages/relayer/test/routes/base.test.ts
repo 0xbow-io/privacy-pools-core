@@ -12,13 +12,13 @@ describe.concurrent('Base Route', () => {
   });
 
   describe.concurrent('GET /', () => {
-    it('should return method not available message', async () => {
+    it('should return route not found', async () => {
       const response = await request(app)
         .get('/')
-        .expect(405);
+        .expect(404);
 
       expect(response.body).toEqual({
-        error: "Method not available, try '/details', '/relay', '/quote'",
+        error: "Route not found",
       });
     });
   });
