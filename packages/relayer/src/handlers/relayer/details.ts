@@ -52,7 +52,6 @@ export async function relayerDetailsHandler(
 
     next();
   } catch (error) {
-    console.error(error);
     next(error);
   }
 }

@@ -167,7 +167,6 @@ export async function relayQuoteHandler(
 
     res.status(200).json(res.locals.marshalResponse(quoteResponse));
   } catch (error) {
-    console.error(error);
     next(error);
   }
 }

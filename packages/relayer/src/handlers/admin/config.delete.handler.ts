@@ -33,7 +33,6 @@ export async function configDeleteHandler(
 
     next();
   } catch (error) {
-    console.error('Error in configDeleteHandler:', error);
     next(error);
   }
 }

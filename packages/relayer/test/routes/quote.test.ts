@@ -242,9 +242,9 @@ describe.each(originalConfig.chains)('Quote Route - Chain $chain_name ($chain_id
         details: "Unexpected token 'i', \"invalid json\" is not valid JSON"
       };
 
-      expect(response.status).toBe(500);
+      expect(response.status).toBe(400);
       expect(response.body.message).toBe(jsonError.message);
-      expect(response.body.body).toBe(jsonError.details);
+      expect(response.body.details).toBe(jsonError.details);
     });
 
     it('handles value for non configured asset', async () => {

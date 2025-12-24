@@ -33,7 +33,6 @@ export async function configUpdateHandler(
 
     next();
   } catch (error) {
-    console.error('Error in configUpdateHandler:', error);
     next(error);
   }
 }

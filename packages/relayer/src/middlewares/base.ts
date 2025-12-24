@@ -55,6 +55,12 @@ export function errorHandlerMiddleware(
       // Handle other RelayerError types
       res.status(400).json({ error: err.toJSON() });
     }
+  } else if (err instanceof SyntaxError && 'type' in err && err.type === 'entity.parse.failed') {
+    // Handle JSON parsing errors from body-parser
+    res.status(400).json({ 
+      message: "Invalid JSON format",
+      details: err.message 
+    });
   } else {
     res.status(500).json({ error: "Internal Server Error" });
   }
