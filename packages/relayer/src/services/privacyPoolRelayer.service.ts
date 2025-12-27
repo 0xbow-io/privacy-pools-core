@@ -310,6 +310,13 @@ export class PrivacyPoolRelayer {
         );
       }
 
+      // Verify the fee commitment was generated for this exact withdrawal data
+      if (wp.feeCommitment.withdrawalData !== wp.withdrawal.data) {
+        throw WithdrawalValidationError.relayerCommitmentRejected(
+          `Fee commitment withdrawal data mismatch: commitment was generated for different withdrawal parameters`,
+        );
+      }
+
     } else {
 
       const currentFeeBPS = await quoteService.quoteFeeBPSNative({
