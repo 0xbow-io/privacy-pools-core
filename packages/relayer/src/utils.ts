@@ -18,6 +18,7 @@ import {
 } from "./interfaces/relayer/request.js";
 import { FeeDataAbi } from "./types/abi.types.js";
 import { ChainId } from "./types.js";
+import { RelayerConfig } from "./config/config.js";
 
 
 export const JSONStringifyBigInt = (json_string: object) => {
@@ -80,6 +81,17 @@ export function parseSignals(
     ASPTreeDepth: BigInt(signals[6]!),
     context: BigInt(signals[7]!),
   };
+}
+
+export async function createChainObjectFromBrandedChainId(chainId: ChainId) {
+  const config = new RelayerConfig().chain(chainId);
+  const [chain_name, rpc_url] = await Promise.all([
+    config.chain_name(),
+    config.rpc_url()
+  ]);
+  return createChainObject({
+    chain_id: config.chainId as ChainId, chain_name, rpc_url
+  });
 }
 
 /**

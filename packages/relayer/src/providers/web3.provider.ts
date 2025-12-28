@@ -2,8 +2,8 @@ import { createPublicClient, createWalletClient, http, PublicClient, verifyTyped
 import { privateKeyToAccount } from "viem/accounts";
 import { RelayerConfig } from "../config/index.js";
 import { FeeCommitment } from "../interfaces/relayer/common.js";
-import { createChainObject } from "../utils.js";
 import { ChainId } from "../types.js";
+import { createChainObjectFromBrandedChainId } from "../utils.js";
 
 interface IWeb3Provider {
   client(chainId: ChainId): Promise<PublicClient>;
@@ -30,18 +30,16 @@ const RelayerCommitmentTypes = {
  * Class representing the provider for interacting with several chains
  */
 export class Web3Provider implements IWeb3Provider {
-  constructor() {}
+  constructor() { }
 
   /*
    * Create a Client object for a specific chainId
    *
    **/
   async client(chainId: ChainId): Promise<PublicClient> {
-    const config = new RelayerConfig();
-    const chainConfig = await config.chain(chainId).config();
-    const chain = createChainObject(chainConfig); 
-    const client = createPublicClient({ 
-      chain, 
+    const chain = await createChainObjectFromBrandedChainId(chainId);
+    const client = createPublicClient({
+      chain,
       transport: http(chain.rpcUrls.default.http[0])
     });
     if (client === undefined) {
@@ -52,18 +50,17 @@ export class Web3Provider implements IWeb3Provider {
 
   async signer(chainId: ChainId): Promise<WalletClient> {
     const config = new RelayerConfig().chain(chainId);
-    const chainConfig = await config.config();
-    const chain = createChainObject(chainConfig);  
+    const chainObject = await createChainObjectFromBrandedChainId(chainId);
     const pkey = await config.signerPrivateKey();
     const account = privateKeyToAccount(pkey);
     const signer = createWalletClient({
       account,
-      chain,
-      transport: http(chain.rpcUrls.default.http[0])
+      chain: chainObject,
+      transport: http(chainObject.rpcUrls.default.http[0])
     });
     if (signer === undefined) {
       throw Error(`Web3ProviderError::UnsupportedChainId(${chainId})`);
-    } 
+    }
     else return signer;
   }
 

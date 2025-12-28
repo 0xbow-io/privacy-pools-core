@@ -7,18 +7,18 @@ import {
   Circuits,
   ContractInteractionsService,
   PrivacyPoolSDK,
+  SDKError,
   Withdrawal,
   WithdrawalProof,
-  SDKError,
   type Hash,
 } from "@0xbow/privacy-pools-core-sdk";
 import { Address } from "viem";
 import { RelayerConfig } from "../config/index.js";
+import { ConfigError, RelayerError, SdkError } from "../exceptions/base.exception.js";
 import { WithdrawalPayload } from "../interfaces/relayer/request.js";
-import { RelayerError, SdkError, ConfigError } from "../exceptions/base.exception.js";
-import { SdkProviderInterface } from "../types/sdk.types.js";
-import { createChainObject } from "../utils.js";
 import { ChainId } from "../types.js";
+import { SdkProviderInterface } from "../types/sdk.types.js";
+import { createChainObjectFromBrandedChainId } from "../utils.js";
 
 /**
  * Class representing the SDK provider for interacting with Privacy Pool SDK.
@@ -26,7 +26,7 @@ import { ChainId } from "../types.js";
 export class SdkProvider implements SdkProviderInterface {
   /** Instance of the PrivacyPoolSDK. */
   private sdk: PrivacyPoolSDK;
-  
+
   /**
    * Initializes a new instance of the SDK provider.
    */
@@ -43,15 +43,15 @@ export class SdkProvider implements SdkProviderInterface {
    */
   private async getContractsForChain(chainId: ChainId): Promise<ContractInteractionsService> {
     const config = new RelayerConfig().chain(chainId);
-    const chainConfig = await config.config();
-    const chain = createChainObject(chainConfig);
+    const chainObject = await createChainObjectFromBrandedChainId(chainId);
+    const rpcUrl = await config.rpc_url();
     const entrypointAddress = await config.entrypointAddress();
     const signerPrivateKey = await config.entrypointAddress();
 
     // Create contract instance
     const contracts = this.sdk.createContractInstance(
-      chainConfig.rpc_url,
-      chain,
+      rpcUrl,
+      chainObject,
       entrypointAddress,
       signerPrivateKey,
     );
@@ -82,7 +82,7 @@ export class SdkProvider implements SdkProviderInterface {
   async broadcastWithdrawal(
     withdrawalPayload: WithdrawalPayload,
     chainId: ChainId,
-  ): Promise<{ hash: string }> {
+  ): Promise<{ hash: string; }> {
     const contracts = await this.getContractsForChain(chainId);
     return contracts.relay(
       withdrawalPayload.withdrawal,
@@ -112,7 +112,7 @@ export class SdkProvider implements SdkProviderInterface {
   async scopeData(
     scope: bigint,
     chainId: ChainId,
-  ): Promise<{ poolAddress: Address; assetAddress: Address }> {
+  ): Promise<{ poolAddress: Address; assetAddress: Address; }> {
     try {
       const contracts = await this.getContractsForChain(chainId);
       const data = await contracts.getScopeData(scope);

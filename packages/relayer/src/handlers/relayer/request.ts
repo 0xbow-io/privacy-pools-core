@@ -75,8 +75,7 @@ export async function relayRequestHandler(
     const { payload: withdrawalPayload, chainId } = await parseWithdrawal(req.body);
 
     const chain = new RelayerConfig().chain(chainId);
-    const config = await chain.config();
-    const maxGasPrice = config.max_gas_price;
+    const maxGasPrice = await chain.max_gas_price();
     const currentGasPrice = await web3Provider.getGasPrice(chainId);
 
     // XXX: Block extraGas for EXCEPTION_TOKENS
