@@ -251,9 +251,9 @@ export class PrivacyPoolRelayer {
     const { feeRecipient, relayFeeBPS } = decodeWithdrawalData(withdrawalData);
     const proofSignals = parseSignals(wp.proof.publicSignals);
 
-    if ((wp.feeCommitment !== undefined) && (wp.feeCommitment.amount > proofSignals.withdrawnValue)) {
+    if ((wp.feeCommitment !== undefined) && (wp.feeCommitment.amount !== proofSignals.withdrawnValue)) {
       throw WithdrawalValidationError.withdrawnValueTooSmall(
-        `WithdrawnValue too small: expected "${wp.feeCommitment.amount}", got "${proofSignals.withdrawnValue}".`,
+        `WithdrawnValue mismatch: expected "${wp.feeCommitment.amount}", got "${proofSignals.withdrawnValue}".`,
       );
     }
 
