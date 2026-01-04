@@ -87,7 +87,7 @@ export class PrivacyPoolRelayer {
       let txSwap;
       if (extraGas) {
         // TODO HERE
-        txSwap = await this.sendExtraGas(req.scope, req.withdrawal, req.proof, chainId, response.hash);
+        txSwap = await this.sendExtraGas(req.scope, req.withdrawal, req.proof, chainId, response.hash, req.feeCommitment!);
         // txSwap = await this.swapForNativeAndFund(req.scope, req.withdrawal, req.proof, chainId, response.hash);
       }
 
@@ -163,35 +163,22 @@ export class PrivacyPoolRelayer {
     const withdrawnValue = parseSignals(proof.publicSignals).withdrawnValue;
     const gasPrice = await web3Provider.getGasPrice(chainId);
 
-    // don't need any of these three since we are keeping the diff?
-    // const feeReceiver = await chainConfig.feeReceiverAddress(); 
     const feeGross = withdrawnValue * relayFeeBPS / 10_000n; // full extra gas amount
     const feeBase = withdrawnValue * assetConfig.fee_bps / 10_000n; // relay fee
-
+    
     const relayerGasRefundValue = gasPrice * quoteService.extraGasTxCost + relayGasPrice * relayGasUsed;
-    const amountToSend = feeGross - feeBase - relayerGasRefundValue; //TODO value send should always be the same 
+    const relayTxCost = relayerGasRefundValue; // TODO this might not be right 
 
-    // relay -> total spent relaying = x gwei
-    //
-    // (fee with extra gas on)   100 USDC       feeBPS  decimals  = grossFeeAmount
-    // feeGross =               100_000_000  *   650  / 10_000   = y USDC 
-    //
-    // (relay cost)                                               = relayFeeAmount
-    // feeBase =                100_000_000   *   50  / 10_000   = z USDC
-    //
-    // (cost of send tx)
-    // relayerGasRefundValue = (gas price in wei) * (gwei for tx) + (relay gas price) * (relay gas used)
-    //
-    // rn actual cost of sending = total fee - relay cost - send tx cost 
-    //
-    // so maybe it should actually be:
-    //
-    // const amountToSend = feeGross - feeBase - relayerGasRefundValue; //TODO value send should always be the same 
+    const sendGasUnits = 21000n; // we're just doing ETH send, but ERC-20 token transfers typically cost 50,000–65,000 gas units
+    const sendTxCost = gasPrice * sendGasUnits;
 
-    // TODO I think this is the correct amount
-    // since the refund is supposed to be kept by relayer
-    // we have to remove it from the grossFeeBPS, 
-    // along with the base fee from the previous relay 
+    const q = 1n; // TODO: fully quoted TOKEN amount in eth WEI? if already quoted, should be 1
+
+    const valueNet = (feeGross - feeBase) * q - relayTxCost - sendTxCost;
+
+    // NOTE: min and max don't work with bigints
+    // const amountToSend = Math.min(650_000n, Math.max(100_000n, valueNet)); 
+    const amountToSend = valueNet < 100_000n ? 100_000n : valueNet > 650_000n ? 650_000n : valueNet; 
 
     const relayer = await web3Provider.signer(chainId);
 
