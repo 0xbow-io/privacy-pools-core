@@ -37,6 +37,8 @@ export enum ErrorCode {
 
   // Quote errors
   QUOTE_ERROR = "QUOTE_ERROR",
+  UNSUPPORTED_FEATURE = "UNSUPPORTED_FEATURE",
+  AMOUNT_LOW = "AMOUNT_LOW",
 }
 
 /**
@@ -302,7 +304,26 @@ export class QuoterError extends RelayerError {
 
   public static override assetNotSupported(
     details?: Record<string, unknown> | string) {
-    return new QuoterError("Asset is not supported", ErrorCode.ASSET_NOT_SUPPORTED, details);
+    return new QuoterError("Asset is not supported by quoter", ErrorCode.ASSET_NOT_SUPPORTED, details);
   }
 
+  public static cowQuoterError(
+    details?: Record<string, unknown> | string) {
+    return new QuoterError("CowSwap quote error", ErrorCode.QUOTE_ERROR, details);
+  }
+
+  public static chainNotSupported(
+    details?: Record<string, unknown> | string) {
+    return new QuoterError("Chain is not supported by quoter", ErrorCode.CHAIN_NOT_SUPPORTED, details);
+  }
+
+  public static amountTooLow(
+  details?: Record<string, unknown> | string) {
+    return new QuoterError("Amount to quote is too low", ErrorCode.AMOUNT_LOW, details);
+  }
+
+  public static extraGasNotSupported(
+  details?: Record<string, unknown> | string) {
+    return new QuoterError("Extra gas is not supported", ErrorCode.UNSUPPORTED_FEATURE, details);
+  }
 }

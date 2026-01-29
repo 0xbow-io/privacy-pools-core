@@ -1,8 +1,8 @@
 import { NextFunction, Response } from "express";
-import { DetailsMarshall } from "../../types.js";
-import { ValidationError } from "../../exceptions/base.exception.js";
-import { DetailsRequest } from "../../middlewares/index.js";
 import { RelayerConfig } from "../../config/index.js";
+import { RelayerError } from "../../exceptions/base.exception.js";
+import { DetailsRequest } from "../../middlewares/index.js";
+import { DetailsMarshall } from "../../types.js";
 
 /**
  * Handler for the relayer details endpoint.
@@ -22,15 +22,15 @@ export async function relayerDetailsHandler(
     const chainId = req.parsedQuery.chainId;
     const assetAddress = req.parsedQuery.assetAddress;
 
-    const chain = new RelayerConfig().chain(chainId)
+    const chain = new RelayerConfig().chain(chainId);
 
     const feeReceiverAddress = await chain.feeReceiverAddress();
 
     const [assetConfig, error] = await chain.assetConfig(assetAddress);
 
     if (error) {
-      return next(ValidationError.invalidInput({
-        message: error
+      return next(RelayerError.assetNotSupported({
+        message: `Asset ${assetAddress} for chain ${chainId} is not supported`
       }));
     }
 

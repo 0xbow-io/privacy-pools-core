@@ -1,8 +1,10 @@
 import { NextFunction, Request, Response } from "express";
-import { RelayerError, WithdrawalValidationError } from "../exceptions/base.exception.js";
+import { RelayerError, WithdrawalValidationError, QuoterError } from "../exceptions/base.exception.js";
 import { RelayerMarshall } from "../types.js";
 import { ConfigError, ValidationError } from "../exceptions/base.exception.js";
+import { createModuleLogger } from "../logger/index.js";
 
+const logger = createModuleLogger(errorHandlerMiddleware);
 /**
  * Middleware to attach a marshaller function to the response locals.
  * This function formats the response data in a standardized way.
@@ -36,7 +38,9 @@ export function errorHandlerMiddleware(
   res: Response,
   next: NextFunction,
 ) {
+  logger.error(err)
   if (err instanceof RelayerError) {
+    
     const { message, code, details } = err;
     const errorResponse = { message, code, details }
     if (err instanceof ConfigError) {
@@ -45,6 +49,8 @@ export function errorHandlerMiddleware(
       res.status(400).json(errorResponse);
     } else if (err instanceof WithdrawalValidationError) {
       res.status(422).json(errorResponse);
+    } else if (err instanceof QuoterError) {
+      res.status(400).json(errorResponse);
     } else {
       // Handle other RelayerError types
       res.status(400).json({ error: err.toJSON() });

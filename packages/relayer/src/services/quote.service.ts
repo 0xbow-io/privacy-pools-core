@@ -11,6 +11,7 @@ interface QuoteFeeBPSParams {
 };
 
 const NativeAddress = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
+const NativeArbitrumAddress = "0x4200000000000000000000000000000000000006";
 
 export interface QuoteFee {
   feeBPS: bigint;
@@ -45,6 +46,7 @@ export class QuoteService {
 
   async quoteFeeBPSNative(quoteParams: QuoteFeeBPSParams): Promise<QuoteFee> {
     const { chainId, assetAddress, amountIn, baseFeeBPS, extraGas } = quoteParams;
+
     const gasPrice = await web3Provider.getGasPrice(chainId);
 
     const EXTRA_GAS_AMOUNT = this.extraGasTxCost + this.extraGasFundAmount;
@@ -54,6 +56,8 @@ export class QuoteService {
     let quote: { num: bigint, den: bigint; path: (string | number)[]; };
     if (assetAddress.toLowerCase() === NativeAddress.toLowerCase()) {
       quote = { num: 1n, den: 1n, path: [] };
+    } else if (assetAddress.toLowerCase() === NativeArbitrumAddress.toLowerCase()) {
+      quote = { num: 1n, den: 1n, path: [] };          // XXX: for 0x420 we treat it as ETH
     } else {
       quote = await quoteProvider.quoteNativeTokenInERC20(chainId, assetAddress, amountIn);
     }
