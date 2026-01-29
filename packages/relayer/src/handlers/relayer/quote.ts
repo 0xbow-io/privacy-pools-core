@@ -28,134 +28,144 @@ export async function relayQuoteHandler(
   res: Response,
   next: NextFunction,
 ) {
-
-  const chainId = req.body.chainId;
-  const amountIn = req.body.amount;
-  const asset = req.body.asset;
-  let extraGas = Boolean(req.body.extraGas);
-
-  const chain = new RelayerConfig().chain(chainId);
-  const [assetConfig, _] = await chain.assetConfig(asset);
-  if (assetConfig === undefined)
-    return next(QuoterError.assetNotSupported(`Asset ${asset} for chain ${chainId} is not supported`));
-
-  if (isNative(asset)) {
-    extraGas = false;
-  }
-
-  // XXX: Block extraGas for EXCEPTION_TOKENS
-  if (extraGas && isExceptionToken(asset)) {
-    return next(
-      QuoterError.assetNotSupported(
-        `Extra gas feature not supported for ${asset}`,
-      ),
-    );
-  }
-
-  let quote: QuoteFee;
   try {
-    quote = await quoteService.quoteFeeBPSNative({
-      chainId,
-      amountIn,
-      assetAddress: asset,
-      baseFeeBPS: assetConfig.fee_bps,
-      extraGas,
-    });
-  } catch (e) {
-    return next(e);
-  }
+    const chainId = req.body.chainId;
+    const amountIn = req.body.amount;
+    const asset = req.body.asset;
+    let extraGas = Boolean(req.body.extraGas);
 
-  const {
-    feeBPS,
-    gasPrice,
-    extraGasFundAmount,
-    relayTxCost,
-    extraGasTxCost
-  } = quote;
+    const chain = new RelayerConfig().chain(chainId);
+    const [assetConfig, _] = await chain.assetConfig(asset);
+    if (assetConfig === undefined)
+      return next(QuoterError.assetNotSupported(`Asset ${asset} for chain ${chainId} is not supported`));
 
-
-  const recipient = req.body.recipient
-    ? getAddress(req.body.recipient.toString())
-    : undefined;
-  const detail = {
-    relayTxCost: { gas: relayTxCost, eth: relayTxCost * gasPrice },
-    extraGasFundAmount: extraGasFundAmount
-      ? { gas: extraGasFundAmount, eth: extraGasFundAmount * gasPrice }
-      : undefined,
-    extraGasTxCost: extraGasTxCost
-      ? { gas: extraGasTxCost, eth: extraGasTxCost * gasPrice }
-      : undefined,
-  };
-
-  const quoteResponse = new QuoteMarshall({
-    baseFeeBPS: assetConfig.fee_bps,
-    feeBPS,
-    gasPrice,
-    detail,
-  });
-
-  if (recipient) {
-    let feeReceiverAddress: Address;
-    const finalFeeReceiverAddress = await chain.feeReceiverAddress();
-    if (extraGas) {
-      const signer = privateKeyToAccount(await chain.signerPrivateKey());
-      if (await chain.isFeeReceiverSameAsSigner()) {
-        feeReceiverAddress = finalFeeReceiverAddress;
-      } else {
-        feeReceiverAddress = signer.address;
-      }
-    } else {
-      feeReceiverAddress = finalFeeReceiverAddress;
+    if (isNative(asset)) {
+      extraGas = false;
     }
-    const withdrawalData = encodeWithdrawalData({
-      feeRecipient: getAddress(feeReceiverAddress),
-      recipient,
-      relayFeeBPS: feeBPS,
-    });
-    const expiration = Number(new Date()) + EXPIRATION_TIME;
-    const relayerCommitment = {
-      withdrawalData,
-      expiration,
-      asset,
-      amount: amountIn,
-      extraGas,
+
+    // XXX: Block extraGas for EXCEPTION_TOKENS
+    if (extraGas && isExceptionToken(asset)) {
+      return next(
+        QuoterError.extraGasNotSupported(
+          `Extra gas feature not supported for ${asset}`,
+        ),
+      );
+    } else if (extraGas && chainId == 42161) {
+      return next(
+        QuoterError.extraGasNotSupported(
+          `Extra gas feature not supported for chain 42161`,
+        ),
+      );
+    }
+
+    let quote: QuoteFee;
+    try {
+      quote = await quoteService.quoteFeeBPSNative({
+        chainId,
+        amountIn,
+        assetAddress: asset,
+        baseFeeBPS: assetConfig.fee_bps,
+        extraGas,
+      });
+    } catch (e) {
+      logger.error('Quote service error', { error: e, chainId, asset, amountIn: amountIn.toString() });
+      return next(e);
+    }
+
+    const {
+      feeBPS,
+      gasPrice,
+      extraGasFundAmount,
+      relayTxCost,
+      extraGasTxCost
+    } = quote;
+
+    const recipient = req.body.recipient
+      ? getAddress(req.body.recipient.toString())
+      : undefined;
+    const detail = {
+      relayTxCost: { gas: relayTxCost, eth: relayTxCost * gasPrice },
+      extraGasFundAmount: extraGasFundAmount
+        ? { gas: extraGasFundAmount, eth: extraGasFundAmount * gasPrice }
+        : undefined,
+      extraGasTxCost: extraGasTxCost
+        ? { gas: extraGasTxCost, eth: extraGasTxCost * gasPrice }
+        : undefined,
     };
-    const signedRelayerCommitment = await web3Provider.signRelayerCommitment(
-      chainId,
-      relayerCommitment,
-    );
 
-    quoteResponse.addFeeCommitment({
-      expiration,
-      asset,
-      withdrawalData,
-      signedRelayerCommitment,
-      extraGas,
-      amount: amountIn,
-    });
-  }
-
-  const logPayload = {
-    quote_request: {
-      chain_id: chainId,
-      asset,
-      gas_price: gasPrice,
-      value_in: amountIn,
-      value_out: quote.out!,
+    const quoteResponse = new QuoteMarshall({
+      baseFeeBPS: assetConfig.fee_bps,
+      feeBPS,
+      gasPrice,
       detail,
-      fee_bps: feeBPS,
-      base_fee_bps: assetConfig.fee_bps
-    },
-  };
+    });
 
-  logger.info("Quote generated", logPayload);
+    if (recipient) {
+      let feeReceiverAddress: Address;
+      const finalFeeReceiverAddress = await chain.feeReceiverAddress();
+      if (extraGas) {
+        const signer = privateKeyToAccount(await chain.signerPrivateKey());
+        if (await chain.isFeeReceiverSameAsSigner()) {
+          feeReceiverAddress = finalFeeReceiverAddress;
+        } else {
+          feeReceiverAddress = signer.address;
+        }
+      } else {
+        feeReceiverAddress = finalFeeReceiverAddress;
+      }
+      const withdrawalData = encodeWithdrawalData({
+        feeRecipient: getAddress(feeReceiverAddress),
+        recipient,
+        relayFeeBPS: feeBPS,
+      });
+      const expiration = Number(new Date()) + EXPIRATION_TIME;
+      const relayerCommitment = {
+        withdrawalData,
+        expiration,
+        asset,
+        amount: amountIn,
+        extraGas,
+      };
+      const signedRelayerCommitment = await web3Provider.signRelayerCommitment(
+        chainId,
+        relayerCommitment,
+      );
 
-  if (feeBPS >= assetConfig.fee_bps * 2n) {
-    logger.warn(
-      "Generated quote might be too high for requested amount",
-      logPayload
-    );
+      quoteResponse.addFeeCommitment({
+        expiration,
+        asset,
+        withdrawalData,
+        signedRelayerCommitment,
+        extraGas,
+        amount: amountIn,
+      });
+    }
+
+    const logPayload = {
+      quote_request: {
+        chain_id: chainId,
+        asset,
+        gas_price: gasPrice,
+        value_in: amountIn,
+        value_out: quote.out!,
+        detail,
+        fee_bps: feeBPS,
+        base_fee_bps: assetConfig.fee_bps
+      },
+    };
+
+    logger.info("Quote generated", logPayload);
+
+    if (feeBPS >= assetConfig.fee_bps * 2n) {
+      logger.warn(
+        "Generated quote might be too high for requested amount",
+        logPayload
+      );
+    }
+
+    res.status(200).json(res.locals.marshalResponse(quoteResponse));
+  } catch (error) {
+    console.error(error);
+    next(error);
   }
-
-  res.status(200).json(res.locals.marshalResponse(quoteResponse));
 }

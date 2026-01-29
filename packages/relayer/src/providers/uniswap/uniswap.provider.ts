@@ -1,6 +1,6 @@
 import { Token } from '@uniswap/sdk-core';
 import { FeeAmount } from '@uniswap/v3-sdk';
-import { Account, Address, getAddress, getContract, GetContractReturnType, PublicClient, WriteContractParameters } from 'viem';
+import { Account, Address, getAddress, getContract, GetContractReturnType, Hex, PublicClient, WriteContractParameters } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
 import { BlockchainError, RelayerError } from '../../exceptions/base.exception.js';
@@ -17,31 +17,14 @@ import { createPermit2 } from './createPermit.js';
 import { encodePath, hopsFromAddressRoute } from './pools.js';
 import { ChainId } from '../../types.js';
 import { RelayerConfig } from '../../config/index.js';
+import { Quote, QuoteInNativeTokenParams, SwapProvider, SwapWithRefundParams } from '../swap.provider.interface.js';
 
 export type UniswapQuote = {
   chainId: ChainId;
-  addressIn: string;
-  addressOut: string;
+  addressIn: Address;
+  addressOut: Address;
   amountIn: bigint;
 };
-
-type QuoteToken = { amount: bigint, decimals: number; };
-
-export type Quote = {
-  path: (string | FeeAmount)[];
-  in: QuoteToken;
-  out: QuoteToken;
-};
-
-interface SwapWithRefundParams {
-  feeReceiver: `0x${string}`;
-  nativeRecipient: `0x${string}`;
-  tokenIn: `0x${string}`;
-  feeGross: bigint;
-  refundAmount: bigint;
-  chainId: ChainId;
-  feeBase: bigint;
-}
 
 interface CreateInstructionsFeeReceiveerIsRelayer {
   router: { address: Address; };
@@ -65,7 +48,7 @@ function isNullAddress(a: string) {
   return getAddress(a) === ZERO_ADDRESS;
 }
 
-export class UniswapProvider {
+export class UniswapProvider implements SwapProvider {
 
   static readonly ZERO_ADDRESS = ZERO_ADDRESS;
 
@@ -110,16 +93,20 @@ export class UniswapProvider {
     });
   }
 
-  async quoteNativeToken(chainId: ChainId, addressIn: Address, amountIn: bigint): Promise<Quote> {
+  async quoteNativeToken(params: QuoteInNativeTokenParams): Promise<Quote> {
+    const { chainId, amount: amountIn, tokenAddress: addressIn } = params;
     const weth = WRAPPED_NATIVE_TOKEN_ADDRESS[chainId]!;
+    const wethAddress = getAddress(weth.address);
     // First try direct quote
     try {
-      return await this.quote({
+      const { valueIn, valueOut, path } = await this.quote({
         chainId,
         amountIn,
-        addressOut: weth.address,
+        addressOut: wethAddress,
         addressIn
       });
+
+      return { valueIn, valueOut, path };
     } catch (directError) {
 
       // If direct quote fails, try multi-hop routing
@@ -133,10 +120,10 @@ export class UniswapProvider {
         }
 
         try {
-          return await this.quoteMultiHop({
+          return this.quoteMultiHop({
             chainId,
             amountIn,
-            path: [addressIn as Address, intermediateToken, weth.address as Address]
+            path: [addressIn, intermediateToken, wethAddress]
           });
         } catch {
           continue;
@@ -189,30 +176,48 @@ export class UniswapProvider {
     return fee;
   }
 
-  async quote({ chainId, addressIn, addressOut, amountIn }: UniswapQuote) {
-    const tokenIn = await this.getTokenInfo(chainId, addressIn as Address);
-    const tokenOut = await this.getTokenInfo(chainId, addressOut as Address);
+  async findGreatestOutputForPair({ chainId, addressIn, addressOut, amountIn }: UniswapQuote) {
+    const tokenIn = await this.getTokenInfo(chainId, addressIn);
+    const tokenOut = await this.getTokenInfo(chainId, addressOut);
     const quoterContract = await this.getQuoter(chainId);
-
-    const fee = await this.findLowestFeePoolForPair(chainId, addressIn, addressOut);
-    try {
-
-      const quotedAmountOut = await quoterContract.simulate.quoteExactInputSingle([{
-        tokenIn: tokenIn.address as Address,
-        tokenOut: tokenOut.address as Address,
+    // {fee, (amount, sqrtPriceX96After, tickAfter, gasEstimate)}[]
+    const quotedAmountsOut = await Promise.all(FeeTiers.map(async fee => {
+      return quoterContract.simulate.quoteExactInputSingle([{
+        tokenIn: getAddress(tokenIn.address),
+        tokenOut: getAddress(tokenOut.address),
         fee,
         amountIn,
         sqrtPriceLimitX96: 0n,
-      }]);
+      }])
+        .then(({ result }) => ({ fee, result }))
+        .catch(_ => undefined); // some pools dont exist
+    }));
 
-      // amount, sqrtPriceX96After, tickAfter, gasEstimate
-      const [amount, , ,] = quotedAmountOut.result;
+    const sorted = quotedAmountsOut
+      .filter(x => x !== undefined)
+      .sort((a, b) => Number(b.result[0] - a.result[0]));
+
+    return sorted[0];
+  }
+
+  async quote({ chainId, addressIn, addressOut, amountIn }: UniswapQuote): Promise<Quote> {
+
+    const tokenIn = await this.getTokenInfo(chainId, addressIn);
+    const tokenOut = await this.getTokenInfo(chainId, addressOut);
+
+    try {
+      const bestQuote = await this.findGreatestOutputForPair({ chainId, addressIn, addressOut, amountIn });
+      if (bestQuote === undefined) {
+        throw RelayerError.unknown("Couldn't find any direct pool!");
+      }
+      const { fee, result: [amount, , ,] } = bestQuote;
+
       return {
-        path: [tokenIn.address, fee, tokenOut.address],
-        in: {
+        path: [tokenIn.address, fee.toString(), tokenOut.address],
+        valueIn: {
           amount: amountIn, decimals: tokenIn.decimals
         },
-        out: {
+        valueOut: {
           amount, decimals: tokenOut.decimals
         }
       };
@@ -249,7 +254,16 @@ export class UniswapProvider {
     for (const hop of hops) {
       const [tokenA, tokenB] = hop;
       try {
-        const fee = await this.findLowestFeePoolForPair(chainId, tokenA, tokenB);
+        const bestQuote = await this.findGreatestOutputForPair({
+          chainId,
+          addressIn: tokenA,
+          addressOut: tokenB,
+          amountIn
+        });
+        if (bestQuote === undefined) {
+          throw RelayerError.unknown("Couldn't find any direct pool!");
+        }
+        const { fee } = bestQuote;
         const feePath = { token: tokenA, fee };
         pathWithFees.push(feePath);
       } catch {
@@ -263,7 +277,7 @@ export class UniswapProvider {
     // Encode the path for quoteExactInput
     // Path encoding: token0 (20 bytes) + fee0 (3 bytes) + token1 (20 bytes) + fee1 (3 bytes) + token2 (20 bytes)...
     let encodedPath = '0x';
-    const plainPath: (string | FeeAmount)[] = [];
+    const plainPath: string[] = [];
     pathWithFees.forEach((p, i) => {
       const { token, fee } = p;
       encodedPath += token.replace(/^0x/, ""); // Remove '0x' prefix
@@ -271,7 +285,7 @@ export class UniswapProvider {
       if (i < pathWithFees.length - 1) {
         // Add fee as 3 bytes (24 bits)
         encodedPath += fee.toString(16).padStart(6, '0');
-        plainPath.push(fee);
+        plainPath.push(fee.toString());
       }
     });
 
@@ -285,11 +299,11 @@ export class UniswapProvider {
 
       return {
         path: plainPath,
-        in: {
+        valueIn: {
           amount: amountIn,
           decimals: tokenIn.decimals
         },
-        out: {
+        valueOut: {
           amount: amountOut,
           decimals: tokenOut.decimals
         }
@@ -556,7 +570,7 @@ export class UniswapProvider {
     return path;
   }
 
-  async swapExactInputForWeth(params: SwapWithRefundParams) {
+  async swapExactInputForWeth(params: SwapWithRefundParams): Promise<Hex> {
     const { chainId, tokenIn } = params;
     const path = await this.findSingleOrMultiHopPath(chainId, tokenIn);
     const encodedPath = encodePath(path);
@@ -565,5 +579,4 @@ export class UniswapProvider {
     const txHash = await relayer.writeContract(writeContractParams);
     return txHash;
   }
-
 }

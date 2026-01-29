@@ -21,18 +21,18 @@ export function permit2Address(chainId?: number): `0x${string}` {
 * source: https://github.com/Uniswap/v3-periphery/blob/main/deploys.md
 */
 
-// export const QUOTER_CONTRACT_ADDRESS: Record<string, Address> = {
-//   "1": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",         // Ethereum
-//   "137": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",       // polygon
-//   "10": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",        // Optimism
-//   "42161": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",     // Arbitrum
-//   "11155111": "0xEd1f6473345F45b75F8179591dd5bA1888cf2FB3",  // Sepolia
-// };
+export const QUOTER_CONTRACT_ADDRESS: Record<string, Address> = {
+  "1":        "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",  // Ethereum
+  "10":       "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",  // Optimism
+  "137":      "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",  // Polygon
+  "42161":    "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",  // Arbitrum
+  "11155111": "0xEd1f6473345F45b75F8179591dd5bA1888cf2FB3",  // Sepolia
+};
 
 export const FACTORY_CONTRACT_ADDRESS: Record<string, Address> = {
   "1": "0x1F98431c8aD98523631AE4a59f267346ea31F984",         // Ethereum
-  "137": "0x1F98431c8aD98523631AE4a59f267346ea31F984",       // polygon
   "10": "0x1F98431c8aD98523631AE4a59f267346ea31F984",        // Optimism
+  "137": "0x1F98431c8aD98523631AE4a59f267346ea31F984",       // Polygon
   "42161": "0x1F98431c8aD98523631AE4a59f267346ea31F984",     // Arbitrum
   "11155111": "0x0227628f3f023bb0b980b67d528571c95c6dac1c",  // Sepolia
 };
@@ -64,8 +64,8 @@ export function getV3Factory(chainId: number) {
 }
 
 export function getQuoterAddress(chainId: number) {
-  const mainnetQuoter = "0x61fFE014bA17989E743c5F6cB21bF9697530B21e";
-  return getAddress(chainId !== 1 ? QUOTER_ADDRESSES[chainId]! : mainnetQuoter)
+  const quoterAddress = QUOTER_CONTRACT_ADDRESS[chainId] || QUOTER_ADDRESSES[chainId]!; 
+  return getAddress(quoterAddress)
 }
 
 export const FeeTiers: FeeAmount[] = [
