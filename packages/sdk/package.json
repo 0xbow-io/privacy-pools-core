@@ -35,7 +35,7 @@
   ],
   "scripts": {
     "circuits:setup": "cd ../circuits/ && yarn install && yarn compile && yarn setup:all",
-    "circuits:copy": "sh ./scripts/copy_circuits.sh",
+    "circuits:copy": "bash ./scripts/copy_circuits.sh",
     "build": "yarn clean && rollup -c ./configs/rollup.config.mjs",
     "build:bundle": "yarn clean && rollup -c ./configs/rollup.config.mjs && yarn circuits:copy",
     "check-types": "tsc --noEmit -p ./tsconfig.json",
