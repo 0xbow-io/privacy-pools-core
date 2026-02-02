@@ -132,3 +132,11 @@ export function isViemError(error: unknown): error is ViemError {
 export function isNative(asset: `0x${string}`) {
   return asset.toLowerCase() === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
 }
+
+export function min(a: bigint, b: bigint): bigint {
+  return a < b ? a : b;
+}
+
+export function max(a: bigint, b: bigint): bigint {
+  return a > b ? a : b;
+}
