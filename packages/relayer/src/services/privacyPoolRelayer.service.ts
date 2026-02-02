@@ -87,7 +87,7 @@ export class PrivacyPoolRelayer {
       let txSwap;
       if (extraGas) {
         // TODO HERE
-        txSwap = await this.sendExtraGas(req.scope, req.withdrawal, req.proof, chainId, response.hash, req.feeCommitment!);
+        txSwap = await this.sendExtraGas(req.scope, req.withdrawal, req.proof, chainId, response.hash);
         // txSwap = await this.swapForNativeAndFund(req.scope, req.withdrawal, req.proof, chainId, response.hash);
       }
 
