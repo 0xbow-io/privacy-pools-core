@@ -13,3 +13,7 @@ node_modules
 
 # Cursor rules files
 .cursorrules*
+
+# Local AI/agent tooling and private planning notes
+.claude/
+docs/ENGINEERING_QUESTIONS.md
