@@ -21,8 +21,6 @@ const config: Config = {
   projectName: "privacy-pools-core", // Usually your repo name.
 
   onBrokenLinks: "throw",
-  onBrokenMarkdownLinks: "warn",
-
   headTags: [
     {
       tagName: "meta",
@@ -48,6 +46,9 @@ const config: Config = {
 
   markdown: {
     mermaid: true,
+    hooks: {
+      onBrokenMarkdownLinks: "warn",
+    },
   },
 
   themes: ["@docusaurus/theme-mermaid"],
