@@ -7,6 +7,8 @@ node_modules
 
 # Config files
 .env
+.env.*
+!.env.example
 
 # Avoid ignoring gitkeep
 !/**/.gitkeep
@@ -17,3 +19,4 @@ node_modules
 # Local AI/agent tooling and private planning notes
 .claude/
 docs/ENGINEERING_QUESTIONS.md
+docs/SDK_BUGS.md

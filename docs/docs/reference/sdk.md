@@ -138,7 +138,7 @@ interface WithdrawalProof {
 }
 
 interface Withdrawal {
-  processooor: Address;   // Direct: recipient. Relayed: Entrypoint address.
+  processooor: Address;   // Direct: tx signer (msg.sender). Relayed: Entrypoint address.
   data: Hex;              // Direct: "0x". Relayed: ABI-encoded RelayData.
 }
 ```

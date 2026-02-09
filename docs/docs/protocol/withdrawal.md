@@ -23,7 +23,7 @@ Both methods require [zero-knowledge proofs](/layers/zk/withdrawal) to prove com
 
 | Aspect                   | Direct Withdrawal  | Relayed Withdrawal                      |
 | ------------------------ | ------------------ | --------------------------------------- |
-| Privacy Level            | Basic              | Enhanced (different withdrawal address) |
+| Privacy Level            | Basic (signer pays gas, linking address to on-chain activity) | Enhanced (relayer pays gas, decoupling recipient from tx sender) |
 | Gas Payment              | User pays directly | Relayer pays, takes fee                 |
 | Fee Structure            | No fees            | Configurable relayer fee                |
 | Complexity               | Simpler flow       | Additional fee computation              |
@@ -51,7 +51,7 @@ sequenceDiagram
     User->>Pool: withdraw(withdrawal, proof)
 
     activate Pool
-    Pool->>Pool: Verify processooor is recipient
+    Pool->>Pool: Verify processooor == msg.sender
     Pool->>Entrypoint: Check proof uses latest ASP root
     Pool->>Pool: Verify proof
 
@@ -118,7 +118,7 @@ sequenceDiagram
 
 ```solidity
 struct Withdrawal {
-    address processooor;    // Direct: recipient address, Relayed: Entrypoint address
+    address processooor;    // Direct: tx signer (msg.sender), Relayed: Entrypoint address
     bytes data;             // Direct: empty, Relayed: ABI-encoded RelayData
 }
 
@@ -141,7 +141,7 @@ struct RelayData {
    - User submits proof to pool contract
    - Pool verifies proof and context
    - Updates state (nullifiers, commitments)
-   - Transfers assets to recipient
+   - Transfers assets to signer (processooor)
 
 ### Relayed Withdrawal
 

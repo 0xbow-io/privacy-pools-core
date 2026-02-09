@@ -36,7 +36,7 @@ The project is organized as a monorepo with the following packages:
 1. Clone the repository:
 
 ```bash
-git clone <https://github.com/0xbow-io/privacy-pools-core.git>
+git clone https://github.com/0xbow-io/privacy-pools-core.git
 cd privacy-pools-core
 ```
 
@@ -190,7 +190,7 @@ ENTRYPOINT_ADDRESS=
   "fee_receiver_address": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
   "provider_url": "http://0.0.0.0:8545", // Anvil port
   "fee_bps": "1000",
-  "signer_private_key": "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+  "signer_private_key": "<ANVIL_PRIVATE_KEY>",  // e.g. Anvil Account #0: 0xac0974bec...f2ff80 — NEVER use a real key here
   "sqlite_db_path": "/tmp/pp_relayer.sqlite",
   "entrypoint_address": "0xa513e6e4b8f2a923d98304ec87f64353c4d5c853",
   "chain": {

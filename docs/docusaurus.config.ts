@@ -63,6 +63,8 @@ const config: Config = {
         removeDuplicateHeadings: true,
         rootContent:
           "Sitemap: https://docs.privacypools.com/sitemap.xml\nFull docs for LLMs: https://docs.privacypools.com/llms-full.txt\nSkills overview: https://docs.privacypools.com/skills.md",
+        fullRootContent:
+          "Agent integration reference: https://docs.privacypools.com/skills.md — contains SDK quick start, deposit/withdrawal/ragequit code snippets, type definitions, error handling, and deployment addresses for autonomous integration.\nSitemap: https://docs.privacypools.com/sitemap.xml\nSDK package: @0xbow/privacy-pools-core-sdk (npm)",
         pathTransformation: {
           ignorePaths: ["docs"],
         },
@@ -91,6 +93,19 @@ const config: Config = {
         blog: false,
         theme: {
           customCss: "./src/css/custom.css",
+        },
+        sitemap: {
+          createSitemapItems: async (params) => {
+            const { defaultCreateSitemapItems, ...rest } = params;
+            const items = await defaultCreateSitemapItems(rest);
+            // Include LLM/AI static artifacts in sitemap for crawler discoverability
+            return [
+              ...items,
+              { url: "https://docs.privacypools.com/skills.md", changefreq: "weekly" as const, priority: 0.7 },
+              { url: "https://docs.privacypools.com/llms.txt", changefreq: "weekly" as const, priority: 0.6 },
+              { url: "https://docs.privacypools.com/llms-full.txt", changefreq: "weekly" as const, priority: 0.6 },
+            ];
+          },
         },
       } satisfies Preset.Options,
     ],

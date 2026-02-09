@@ -67,7 +67,7 @@ const contracts = sdk.createContractInstance(rpcUrl, mainnet, entrypointAddress,
 ```typescript
 // Step 1: Generate deterministic secrets from a mnemonic
 const masterKeys = generateMasterKeys(mnemonic);
-const scope = await contracts.getScope(privacyPoolAddress);
+const scope = await contracts.getScope(privacyPoolAddress) as unknown as Hash; // getScope returns bigint; cast to branded Hash
 // depositIndex is a sequential counter: 0n for your first deposit to this pool, 1n for second, etc.
 const { nullifier, secret } = generateDepositSecrets(masterKeys, scope, depositIndex);
 
@@ -119,16 +119,24 @@ const stateMerkleProof = generateMerkleProof(allCommitmentHashes, commitment.has
 const aspMerkleProof = generateMerkleProof(aspLabels, commitment.preimage.label);
 
 // Step 3: Construct the Withdrawal object and compute context
-const withdrawal: Withdrawal = { processooor: recipientAddress, data: "0x" };
-const scope = await contracts.getScope(privacyPoolAddress);
+// IMPORTANT: For direct withdrawal, processooor MUST equal the tx signer (msg.sender).
+// The contract checks msg.sender == processooor and reverts with InvalidProcessooor otherwise.
+// This means direct withdrawals go to the signer's own address only.
+// To withdraw to a *different* address, use the relayed withdrawal flow instead (see below).
+import { privateKeyToAccount } from "viem/accounts";
+const signerAddress = privateKeyToAccount(privateKey).address; // derive signer address from the same key used in createContractInstance
+const withdrawal: Withdrawal = { processooor: signerAddress, data: "0x" };
+const scope = await contracts.getScope(privacyPoolAddress) as unknown as Hash;
 const context = BigInt(calculateContext(withdrawal, scope)); // calculateContext returns hex string; cast to bigint for proveWithdrawal
 
 // Step 4: Generate ZK withdrawal proof
 // NOTE: contracts.getStateRoot() has a known SDK bug (calls wrong ABI function).
 // Use this workaround to read the pool's current state root directly:
+import { createPublicClient, http } from "viem";
+const publicClient = createPublicClient({ chain: mainnet, transport: http(rpcUrl) });
 const stateRoot = await publicClient.readContract({
   address: privacyPoolAddress, abi: [{ name: "currentRoot", type: "function", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" }], functionName: "currentRoot",
-}) as bigint;
+}) as unknown as Hash;  // readContract returns bigint; cast to branded Hash
 const withdrawalProof = await sdk.proveWithdrawal(commitment, {
   context,
   withdrawalAmount,
@@ -136,15 +144,17 @@ const withdrawalProof = await sdk.proveWithdrawal(commitment, {
   aspMerkleProof,
   stateRoot,
   stateTreeDepth: 32n, // max tree depth — always 32n (the circuit handles actual depth via siblings)
-  aspRoot,             // from external ASP service (see "Data Sourcing")
+  aspRoot: aspRoot as unknown as Hash,  // ASP API returns bigint; cast to branded Hash
   aspTreeDepth: 32n,   // max tree depth — always 32n
   newNullifier,
   newSecret,
 });
 
-// Step 5: Submit on-chain
+// Step 5: Submit on-chain (direct withdrawal — funds go to signerAddress)
 await contracts.withdraw(withdrawal, withdrawalProof, scope);
-// OR via relayer: await contracts.relay(withdrawal, withdrawalProof, scope);
+// For relayed withdrawals (third-party recipient), you must construct a DIFFERENT withdrawal
+// object with processooor = entrypointAddress and ABI-encoded RelayData in data.
+// See "Constructing the Withdrawal object" section below for the full relay example.
 ```
 
 ### Ragequit
@@ -171,15 +181,15 @@ The withdrawal flow requires several inputs sourced from on-chain state and exte
 | `scope` | Pool contract | `contracts.getScope(privacyPoolAddress)` |
 | `stateRoot` | Pool contract | Read `currentRoot()` directly via viem `readContract` (see workaround in Step 4 above — the SDK's `getStateRoot()` has a known bug) |
 | `allCommitmentHashes` | On-chain events | Reconstruct from `DataService` (see below) |
-| `aspRoot` | **External ASP** | Provided by the Association Set Provider's API |
-| `aspLabels` | **External ASP** | Provided by the Association Set Provider's API |
+| `aspRoot` | ASP (on-chain or API) | On-chain: `Entrypoint.latestRoot()`. Or from ASP API if available (see below) |
+| `aspLabels` | ASP (IPFS or API) | On-chain: `Entrypoint.associationSets(index)` → `ipfsCID` → fetch label set from IPFS. Or from ASP API if available (see below) |
 | `label` | Deposit event | Read from `Deposited` event logs after deposit tx |
-| `withdrawal` | Constructed by user | `{ processooor: recipientAddress, data: "0x" }` |
+| `withdrawal` | Constructed by user | `{ processooor: signerAddress, data: "0x" }` (direct) or `{ processooor: entrypointAddress, data: relayData }` (relayed) |
 | `context` | Derived | `calculateContext(withdrawal, scope)` |
 
 ### Reconstructing the state tree
 
-The state tree is built from deposit and withdrawal event logs. Each deposit inserts a `commitment` leaf; each withdrawal inserts a `newCommitment` leaf (the change commitment). Ragequit does NOT insert a leaf — it only spends a nullifier. Leaves must be merged in **on-chain insertion order** (by block number, then log index within the block). The SDK event types don't expose `logIndex`, so the best available approach is to sort by `blockNumber` and rely on stable sort to preserve relative order. Since `DataService` returns events via `getLogs` (which preserves log ordering), each array from `getDeposits()` and `getWithdrawals()` is already internally ordered. Spread deposits before withdrawals and stable-sort by block — this is correct for the common case (a commitment must exist before it can be spent). Always validate the reconstructed root against `getStateRoot()` to catch rare same-block interleaving mismatches.
+The state tree is built from deposit and withdrawal event logs. Each deposit inserts a `commitment` leaf; each withdrawal inserts a `newCommitment` leaf (the change commitment). Ragequit does NOT insert a leaf — it only spends a nullifier. Leaves must be merged in **on-chain insertion order** (by block number, then log index within the block). The SDK event types don't expose `logIndex`, so the best available approach is to sort by `blockNumber` and rely on stable sort to preserve relative order. Since `DataService` returns events via `getLogs` (which preserves log ordering), each array from `getDeposits()` and `getWithdrawals()` is already internally ordered. Spread deposits before withdrawals and stable-sort by block — this is correct for the common case (a commitment must exist before it can be spent). Always validate the reconstructed root against the on-chain `currentRoot()` (via `readContract` — see Step 4 workaround) to catch rare same-block interleaving mismatches.
 
 ```typescript
 // Use the deployment start block for the chain (see Supported Networks table above).
@@ -201,7 +211,7 @@ const withdrawals = await dataService.getWithdrawals(pool);
 const depositLeaves = deposits.map(d => ({ hash: d.commitment, blockNumber: d.blockNumber }));
 const withdrawalLeaves = withdrawals.map(w => ({ hash: w.newCommitment, blockNumber: w.blockNumber }));
 const allLeaves = [...depositLeaves, ...withdrawalLeaves]
-  .sort((a, b) => Number(a.blockNumber - b.blockNumber));
+  .sort((a, b) => (a.blockNumber < b.blockNumber ? -1 : a.blockNumber > b.blockNumber ? 1 : 0));
 // Note: JavaScript's Array.sort is stable (ES2019+), so same-blockNumber items
 // preserve their relative order from the spread. Since deposits are spread first,
 // same-block deposits appear before same-block withdrawals, matching on-chain order
@@ -223,20 +233,27 @@ const stateMerkleProof = generateMerkleProof(allCommitmentHashes, commitment.has
 // try swapping the order of deposit/withdrawal leaves that share the same blockNumber.
 ```
 
-### ASP data (external)
+### ASP data
 
-The `aspRoot` and `aspLabels` come from the Association Set Provider (ASP), operated by 0xbow. The ASP screens deposits for compliance and publishes a Merkle tree of approved **labels** (not commitment hashes). The ZK circuit verifies that the deposit's `label` is a leaf in the ASP tree. Since the `label` stays the same across partial withdrawals, a single ASP approval covers the original deposit and all its subsequent change commitments. Most deposits are approved within 1 hour, though some may take up to 7 days. The ASP can also retroactively remove a label from the approved set — if removed, private withdrawal fails but ragequit (public exit) always remains available. The SDK does not include an ASP client — you must obtain this data from the 0xbow ASP API.
+The `aspRoot` and `aspLabels` come from the Association Set Provider (ASP), operated by 0xbow. The ASP screens deposits for compliance and publishes a Merkle tree of approved **labels** (not commitment hashes). The ZK circuit verifies that the deposit's `label` is a leaf in the ASP tree. Since the `label` stays the same across partial withdrawals, a single ASP approval covers the original deposit and all its subsequent change commitments. Most deposits are approved within 1 hour, though some may take up to 7 days. The ASP can also retroactively remove a label from the approved set — if removed, private withdrawal fails but ragequit (public exit) always remains available.
+
+**How to obtain ASP data:** There are two possible paths (canonical source is pending confirmation from the engineering team):
+
+1. **On-chain + IPFS:** The `aspRoot` is available on-chain via `Entrypoint.latestRoot()`. To get the corresponding IPFS CID, query `RootUpdated(uint256 root, string ipfsCID, uint256 timestamp)` events from the Entrypoint contract. The most recent event contains the latest CID — fetch the label data from IPFS using that CID, then build the Merkle tree locally. (You can also call `Entrypoint.associationSets(index)` directly, but the contract has no length accessor — use the `RootUpdated` event count to determine the latest index.)
+2. **ASP HTTP API (if available):** 0xbow may operate an API that returns the root and labels (or pre-computed Merkle proofs) directly. The SDK does not include an ASP client.
+
+The on-chain root is always authoritative (the contract validates against it). If using an API, always verify the returned root matches `Entrypoint.latestRoot()`.
 
 ### Constructing the Withdrawal object
 
 ```typescript
 interface Withdrawal {
-  processooor: Address;  // Direct: recipient address. Relayed: MUST be the Entrypoint address.
+  processooor: Address;  // Direct: signer's own address (msg.sender). Relayed: MUST be the Entrypoint address.
   data: Hex;             // "0x" for direct withdrawals; ABI-encoded RelayData for relayed
 }
 
-// Direct withdrawal — user receives funds directly
-const withdrawal: Withdrawal = { processooor: recipientAddress, data: "0x" };
+// Direct withdrawal — funds go to the signer's own address (processooor == msg.sender required)
+const withdrawal: Withdrawal = { processooor: signerAddress, data: "0x" };
 
 // Relayed withdrawal — processooor MUST be the Entrypoint address (not the relayer).
 // The Entrypoint.relay() function checks: _withdrawal.processooor == address(this).
@@ -263,6 +280,9 @@ The `label` and `value` (post-fee committed amount) are generated on-chain durin
 ```typescript
 import { decodeEventLog, parseAbi } from "viem";
 
+// Note: the 5th arg is named _precommitmentHash in the contract (IPrivacyPool.sol).
+// The SDK's DataService internally parses it as _merkleRoot — this is a naming mismatch
+// in the SDK, but the value is the same. Use the contract name when decoding manually.
 const depositedEvent = parseAbi([
   "event Deposited(address indexed _depositor, uint256 _commitment, uint256 _label, uint256 _value, uint256 _precommitmentHash)"
 ]);
@@ -294,7 +314,7 @@ To find which deposits belong to a given mnemonic, compute the expected precommi
 
 ```typescript
 const masterKeys = generateMasterKeys(mnemonic);
-const scope = await contracts.getScope(privacyPoolAddress);
+const scope = await contracts.getScope(privacyPoolAddress) as unknown as Hash;
 const allDeposits = await dataService.getDeposits(pool);
 
 const myDeposits = [];
@@ -322,7 +342,7 @@ for (let i = 0n; ; i++) {
 | Method | Returns | Description |
 |--------|---------|-------------|
 | `getScope(poolAddress)` | `bigint` | Pool's unique scope identifier |
-| `getStateRoot(poolAddress)` | `bigint` | Latest Merkle root of the pool's state tree. **Note:** the SDK implementation may have a bug — it calls `latestRoot` (an Entrypoint function) at the pool address instead of `currentRoot`. If this fails, read `currentRoot()` directly from the pool contract using viem's `readContract`. |
+| `getStateRoot(poolAddress)` | `bigint` | **⚠️ Known SDK bug:** This method calls `latestRoot` (an Entrypoint-only function) at the pool address instead of the pool's `currentRoot`. It will return incorrect data or revert. **Do not use.** Read `currentRoot()` directly from the pool contract using viem's `readContract` (see Step 4 workaround in the Withdrawal section). |
 | `getStateSize(poolAddress)` | `bigint` | Current number of leaves in the state tree |
 | `getAssetConfig(assetAddress)` | `AssetConfig` | Pool address, minimum deposit, fee config |
 | `getScopeData(scope)` | `{ poolAddress, assetAddress }` | Reverse lookup: scope → pool + asset addresses |
@@ -357,7 +377,7 @@ All write methods return `Promise<{ hash: string; wait: () => Promise<void> }>`.
 | Arbitrum | 42161 | `import { arbitrum } from "viem/chains"` | `0x44192215fed782896be2ce24e0bfbf0bf825d15e` | `404391804n` |
 | OP Mainnet | 10 | `import { optimism } from "viem/chains"` | `0x44192215fed782896be2ce24e0bfbf0bf825d15e` | `144288141n` |
 
-Starknet is also supported but uses a different SDK integration (not viem-based).
+Privacy Pools is also deployed on Starknet, but Starknet is **not supported by this SDK** (`@0xbow/privacy-pools-core-sdk`). Starknet integration requires a separate SDK (not viem-based).
 
 Full pool addresses and asset addresses: https://docs.privacypools.com/deployments
 

@@ -40,7 +40,7 @@ The Association Set Provider is a crucial compliance layer that controls which d
   ```solidity
   struct AssociationSetData {
     uint256 root;        // Merkle root of approved labels
-    bytes32 ipfsHash;    // Reference to off-chain data
+    string ipfsCID;      // IPFS v1 CID referencing off-chain association set data
     uint256 timestamp;   // Update timestamp
   }
 
@@ -61,6 +61,6 @@ The Association Set Provider is a crucial compliance layer that controls which d
 - Labels can be removed from ASP set
 - Removal triggers withdrawal restrictions
 - Original depositors can [ragequit](/protocol/ragequit)
-- Enabled complaint exit path
+- Enables compliant exit path
 
 The ASP system enables Privacy Pools to maintain compliance requirements while preserving the core privacy features of the protocol through cryptographic proofs and controlled label management.
