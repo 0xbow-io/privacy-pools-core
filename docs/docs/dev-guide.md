@@ -16,7 +16,7 @@ keywords:
 
 Before you begin, ensure you have the following installed:
 
-- Node.js (v18 or later)
+- Node.js (v20 or later)
 - Yarn (v1.22 or later)
 - Foundry (for smart contracts)
 - Docker (for running the relayer)
