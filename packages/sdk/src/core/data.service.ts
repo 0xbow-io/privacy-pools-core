@@ -16,6 +16,9 @@ import { Logger } from "../utils/logger.js";
 import { DataError } from "../errors/data.error.js";
 import { ErrorCode } from "../errors/base.error.js";
 
+const isNil = (value: unknown): value is null | undefined =>
+  value === null || value === undefined;
+
 // Event signatures from the contract
 const DEPOSIT_EVENT = parseAbiItem('event Deposited(address indexed _depositor, uint256 _commitment, uint256 _label, uint256 _value, uint256 _merkleRoot)');
 const WITHDRAWAL_EVENT = parseAbiItem('event Withdrawn(address indexed _processooor, uint256 _value, uint256 _spentNullifier, uint256 _newCommitment)');
@@ -104,7 +107,14 @@ export class DataService {
             _merkleRoot: precommitment,
           } = log.args;
 
-          if (!depositor || !commitment || !label || !precommitment || !log.blockNumber || !log.transactionHash) {
+          if (
+            isNil(depositor) ||
+            isNil(commitment) ||
+            isNil(label) ||
+            isNil(precommitment) ||
+            isNil(log.blockNumber) ||
+            isNil(log.transactionHash)
+          ) {
             throw DataError.invalidLog("deposit", "missing required fields");
           }
 
@@ -112,7 +122,7 @@ export class DataService {
             depositor: depositor.toLowerCase(),
             commitment: commitment as Hash,
             label: label as Hash,
-            value: value || BigInt(0),
+            value: value ?? BigInt(0),
             precommitment: precommitment as Hash,
             blockNumber: BigInt(log.blockNumber),
             transactionHash: log.transactionHash,
@@ -168,7 +178,13 @@ export class DataService {
             _newCommitment: newCommitment,
           } = log.args;
 
-          if (!value || !spentNullifier || !newCommitment || !log.blockNumber || !log.transactionHash) {
+          if (
+            isNil(value) ||
+            isNil(spentNullifier) ||
+            isNil(newCommitment) ||
+            isNil(log.blockNumber) ||
+            isNil(log.transactionHash)
+          ) {
             throw DataError.invalidLog("withdrawal", "missing required fields");
           }
 
@@ -231,7 +247,13 @@ export class DataService {
             _value: value,
           } = log.args;
 
-          if (!ragequitter || !commitment || !label || !log.blockNumber || !log.transactionHash) {
+          if (
+            isNil(ragequitter) ||
+            isNil(commitment) ||
+            isNil(label) ||
+            isNil(log.blockNumber) ||
+            isNil(log.transactionHash)
+          ) {
             throw DataError.invalidLog("ragequit", "missing required fields");
           }
 
@@ -239,7 +261,7 @@ export class DataService {
             ragequitter: ragequitter.toLowerCase(),
             commitment: commitment as Hash,
             label: label as Hash,
-            value: value || BigInt(0),
+            value: value ?? BigInt(0),
             blockNumber: BigInt(log.blockNumber),
             transactionHash: log.transactionHash,
           };

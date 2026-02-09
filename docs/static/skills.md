@@ -130,13 +130,7 @@ const scope = await contracts.getScope(privacyPoolAddress) as unknown as Hash;
 const context = BigInt(calculateContext(withdrawal, scope)); // calculateContext returns hex string; cast to bigint for proveWithdrawal
 
 // Step 4: Generate ZK withdrawal proof
-// NOTE: contracts.getStateRoot() has a known SDK bug (calls wrong ABI function).
-// Use this workaround to read the pool's current state root directly:
-import { createPublicClient, http } from "viem";
-const publicClient = createPublicClient({ chain: mainnet, transport: http(rpcUrl) });
-const stateRoot = await publicClient.readContract({
-  address: privacyPoolAddress, abi: [{ name: "currentRoot", type: "function", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" }], functionName: "currentRoot",
-}) as unknown as Hash;  // readContract returns bigint; cast to branded Hash
+const stateRoot = await contracts.getStateRoot(privacyPoolAddress) as unknown as Hash;
 const withdrawalProof = await sdk.proveWithdrawal(commitment, {
   context,
   withdrawalAmount,
@@ -179,7 +173,7 @@ The withdrawal flow requires several inputs sourced from on-chain state and exte
 | Input | Source | How to get it |
 |-------|--------|---------------|
 | `scope` | Pool contract | `contracts.getScope(privacyPoolAddress)` |
-| `stateRoot` | Pool contract | Read `currentRoot()` directly via viem `readContract` (see workaround in Step 4 above — the SDK's `getStateRoot()` has a known bug) |
+| `stateRoot` | Pool contract | `contracts.getStateRoot(privacyPoolAddress)` |
 | `allCommitmentHashes` | ASP API (preferred) or on-chain events | **Preferred:** `GET /{chainId}/public/mt-leaves` → `response.stateTreeLeaves` (pre-ordered). **Fallback:** reconstruct from `DataService` events (see below) |
 | `aspRoot` | ASP API | `GET /{chainId}/public/mt-roots` → `response.mtRoot`. Requires `X-Pool-Scope` header. Verify against on-chain `Entrypoint.latestRoot()` before submitting |
 | `aspLabels` | ASP API | `GET /{chainId}/public/mt-leaves` → `response.aspLeaves`. Requires `X-Pool-Scope` header. Returns `string[]` of decimal bigint labels |
@@ -209,7 +203,7 @@ const stateMerkleProof = generateMerkleProof(allCommitmentHashes, commitment.has
 const aspMerkleProof = generateMerkleProof(aspLabels, commitment.preimage.label);
 ```
 
-**Fallback: Reconstruct from on-chain events.** If the API is unavailable, build the state tree from deposit and withdrawal event logs. Each deposit inserts a `commitment` leaf; each withdrawal inserts a `newCommitment` leaf (the change commitment). Ragequit does NOT insert a leaf — it only spends a nullifier. Leaves must be merged in **on-chain insertion order** (by block number, then log index within the block). The SDK event types don't expose `logIndex`, so the best available approach is to sort by `blockNumber` and rely on stable sort to preserve relative order. Since `DataService` returns events via `getLogs` (which preserves log ordering), each array from `getDeposits()` and `getWithdrawals()` is already internally ordered. Spread deposits before withdrawals and stable-sort by block — this is correct for the common case (a commitment must exist before it can be spent). Always validate the reconstructed root against the on-chain `currentRoot()` (via `readContract` — see Step 4 workaround) to catch rare same-block interleaving mismatches.
+**Fallback: Reconstruct from on-chain events.** If the API is unavailable, build the state tree from deposit and withdrawal event logs. Each deposit inserts a `commitment` leaf; each withdrawal inserts a `newCommitment` leaf (the change commitment). Ragequit does NOT insert a leaf — it only spends a nullifier. Leaves must be merged in **on-chain insertion order** (by block number, then log index within the block). The SDK event types don't expose `logIndex`, so the best available approach is to sort by `blockNumber` and rely on stable sort to preserve relative order. Since `DataService` returns events via `getLogs` (which preserves log ordering), each array from `getDeposits()` and `getWithdrawals()` is already internally ordered. Spread deposits before withdrawals and stable-sort by block — this is correct for the common case (a commitment must exist before it can be spent). Always validate the reconstructed root against the on-chain `currentRoot()` (e.g., `contracts.getStateRoot(privacyPoolAddress)`) to catch rare same-block interleaving mismatches.
 
 ```typescript
 // Use the deployment start block for the chain (see Supported Networks table above).
@@ -316,10 +310,63 @@ const allCommitmentHashes: bigint[] = stateTreeLeaves.map((s: string) => BigInt(
 ```
 
 **Important notes:**
-- The `X-Pool-Scope` value must be a **decimal string** (hex will return 404).
+- The `X-Pool-Scope` value must be a **decimal string** (hex/non-decimal values are rejected with a validation error).
 - Both endpoints are unauthenticated (no API key required) on the mainnet and testnet hosts.
 - No pagination — the full leaf arrays are returned in a single response.
 - The contract validates against the latest on-chain ASP root. Verify: `BigInt(mtRoot) === Entrypoint.latestRoot()` before submitting. If they differ, the ASP database may be ahead of the on-chain root — wait for the next `updateRoot` transaction or re-fetch.
+
+#### `GET /{chainId}/health/liveness` — ASP availability check
+
+Returns the current health status of the ASP API for a given chain. Use this before making ASP data calls to verify the service is reachable.
+
+```typescript
+const aspApiHost = getAspApiHost(chainId);
+const res = await fetch(`${aspApiHost}/${chainId}/health/liveness`);
+const { status } = await res.json();
+// status: "ok" when healthy
+if (status !== "ok") throw new Error(`ASP API unhealthy for chain ${chainId}`);
+```
+
+#### `GET /{chainId}/health/asp` — ASP pool leaf counts
+
+Returns pool-level leaf counts, useful for sanity-checking whether the ASP is indexing a given pool.
+
+```typescript
+const res = await fetch(`${aspApiHost}/${chainId}/health/asp`);
+const { status, currentLeaves } = await res.json();
+// currentLeaves: Array<{ poolId: number, totalLeaves: number }>
+// Example: [{ poolId: 1, totalLeaves: 6229 }, { poolId: 6, totalLeaves: 749 }]
+```
+
+#### `GET /global/public/entrypoints` — Programmatic chain discovery
+
+Returns all chains with their entrypoint contract addresses and deployment start blocks. Useful for dynamically determining which chains are supported.
+
+```typescript
+const res = await fetch(`${aspApiHost}/global/public/entrypoints`);
+const { chains } = await res.json();
+// chains: Record<string, { entrypoint: string, fromBlock: number, chainId: string }>
+// Example: { ethereum: { entrypoint: "0x6818...", fromBlock: 22167294, chainId: "1" }, ... }
+```
+
+> **Note:** Treat `GET /global/public/entrypoints` as discovery data, not an automatic allowlist. For this SDK workflow, filter to the chains listed in the **Supported Networks** table below (Ethereum, Arbitrum, OP Mainnet) unless you have separately validated additional chains.
+
+#### `GET /{chainId}/public/deposits-larger-than` — Anonymity set size
+
+Returns the number of deposits above a given amount threshold for a pool. **Required header:** `X-Pool-Scope` (scope as decimal string). **Required query:** `amount` (decimal bigint string in wei, e.g. `"1000000000000000000"`). Useful for agents assessing anonymity set quality before initiating a withdrawal.
+
+```typescript
+const aspApiHost = getAspApiHost(chainId);
+const scope = await contracts.getScope(privacyPoolAddress);
+const res = await fetch(
+  `${aspApiHost}/${chainId}/public/deposits-larger-than?amount=1000000000000000000`,
+  { headers: { "X-Pool-Scope": scope.toString() } }
+);
+const { eligibleDeposits, totalDeposits, percentage } = await res.json();
+// eligibleDeposits: number — count of deposits >= the threshold
+// totalDeposits: number — total deposit count in the pool
+// percentage: number — eligibleDeposits / totalDeposits * 100
+```
 
 **On-chain/IPFS (supplemental, not canonical client source):**
 
@@ -555,7 +602,7 @@ for (let i = 0n; ; i++) {
 | Method | Returns | Description |
 |--------|---------|-------------|
 | `getScope(poolAddress)` | `bigint` | Pool's unique scope identifier |
-| `getStateRoot(poolAddress)` | `bigint` | **⚠️ Known SDK bug:** This method calls `latestRoot` (an Entrypoint-only function) at the pool address instead of the pool's `currentRoot`. It will return incorrect data or revert. **Do not use.** Read `currentRoot()` directly from the pool contract using viem's `readContract` (see Step 4 workaround in the Withdrawal section). |
+| `getStateRoot(poolAddress)` | `bigint` | Current state Merkle root of the pool (`currentRoot()`). |
 | `getStateSize(poolAddress)` | `bigint` | Current number of leaves in the state tree |
 | `getAssetConfig(assetAddress)` | `AssetConfig` | Pool address, minimum deposit, fee config |
 | `getScopeData(scope)` | `{ poolAddress, assetAddress }` | Reverse lookup: scope → pool + asset addresses |
@@ -638,7 +685,7 @@ interface DepositEvent {
   depositor: string;       // depositor address (lowercase)
   commitment: Hash;        // the on-chain commitment hash
   label: Hash;             // the on-chain generated label
-  value: bigint;           // deposited amount
+  value: bigint;           // post-fee committed amount (after vettingFeeBPS deduction)
   precommitment: Hash;     // precommitment hash (matches hashPrecommitment output)
   blockNumber: bigint;
   transactionHash: Hex;
@@ -668,7 +715,7 @@ interface RagequitEvent {
 
 To match a withdrawal to its source deposit, compute `Poseidon(nullifier)` from the deposit's nullifier and compare: `withdrawalEvent.spentNullifier === poseidon([commitment.preimage.precommitment.nullifier])`. You cannot match directly against `depositEvent.precommitment` because they are different hashes.
 
-**⚠️ Known SDK bug — DataService truthiness checks reject valid `0n` values.** The `getDeposits()`, `getWithdrawals()`, and `getRagequits()` methods use JavaScript truthiness checks (`!value`) to validate event fields. Since `!0n === true` in JavaScript, any event field that is legitimately `0n` will be rejected as "missing required fields." In practice this mainly affects `getWithdrawals()` — a zero-value withdrawal (e.g., from a fully-spent commitment) has `_value = 0n`, which fails the `!value` guard and throws `DataError`. If you encounter unexpected `invalidLog` errors on events with zero-value fields, this is the cause. The preferred workaround is to use the ASP API (`mt-leaves`) for state tree reconstruction, which bypasses DataService entirely.
+DataService event parsing uses explicit `null`/`undefined` checks for required fields, so valid `0n` values are handled correctly in `getDeposits()`, `getWithdrawals()`, and `getRagequits()`. If you are pinned to an older SDK release and observe `invalidLog` errors on zero-value events, upgrade to the latest SDK or use ASP API `mt-leaves` as a temporary fallback for tree reconstruction.
 
 ## Error Handling
 

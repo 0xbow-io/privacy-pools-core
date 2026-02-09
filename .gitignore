@@ -1,6 +1,7 @@
 # General
 yarn-error.log
 node_modules
+*.tsbuildinfo
 .DS_Store
 .vscode
 .idea
@@ -20,3 +21,7 @@ node_modules
 .claude/
 docs/artem_questions.md
 docs/potential_sdk_bugs.md
+docs/ENGINEERING_QUESTIONS.md
+docs/engineering-questions.md
+docs/SDK_BUGS.md
+docs/sdk_potential_bugs.md

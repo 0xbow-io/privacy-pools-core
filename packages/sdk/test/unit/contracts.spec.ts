@@ -229,4 +229,19 @@ describe("ContractInteractionsService", () => {
       ContractError.scopeNotFound(BigInt(mockScope)),
     );
   });
+
+  it("should get state root from the privacy pool currentRoot", async () => {
+    const expectedRoot = BigInt(123456789);
+    mockPublicClient.readContract.mockResolvedValue(expectedRoot);
+
+    const result = await service.getStateRoot(mockPoolAddress);
+
+    expect(result).toBe(expectedRoot);
+    expect(mockPublicClient.readContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        address: mockPoolAddress,
+        functionName: "currentRoot",
+      }),
+    );
+  });
 });

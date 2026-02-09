@@ -4,7 +4,7 @@
   "description": "Core repository for the Privacy Pool protocol",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/defi-wonderland/privacy-pool-core.git"
+    "url": "git+https://github.com/0xbow-io/privacy-pools-core.git"
   },
   "license": "Apache-2.0",
   "author": "Wonderland",
