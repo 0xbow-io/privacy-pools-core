@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(yarn build)",
+      "Bash(while read -r path)",
+      "Bash(do)",
+      "Bash(file=\"/Users/matthewb/Documents/0xbow/docs/privacy-pools-core-main/docs/build/$path\")",
+      "Bash(if [ -f \"$file\" ])",
+      "Bash(then)",
+      "Bash(echo:*)",
+      "Bash(else)",
+      "Bash(fi)",
+      "Bash(done)",
+      "WebFetch(domain:dev.to)",
+      "Bash(npm run build:*)",
+      "Bash(npm run docs:build:*)",
+      "Bash(wc:*)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:docs.stripe.com)",
+      "WebFetch(domain:docs.mintlify.com)",
+      "WebFetch(domain:developers.cloudflare.com)"
+    ]
+  }
+}

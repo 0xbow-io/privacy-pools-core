@@ -1,8 +1,15 @@
 ---
 title: Privacy Policy
+description: "Privacy Policy and Cookies Statement describing personal data processing practices for 0xbow properties."
+keywords:
+  - 0xbow
+  - privacy policy
+  - cookies
+  - personal data
+  - data protection
+  - legal
 ---
 
-# Privacy Policy and Cookies Statement
 
 This **Privacy Policy and Cookies Statement** ("**Policy**") describes how **0xbow Ltd**. and its affiliated companies (referred to in this document as "**0xbow**," "we," "us" or "our") collects, uses, shares and otherwise processes Personal Data (defined below) including:
 

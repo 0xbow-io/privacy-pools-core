@@ -1,6 +1,16 @@
 ---
 title: Entrypoint
+description: "Technical reference for the upgradeable Entrypoint contract that coordinates pools, relays withdrawals, updates ASP roots, and manages protocol configuration."
+keywords:
+  - privacy pools
+  - entrypoint
+  - UUPS
+  - access control
+  - asp root
+  - relay
+  - solidity
 ---
+
 
 The Entrypoint contract acts as the central coordinator for the Privacy Pools protocol, managing:
 
@@ -55,7 +65,7 @@ The deposit process:
 ### 2. Withdrawal Relay
 
 ```solidity
-function relay(IPrivacyPool.Withdrawal calldata _withdrawal, ProofLib.WithdrawProof calldata _proof) external nonReentrant
+function relay(IPrivacyPool.Withdrawal calldata _withdrawal, ProofLib.WithdrawProof calldata _proof, uint256 _scope) external nonReentrant
 ```
 
 Handles private withdrawals by:
@@ -70,9 +80,9 @@ Handles private withdrawals by:
 Provides functions for pool lifecycle management:
 
 ```solidity
-function registerPool(IERC20 _asset, IPrivacyPool _pool, uint256 _minimumDepositAmount, uint256 _vettingFeeBPS) external;
+function registerPool(IERC20 _asset, IPrivacyPool _pool, uint256 _minimumDepositAmount, uint256 _vettingFeeBPS, uint256 _maxRelayFeeBPS) external;
 function removePool(IERC20 _asset) external;
-function updatePoolConfiguration(IERC20 _asset, uint256 _minimumDepositAmount, uint256 _vettingFeeBPS) external;
+function updatePoolConfiguration(IERC20 _asset, uint256 _minimumDepositAmount, uint256 _vettingFeeBPS, uint256 _maxRelayFeeBPS) external;
 function windDownPool(IPrivacyPool _pool) external;
 ```
 
@@ -86,7 +96,7 @@ These functions allow:
 ### 4. ASP Root Management
 
 ```solidity
-function updateRoot(uint256 _root, bytes32 _ipfsHash) external returns (uint256 _index);
+function updateRoot(uint256 _root, string memory _ipfsCID) external returns (uint256 _index);
 ```
 
 Maintains withdrawal validation data:

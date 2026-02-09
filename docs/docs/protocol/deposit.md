@@ -1,8 +1,18 @@
 ---
 title: Deposit
+description: "End-to-end deposit flow for ETH and ERC20, including precommitment generation, Entrypoint routing, fees, and commitment insertion."
+keywords:
+  - privacy pools
+  - deposit
+  - eth
+  - erc20
+  - precommitment
+  - entrypoint
+  - commitment
 ---
 
-The deposit operation is the entry point into the Privacy Pools protocol. It allows users to publicly deposit assets (ETH or ERC20 tokens) into a pool, creating a private commitment that can later be used for private withdrawals or public ragequit operations.
+
+The deposit operation is the entry point into the Privacy Pools protocol. It allows users to publicly deposit assets (ETH or ERC20 tokens) into a pool, creating a private commitment that can later be used for [private withdrawals](/protocol/withdrawal) or public [ragequit](/protocol/ragequit) operations.
 
 ## Protocol Flow
 

@@ -1,6 +1,15 @@
 ---
 title: Terms of Use
+description: "Terms of Use governing access to the Privacy Pools website and related functionalities."
+keywords:
+  - 0xbow
+  - terms of use
+  - legal
+  - website terms
+  - agreement
+  - privacy policy
 ---
+
 
 PLEASE READ THE FOLLOWING TERMS AND CONDITIONS (THE "TERMS", "TERMS OF
 USE"), WHICH ALONG WITH OUR [PRIVACY

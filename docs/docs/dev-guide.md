@@ -1,6 +1,16 @@
 ---
 title: Developer Guide
+description: "Developer setup and integration guide covering prerequisites, monorepo structure, and implementation workflows."
+keywords:
+  - privacy pools
+  - developer guide
+  - setup
+  - monorepo
+  - foundry
+  - circom
+  - integration
 ---
+
 
 ## Prerequisites
 
@@ -16,9 +26,9 @@ Before you begin, ensure you have the following installed:
 
 The project is organized as a monorepo with the following packages:
 
-- `contracts`: Solidity smart contracts
-- `circuits`: Zero-knowledge circuits in Circom
-- `sdk`: TypeScript SDK for interacting with the protocol
+- `contracts`: [Solidity smart contracts](/layers/contracts)
+- `circuits`: [Zero-knowledge circuits](/layers/zk) in Circom
+- `sdk`: [TypeScript SDK](/reference/sdk) for interacting with the protocol
 - `relayer`: Note relayer service
 
 ## Installation

@@ -1,21 +1,31 @@
 ---
 title: ASP Layer
+description: "ASP layer responsibilities for approved-label set management, inclusion data publication, and compliance-aware withdrawal gating."
+keywords:
+  - privacy pools
+  - ASP
+  - association set provider
+  - approved labels
+  - compliance
+  - state updates
+  - withdrawals
 ---
 
-### Overview - Role in the Protocol
+
+## Overview - Role in the Protocol
 
 The Association Set Provider is a crucial compliance layer that controls which deposits can be privately withdrawn from Privacy Pools. It maintains a set of approved labels and provides the data necessary for cryptographic proofs of label inclusion, bridging privacy with regulatory requirements.
 
-### Core Responsibilities
+## Core Responsibilities
 
 - Manages list of approved deposit labels
-- Provides inclusion proofs for withdrawals
+- Provides inclusion proofs for [withdrawals](/protocol/withdrawal)
 - Enables label revocation when needed
 - Maintains compliance without compromising privacy
 
-### Integration Points
+## Integration Points
 
-- Interacts with Entrypoint via authorized postmen
+- Interacts with [Entrypoint](/layers/contracts/entrypoint) via authorized postmen
 - Provides roots for withdrawal validation
 - Determines withdrawal eligibility
 - Enforces protocol compliance rules
@@ -44,13 +54,13 @@ The Association Set Provider is a crucial compliance layer that controls which d
 - Withdrawals require valid ASP root
 - Proof must demonstrate label inclusion
 - Latest root used for validation
-- Failed validations trigger ragequit option
+- Failed validations trigger [ragequit](/protocol/ragequit) option
 
 ### Wind Down Process
 
 - Labels can be removed from ASP set
 - Removal triggers withdrawal restrictions
-- Original depositors can ragequit
+- Original depositors can [ragequit](/protocol/ragequit)
 - Enabled complaint exit path
 
 The ASP system enables Privacy Pools to maintain compliance requirements while preserving the core privacy features of the protocol through cryptographic proofs and controlled label management.

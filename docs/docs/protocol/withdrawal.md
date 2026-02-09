@@ -1,15 +1,25 @@
 ---
 title: Withdrawal
+description: "Direct and relayed withdrawal flows, proof generation, nullifier-spend checks, fee handling, and state transition behavior."
+keywords:
+  - privacy pools
+  - withdrawal
+  - relayer
+  - direct withdrawal
+  - nullifier
+  - proof verification
+  - fees
 ---
+
 
 Privacy Pools supports two types of withdrawals:
 
 1. **Direct Withdrawals**: User directly interacts with pool contract
 2. **Relayed Withdrawals**: Withdrawal processed through a relayer for additional privacy
 
-Both methods require zero-knowledge proofs to prove commitment ownership and maintain privacy.
+Both methods require [zero-knowledge proofs](/layers/zk/withdrawal) to prove commitment ownership and maintain privacy.
 
-### Withdrawal Types Comparison
+## Withdrawal Types Comparison
 
 | Aspect                   | Direct Withdrawal  | Relayed Withdrawal                      |
 | ------------------------ | ------------------ | --------------------------------------- |
@@ -108,14 +118,13 @@ sequenceDiagram
 
 ```solidity
 struct Withdrawal {
-    address processooor;    // Direct: recipient, Relayed: Entrypoint
-    uint256 scope;         // Pool identifier
-    bytes data;           // Direct: empty, Relayed: encoded `FeeData`
+    address processooor;    // Direct: recipient address, Relayed: Entrypoint address
+    bytes data;             // Direct: empty, Relayed: ABI-encoded RelayData
 }
 
-struct FeeData {
-    address recipient;     // Final recipient
-    address feeRecipient;  // Relayer address
+struct RelayData {
+    address recipient;     // Final recipient of withdrawn funds
+    address feeRecipient;  // Relayer address (receives the fee)
     uint256 relayFeeBPS;   // Fee in basis points
 }
 ```

@@ -23,11 +23,52 @@ const config: Config = {
   onBrokenLinks: "throw",
   onBrokenMarkdownLinks: "warn",
 
+  headTags: [
+    {
+      tagName: "meta",
+      attributes: { property: "og:type", content: "website" },
+    },
+    {
+      tagName: "meta",
+      attributes: { name: "twitter:site", content: "@0xprivacypools" },
+    },
+    {
+      tagName: "meta",
+      attributes: { name: "twitter:creator", content: "@0xbowio" },
+    },
+    {
+      tagName: "meta",
+      attributes: { name: "twitter:card", content: "summary_large_image" },
+    },
+    {
+      tagName: "meta",
+      attributes: { name: "robots", content: "index, follow" },
+    },
+  ],
+
   markdown: {
     mermaid: true,
   },
 
   themes: ["@docusaurus/theme-mermaid"],
+
+  plugins: [
+    [
+      "docusaurus-plugin-llms",
+      {
+        generateMarkdownFiles: true,
+        generateLLMsTxt: true,
+        generateLLMsFullTxt: true,
+        excludeImports: true,
+        removeDuplicateHeadings: true,
+        rootContent:
+          "Sitemap: https://docs.privacypools.com/sitemap.xml\nFull docs for LLMs: https://docs.privacypools.com/llms-full.txt\nSkills overview: https://docs.privacypools.com/skills.md",
+        pathTransformation: {
+          ignorePaths: ["docs"],
+        },
+      },
+    ],
+  ],
 
   // Even if you don't use internationalization, you can use this field to set
   // useful metadata like html lang. For example, if your site is Chinese, you
@@ -57,7 +98,7 @@ const config: Config = {
 
   themeConfig: {
     // Replace with your project's social card
-    image: "img/docusaurus-social-card.jpg",
+    image: "img/privacy-pools-banner.png",
     sidebar: {
       autoCollapseCategories: false,
     },
@@ -77,6 +118,16 @@ const config: Config = {
     },
     footer: {
       style: "dark",
+      links: [
+        {
+          title: "For AI Agents",
+          items: [
+            { label: "llms.txt", href: "https://docs.privacypools.com/llms.txt" },
+            { label: "llms-full.txt", href: "https://docs.privacypools.com/llms-full.txt" },
+            { label: "skills.md", href: "https://docs.privacypools.com/skills.md" },
+          ],
+        },
+      ],
       copyright: `Copyright © ${new Date().getFullYear()} 0XBOW LTD`,
     },
     prism: {

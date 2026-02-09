@@ -1,6 +1,16 @@
 ---
 title: Commitment Circuit
+description: "Interface and behavior of the commitment circuit used to derive commitment and nullifier hashes from deposit inputs."
+keywords:
+  - privacy pools
+  - commitment circuit
+  - circom
+  - poseidon
+  - nullifier hash
+  - deposit proof
+  - zk
 ---
+
 
 The commitment circuit (`commitment.circom`) handles the creation and verification of commitments:
 
