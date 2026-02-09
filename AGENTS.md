@@ -32,16 +32,16 @@ Yarn workspaces monorepo:
 yarn
 
 # Contracts
-yarn workspace @0xbow/contracts test
+yarn workspace @privacy-pool-core/contracts test
 
 # Circuits
-yarn workspace @0xbow/circuits test
+yarn workspace @privacy-pool-core/circuits test
 
 # SDK
-yarn workspace @0xbow/sdk test
+yarn workspace @0xbow/privacy-pools-core-sdk test
 
 # Relayer
-yarn workspace @0xbow/relayer test
+yarn workspace @privacy-pool-core/relayer test
 
 # Docs
 cd docs && yarn build

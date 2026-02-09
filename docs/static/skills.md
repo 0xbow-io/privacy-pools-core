@@ -368,19 +368,18 @@ The API matches the OSS relayer contract (`packages/relayer`) exactly:
 - `POST /relayer/request`
 - `GET /relayer/details`
 
-Example `POST /relayer/quote`:
+Example `POST /relayer/quote` — without `recipient` (fee estimate only, no signed commitment):
 
 ```json
 {
   "chainId": 11155111,
   "amount": "1000000000000000000",
   "asset": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
-  "extraGas": false,
-  "recipient": "0xRecipientAddress"
+  "extraGas": false
 }
 ```
 
-Example response (values are dynamic — vary with gas price and relayer config):
+Response (values are dynamic — vary with gas price and relayer config):
 
 ```json
 {
@@ -396,7 +395,19 @@ Example response (values are dynamic — vary with gas price and relayer config)
 }
 ```
 
-When `recipient` is provided in the quote request, the response also includes a `feeCommitment` object (pass it through unchanged to `/relayer/request`):
+Example `POST /relayer/quote` — with `recipient` (returns a signed `feeCommitment` to pass through to `/relayer/request`):
+
+```json
+{
+  "chainId": 11155111,
+  "amount": "1000000000000000000",
+  "asset": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+  "extraGas": false,
+  "recipient": "0xRecipientAddress"
+}
+```
+
+Response:
 
 ```json
 {
@@ -656,6 +667,8 @@ interface RagequitEvent {
 - `WithdrawalEvent.spentNullifier` = `Poseidon(nullifier)` — the circuit's nullifier hash (single input, NOT the precommitment).
 
 To match a withdrawal to its source deposit, compute `Poseidon(nullifier)` from the deposit's nullifier and compare: `withdrawalEvent.spentNullifier === poseidon([commitment.preimage.precommitment.nullifier])`. You cannot match directly against `depositEvent.precommitment` because they are different hashes.
+
+**⚠️ Known SDK bug — DataService truthiness checks reject valid `0n` values.** The `getDeposits()`, `getWithdrawals()`, and `getRagequits()` methods use JavaScript truthiness checks (`!value`) to validate event fields. Since `!0n === true` in JavaScript, any event field that is legitimately `0n` will be rejected as "missing required fields." In practice this mainly affects `getWithdrawals()` — a zero-value withdrawal (e.g., from a fully-spent commitment) has `_value = 0n`, which fails the `!value` guard and throws `DataError`. If you encounter unexpected `invalidLog` errors on events with zero-value fields, this is the cause. The preferred workaround is to use the ASP API (`mt-leaves`) for state tree reconstruction, which bypasses DataService entirely.
 
 ## Error Handling
 

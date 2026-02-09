@@ -19,4 +19,4 @@ node_modules
 # Local AI/agent tooling and private planning notes
 .claude/
 docs/artem_questions.md
-docs/sdk_potential_bugs.md
+docs/potential_sdk_bugs.md
