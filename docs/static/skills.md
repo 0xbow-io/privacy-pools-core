@@ -180,16 +180,36 @@ The withdrawal flow requires several inputs sourced from on-chain state and exte
 |-------|--------|---------------|
 | `scope` | Pool contract | `contracts.getScope(privacyPoolAddress)` |
 | `stateRoot` | Pool contract | Read `currentRoot()` directly via viem `readContract` (see workaround in Step 4 above — the SDK's `getStateRoot()` has a known bug) |
-| `allCommitmentHashes` | On-chain events | Reconstruct from `DataService` (see below) |
-| `aspRoot` | ASP (on-chain or API) | On-chain: `Entrypoint.latestRoot()`. Or from ASP API if available (see below) |
-| `aspLabels` | ASP (IPFS or API) | On-chain: `Entrypoint.associationSets(index)` → `ipfsCID` → fetch label set from IPFS. Or from ASP API if available (see below) |
+| `allCommitmentHashes` | ASP API (preferred) or on-chain events | **Preferred:** `GET /{chainId}/public/mt-leaves` → `response.stateTreeLeaves` (pre-ordered). **Fallback:** reconstruct from `DataService` events (see below) |
+| `aspRoot` | ASP API | `GET /{chainId}/public/mt-roots` → `response.mtRoot`. Requires `X-Pool-Scope` header. Verify against on-chain `Entrypoint.latestRoot()` before submitting |
+| `aspLabels` | ASP API | `GET /{chainId}/public/mt-leaves` → `response.aspLeaves`. Requires `X-Pool-Scope` header. Returns `string[]` of decimal bigint labels |
 | `label` | Deposit event | Read from `Deposited` event logs after deposit tx |
 | `withdrawal` | Constructed by user | `{ processooor: signerAddress, data: "0x" }` (direct) or `{ processooor: entrypointAddress, data: relayData }` (relayed) |
 | `context` | Derived | `calculateContext(withdrawal, scope)` |
 
 ### Reconstructing the state tree
 
-The state tree is built from deposit and withdrawal event logs. Each deposit inserts a `commitment` leaf; each withdrawal inserts a `newCommitment` leaf (the change commitment). Ragequit does NOT insert a leaf — it only spends a nullifier. Leaves must be merged in **on-chain insertion order** (by block number, then log index within the block). The SDK event types don't expose `logIndex`, so the best available approach is to sort by `blockNumber` and rely on stable sort to preserve relative order. Since `DataService` returns events via `getLogs` (which preserves log ordering), each array from `getDeposits()` and `getWithdrawals()` is already internally ordered. Spread deposits before withdrawals and stable-sort by block — this is correct for the common case (a commitment must exist before it can be spent). Always validate the reconstructed root against the on-chain `currentRoot()` (via `readContract` — see Step 4 workaround) to catch rare same-block interleaving mismatches.
+**Preferred: Use the ASP API.** The `GET /{chainId}/public/mt-leaves` endpoint returns `stateTreeLeaves` — the complete, pre-ordered list of commitment hashes for the pool. This is the simplest and most reliable way to build the state Merkle proof:
+
+```typescript
+// Fetch state tree leaves and ASP labels in one call
+const aspApiHost = getAspApiHost(chainId); // see getAspApiHost helper in "ASP data" section below
+const scope = await contracts.getScope(privacyPoolAddress);
+const res = await fetch(`${aspApiHost}/${chainId}/public/mt-leaves`, {
+  headers: { "X-Pool-Scope": scope.toString() },
+});
+const { aspLeaves, stateTreeLeaves } = await res.json();
+
+// Convert to bigint arrays
+const allCommitmentHashes: bigint[] = stateTreeLeaves.map((s: string) => BigInt(s));
+const aspLabels: bigint[] = aspLeaves.map((s: string) => BigInt(s));
+
+// Build Merkle proofs directly
+const stateMerkleProof = generateMerkleProof(allCommitmentHashes, commitment.hash);
+const aspMerkleProof = generateMerkleProof(aspLabels, commitment.preimage.label);
+```
+
+**Fallback: Reconstruct from on-chain events.** If the API is unavailable, build the state tree from deposit and withdrawal event logs. Each deposit inserts a `commitment` leaf; each withdrawal inserts a `newCommitment` leaf (the change commitment). Ragequit does NOT insert a leaf — it only spends a nullifier. Leaves must be merged in **on-chain insertion order** (by block number, then log index within the block). The SDK event types don't expose `logIndex`, so the best available approach is to sort by `blockNumber` and rely on stable sort to preserve relative order. Since `DataService` returns events via `getLogs` (which preserves log ordering), each array from `getDeposits()` and `getWithdrawals()` is already internally ordered. Spread deposits before withdrawals and stable-sort by block — this is correct for the common case (a commitment must exist before it can be spent). Always validate the reconstructed root against the on-chain `currentRoot()` (via `readContract` — see Step 4 workaround) to catch rare same-block interleaving mismatches.
 
 ```typescript
 // Use the deployment start block for the chain (see Supported Networks table above).
@@ -237,12 +257,75 @@ const stateMerkleProof = generateMerkleProof(allCommitmentHashes, commitment.has
 
 The `aspRoot` and `aspLabels` come from the Association Set Provider (ASP), operated by 0xbow. The ASP screens deposits for compliance and publishes a Merkle tree of approved **labels** (not commitment hashes). The ZK circuit verifies that the deposit's `label` is a leaf in the ASP tree. Since the `label` stays the same across partial withdrawals, a single ASP approval covers the original deposit and all its subsequent change commitments. Most deposits are approved within 1 hour, though some may take up to 7 days. The ASP can also retroactively remove a label from the approved set — if removed, private withdrawal fails but ragequit (public exit) always remains available.
 
-**How to obtain ASP data:** There are two possible paths (canonical source is pending confirmation from the engineering team):
+**Canonical source (engineering-confirmed): ASP HTTP API backed by database data.**
 
-1. **On-chain + IPFS:** The `aspRoot` is available on-chain via `Entrypoint.latestRoot()`. To get the corresponding IPFS CID, query `RootUpdated(uint256 root, string ipfsCID, uint256 timestamp)` events from the Entrypoint contract. The most recent event contains the latest CID — fetch the label data from IPFS using that CID, then build the Merkle tree locally. (You can also call `Entrypoint.associationSets(index)` directly, but the contract has no length accessor — use the `RootUpdated` event count to determine the latest index.)
-2. **ASP HTTP API (if available):** 0xbow may operate an API that returns the root and labels (or pre-computed Merkle proofs) directly. The SDK does not include an ASP client.
+Base URLs:
+- Mainnet: `https://api.0xbow.io`
+- Testnet: `https://dw.0xbow.io`
+- Swagger docs: `https://api.0xbow.io/api-docs` (⚠️ **Swagger schemas are inaccurate across multiple endpoints** — e.g., `mt-roots` advertises `{ root }` but returns `{ mtRoot, createdAt, onchainMtRoot }`; deposit/withdrawal endpoints return `depositEvents`/`withdrawalEvents` keys where Swagger says `events`; `pool-info` returns a completely different shape than the DTO. **Do not trust Swagger DTOs for response parsing.** Always use the response shapes documented in this file.)
 
-The on-chain root is always authoritative (the contract validates against it). If using an API, always verify the returned root matches `Entrypoint.latestRoot()`.
+> **Note:** `request.0xbow.io` is a partner-only host (API-key gated) and does **not** serve the public `mt-roots` / `mt-leaves` endpoints documented below. Only use `api.0xbow.io` (mainnet) or `dw.0xbow.io` (testnet) for ASP data.
+
+**Host selection helper** (used in all code samples below):
+
+```typescript
+function getAspApiHost(chainId: number): string {
+  const hosts: Record<number, string> = {
+    1:        "https://api.0xbow.io",  // Ethereum Mainnet
+    42161:    "https://api.0xbow.io",  // Arbitrum
+    10:       "https://api.0xbow.io",  // OP Mainnet
+    11155111: "https://dw.0xbow.io",   // Sepolia testnet
+  };
+  const host = hosts[chainId];
+  if (!host) throw new Error(`No ASP API host configured for chainId ${chainId}`);
+  return host;
+}
+```
+
+#### `GET /{chainId}/public/mt-roots` — ASP Merkle root
+
+Returns the current ASP tree root for a pool. **Required header:** `X-Pool-Scope` (scope as decimal string).
+
+```typescript
+const aspApiHost = getAspApiHost(chainId); // see helper above
+const scope = await contracts.getScope(privacyPoolAddress);
+const res = await fetch(`${aspApiHost}/${chainId}/public/mt-roots`, {
+  headers: { "X-Pool-Scope": scope.toString() },
+});
+const { mtRoot, createdAt, onchainMtRoot } = await res.json();
+// mtRoot: string — current ASP Merkle root (decimal bigint string) from the database
+// createdAt: string — ISO timestamp of this root
+// onchainMtRoot: string — the on-chain root value (may lag slightly behind mtRoot)
+const aspRoot = BigInt(mtRoot) as unknown as Hash;
+```
+
+#### `GET /{chainId}/public/mt-leaves` — ASP labels + state tree leaves
+
+Returns both the ASP-approved labels and the state tree commitment hashes for a pool. **Required header:** `X-Pool-Scope` (scope as decimal string).
+
+```typescript
+const aspApiHost = getAspApiHost(chainId); // see helper above
+const res = await fetch(`${aspApiHost}/${chainId}/public/mt-leaves`, {
+  headers: { "X-Pool-Scope": scope.toString() },
+});
+const { aspLeaves, stateTreeLeaves } = await res.json();
+// aspLeaves: string[] — approved labels (decimal bigint strings), in tree insertion order
+// stateTreeLeaves: string[] — all commitment hashes (decimal bigint strings), in tree insertion order
+const aspLabels: bigint[] = aspLeaves.map((s: string) => BigInt(s));
+const allCommitmentHashes: bigint[] = stateTreeLeaves.map((s: string) => BigInt(s));
+```
+
+**Important notes:**
+- The `X-Pool-Scope` value must be a **decimal string** (hex will return 404).
+- Both endpoints are unauthenticated (no API key required) on the mainnet and testnet hosts.
+- No pagination — the full leaf arrays are returned in a single response.
+- The contract validates against the latest on-chain ASP root. Verify: `BigInt(mtRoot) === Entrypoint.latestRoot()` before submitting. If they differ, the ASP database may be ahead of the on-chain root — wait for the next `updateRoot` transaction or re-fetch.
+
+**On-chain/IPFS (supplemental, not canonical client source):**
+
+- Latest root: `Entrypoint.latestRoot()` (selector: `0xd7b0fef1`).
+- Historical root access: admin-only.
+- CID source: `associationSets(index).ipfsCID` — returns IPFS CID containing the label set for a given root index.
 
 ### Constructing the Withdrawal object
 
@@ -269,6 +352,125 @@ const relayData = encodeAbiParameters(
   [recipientAddress, relayerAddress, relayFeeBPS]
 );
 const withdrawal: Withdrawal = { processooor: entrypointAddress, data: relayData };
+```
+
+### Relayer API (engineering-confirmed)
+
+The relayer is a **separate service** from the ASP API — it is NOT hosted on `api.0xbow.io` or `dw.0xbow.io`.
+
+Base URLs:
+- Testnet: `https://testnet-relayer.privacypools.com` (confirmed live)
+- Mainnet: not yet publicly documented — check with 0xbow engineering or the [docs site](https://docs.privacypools.com) for updates.
+
+The API matches the OSS relayer contract (`packages/relayer`) exactly:
+
+- `POST /relayer/quote`
+- `POST /relayer/request`
+- `GET /relayer/details`
+
+Example `POST /relayer/quote`:
+
+```json
+{
+  "chainId": 11155111,
+  "amount": "1000000000000000000",
+  "asset": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+  "extraGas": false,
+  "recipient": "0xRecipientAddress"
+}
+```
+
+Example response (values are dynamic — vary with gas price and relayer config):
+
+```json
+{
+  "baseFeeBPS": "10",
+  "feeBPS": "17",
+  "gasPrice": "1089675357",
+  "detail": {
+    "relayTxCost": {
+      "gas": "650000",
+      "eth": "708288982050000"
+    }
+  }
+}
+```
+
+When `recipient` is provided in the quote request, the response also includes a `feeCommitment` object (pass it through unchanged to `/relayer/request`):
+
+```json
+{
+  "baseFeeBPS": "10",
+  "feeBPS": "17",
+  "gasPrice": "1089675357",
+  "detail": { "relayTxCost": { "gas": "650000", "eth": "708288982050000" } },
+  "feeCommitment": {
+    "expiration": 1744676669549,
+    "withdrawalData": "0x...",
+    "asset": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+    "amount": "1000000000000000000",
+    "extraGas": false,
+    "signedRelayerCommitment": "0x..."
+  }
+}
+```
+
+Example `POST /relayer/request` (schema: `zRelayRequest` in `packages/relayer/src/schemes/relayer/request.scheme.ts`):
+
+```json
+{
+  "chainId": 11155111,
+  "scope": "123456789012345678901234567890",
+  "withdrawal": {
+    "processooor": "0x6818809eefce719e480a7526d76bd3e561526b46",
+    "data": "0x..."
+  },
+  "proof": {
+    "pi_a": ["...", "...", "..."],
+    "pi_b": [["...", "..."], ["...", "..."], ["...", "..."]],
+    "pi_c": ["...", "...", "..."]
+  },
+  "publicSignals": ["0", "1", "2", "3", "4", "5", "6", "7"],
+  "feeCommitment": {
+    "expiration": 1744676669549,
+    "withdrawalData": "0x...",
+    "asset": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+    "extraGas": false,
+    "amount": "1000000000000000000",
+    "signedRelayerCommitment": "0x..."
+  }
+}
+```
+
+**Schema notes:**
+- `scope`: decimal bigint string (not hex)
+- `publicSignals`: must be exactly 8 elements (string array)
+- `proof.pi_a` / `pi_c`: 3-element string tuples; `proof.pi_b`: 3×2-element string tuples
+- `feeCommitment` is optional, but when present ALL 6 fields are required: `expiration`, `withdrawalData`, `asset`, `extraGas`, `amount`, `signedRelayerCommitment`
+- The `feeCommitment` fields come directly from the `/relayer/quote` response — pass them through unchanged
+
+Example response:
+
+```json
+{
+  "success": true,
+  "txHash": "0x...",
+  "timestamp": 1744676669549,
+  "requestId": "uuid"
+}
+```
+
+Example `GET /relayer/details?chainId=11155111&assetAddress=0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE` response:
+
+```json
+{
+  "chainId": 11155111,
+  "feeBPS": "10",
+  "minWithdrawAmount": "100",
+  "feeReceiverAddress": "0x349746Ab142B5d0D65899d9bcB6f2Cd53AB084d8",
+  "assetAddress": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+  "maxGasPrice": "10000000000000"
+}
 ```
 
 ### Reading the label and committed value from deposit events
@@ -377,7 +579,7 @@ All write methods return `Promise<{ hash: string; wait: () => Promise<void> }>`.
 | Arbitrum | 42161 | `import { arbitrum } from "viem/chains"` | `0x44192215fed782896be2ce24e0bfbf0bf825d15e` | `404391804n` |
 | OP Mainnet | 10 | `import { optimism } from "viem/chains"` | `0x44192215fed782896be2ce24e0bfbf0bf825d15e` | `144288141n` |
 
-Privacy Pools is also deployed on Starknet, but Starknet is **not supported by this SDK** (`@0xbow/privacy-pools-core-sdk`). Starknet integration requires a separate SDK (not viem-based).
+Privacy Pools is also deployed on Starknet, but as of February 9, 2026 Starknet is **not supported by this SDK** (`@0xbow/privacy-pools-core-sdk`). Starknet integration requires a separate SDK (not viem-based). Engineering has indicated a public Starknet SDK is planned but not yet released.
 
 Full pool addresses and asset addresses: https://docs.privacypools.com/deployments
 
