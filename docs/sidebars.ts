@@ -67,6 +67,7 @@ const sidebars: SidebarsConfig = {
       label: "Technical Reference",
       items: ["reference/contracts", "reference/circuits", "reference/sdk"],
     },
+    "agent-workflows",
     "dev-guide",
     "toc",
     "privacy-policy",

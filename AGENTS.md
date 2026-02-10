@@ -6,14 +6,20 @@
 
 ## Repository Structure
 
-Yarn workspaces monorepo:
+Yarn workspaces monorepo (Node.js >= 20, Yarn 1.x):
 
 - `packages/circuits/` - Circom circuits (commitment, withdrawal, LeanIMT)
 - `packages/contracts/` - Solidity contracts (Entrypoint + PrivacyPool variants)
 - `packages/relayer/` - Relayer service for relayed withdrawals
-- `packages/sdk/` - TypeScript SDK for protocol integration
+- `packages/sdk/` - TypeScript SDK (`@0xbow/privacy-pools-core-sdk`) for protocol integration
 - `docs/` - Docusaurus docs site
 - `audit/` - Security audit reports (read-only)
+
+**Protocol integration docs (agent-first layering):**
+- `docs/static/skills-core.md` — quick operational guide for autonomous agents and human+agent workflows (start here).
+- `docs/static/skills.md` — canonical deep reference and source of truth.
+- `CLAUDE.md` — thin Claude Code router for this repo.
+- `skills/privacy-pools/SKILL.md` — installable Codex skill wrapper derived from the canonical docs.
 
 ## Key Domain Concepts
 
@@ -28,7 +34,7 @@ Yarn workspaces monorepo:
 ## Build and Test Commands
 
 ```bash
-# Repo dependencies
+# Install all workspace dependencies
 yarn
 
 # Contracts
@@ -69,3 +75,4 @@ cd docs && yarn build
 - Mermaid is enabled for flow diagrams.
 - LLM artifacts (`llms.txt`, `llms-full.txt`, markdown exports) are generated at build.
 - Keep `title`, `description`, and `keywords` frontmatter on all docs pages.
+- Agent workflow overview page: `docs/docs/agent-workflows.md`.
