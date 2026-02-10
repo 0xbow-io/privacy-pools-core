@@ -134,6 +134,14 @@ const { nullifier: newNullifier, secret: newSecret } = generateWithdrawalSecrets
   masterKeys, label, withdrawalIndex
 );
 
+// Step 1b: Validate withdrawal amount
+// withdrawalAmount must be > 0 and <= the commitment's value.
+// Exceeding the committed value causes a cryptic circuit error during proof generation.
+if (withdrawalAmount <= 0n) throw new Error("Withdrawal amount must be > 0");
+if (withdrawalAmount > commitment.preimage.value) {
+  throw new Error(`Withdrawal amount ${withdrawalAmount} exceeds committed value ${commitment.preimage.value}`);
+}
+
 // Step 2: Reconstruct the state tree and build Merkle proofs
 // (see "Data Sourcing" section below for full details)
 const stateMerkleProof = generateMerkleProof(allCommitmentHashes, commitment.hash);
@@ -239,8 +247,9 @@ const pool: PoolInfo = { chainId, address: privacyPoolAddress, scope, deployment
 const deposits = await dataService.getDeposits(pool);
 const withdrawals = await dataService.getWithdrawals(pool);
 // Also available: const ragequits = await dataService.getRagequits(pool);
-// getWithdrawals accepts an optional fromBlock parameter for incremental fetching:
+// getWithdrawals and getRagequits accept an optional fromBlock parameter for incremental fetching:
 //   const newWithdrawals = await dataService.getWithdrawals(pool, lastProcessedBlock + 1n);
+//   const newRagequits = await dataService.getRagequits(pool, lastProcessedBlock + 1n);
 
 // Merge leaves in on-chain insertion order (by block number).
 // Both arrays are already in log order from getLogs. Use a stable merge so that
@@ -272,7 +281,7 @@ const stateMerkleProof = generateMerkleProof(allCommitmentHashes, commitment.has
 
 ### ASP data
 
-The `aspRoot` and `aspLabels` come from the Association Set Provider (ASP), operated by 0xbow. The ASP screens deposits for compliance and publishes a Merkle tree of approved **labels** (not commitment hashes). The ZK circuit verifies that the deposit's `label` is a leaf in the ASP tree. Since the `label` stays the same across partial withdrawals, a single ASP approval covers the original deposit and all its subsequent change commitments. Most deposits are approved within 1 hour, though some may take up to 7 days. The ASP can also retroactively remove a label from the approved set — if removed, private withdrawal fails but ragequit (public exit) always remains available.
+The `aspRoot` and `aspLabels` come from the Association Set Provider (ASP), operated by 0xbow. The ASP screens deposits for compliance and publishes a Merkle tree of approved **labels** (not commitment hashes). The ZK circuit verifies that the deposit's `label` is a leaf in the ASP tree. Since the `label` stays the same across partial withdrawals, a single ASP approval covers the original deposit and all its subsequent change commitments. Most deposits are approved within 1 hour, though some may take up to 7 days. The ASP can also retroactively remove a label from the approved set — if removed, private withdrawal fails (the label will be absent from `aspLeaves`) but ragequit (public exit) always remains available. **Pre-withdrawal safety check:** Always verify your deposit's label is still present in `aspLeaves` before generating a withdrawal proof. If the label has been removed since your last check, the proof will be valid but the withdrawal will fail because the ASP Merkle proof won't include your label.
 
 **Canonical source (engineering-confirmed): ASP HTTP API backed by database data.**
 
@@ -292,6 +301,7 @@ function getAspApiHost(chainId: number): string {
     42161:    "https://api.0xbow.io",  // Arbitrum
     10:       "https://api.0xbow.io",  // OP Mainnet
     11155111: "https://dw.0xbow.io",   // Sepolia testnet
+    11155420: "https://dw.0xbow.io",   // OP Sepolia testnet
   };
   const host = hosts[chainId];
   if (!host) throw new Error(`No ASP API host configured for chainId ${chainId}`);
@@ -397,7 +407,7 @@ const { chains } = await res.json();
 // Example: { ethereum: { entrypoint: "0x6818...", fromBlock: 22167294, chainId: "1" }, ... }
 ```
 
-> **Note:** Treat `GET /global/public/entrypoints` as discovery data, not an automatic allowlist. For this SDK workflow, filter to the chains listed in the **Supported Networks** table below (Ethereum, Arbitrum, OP Mainnet) unless you have separately validated additional chains. **Important:** The `fromBlock` in this response is the entrypoint deployment block, which may be later than the optimal `startBlock` for event scanning. Always use the `startBlock` values from the **Supported Networks** table for `DataService` — using the entrypoints `fromBlock` could miss early deposit events.
+> **Note:** Treat `GET /global/public/entrypoints` as discovery data, not an automatic allowlist. For this SDK workflow, filter to the chains listed in the **Supported Networks** table below (Ethereum, Arbitrum, OP Mainnet, Sepolia, OP Sepolia) unless you have separately validated additional chains. **Important:** The `fromBlock` in this response is the entrypoint deployment block, which may be later than the optimal `startBlock` for event scanning. Always use the `startBlock` values from the **Supported Networks** table for `DataService` — using the entrypoints `fromBlock` could miss early deposit events.
 
 #### `GET /{chainId}/public/deposits-larger-than` — Anonymity set size
 
@@ -459,6 +469,23 @@ Base URLs:
 - Mainnet: `https://fastrelay.xyz`
 - Testnet: `https://testnet-relayer.privacypools.com`
 
+**Host selection helper** (mirrors the ASP helper pattern):
+
+```typescript
+function getRelayerHost(chainId: number): string {
+  const hosts: Record<number, string> = {
+    1:        "https://fastrelay.xyz",                    // Ethereum Mainnet
+    42161:    "https://fastrelay.xyz",                    // Arbitrum
+    10:       "https://fastrelay.xyz",                    // OP Mainnet
+    11155111: "https://testnet-relayer.privacypools.com", // Sepolia testnet
+    11155420: "https://testnet-relayer.privacypools.com", // OP Sepolia testnet
+  };
+  const host = hosts[chainId];
+  if (!host) throw new Error(`No relayer host configured for chainId ${chainId}`);
+  return host;
+}
+```
+
 The canonical production relayer is operated by Fat Solutions. The relayer code is open-source (`packages/relayer`) — anyone can host their own. The relayer supports EVM chains and assets currently served by `fastrelay.xyz`; verify each chain/asset pair with `GET /relayer/details?chainId={chainId}&assetAddress={asset}` before use.
 
 The API matches the OSS relayer contract (`packages/relayer`) exactly:
@@ -477,6 +504,8 @@ Example `POST /relayer/quote` — without `recipient` (fee estimate only, no sig
   "extraGas": false
 }
 ```
+
+`extraGas`: when `true`, requests the relayer to use a higher gas limit for the relay transaction. Set to `true` if the recipient is a contract that needs additional gas to process the received funds (e.g., a smart wallet or multisig). For EOA recipients, use `false`.
 
 Response (values are dynamic — vary with gas price and relayer config):
 
@@ -595,7 +624,7 @@ This is the most common privacy-preserving flow: withdraw to a **different addre
 // and aspRoot/aspLabels/allCommitmentHashes from the ASP API (see Data Sourcing above).
 
 // Step 1: Get a relayer fee quote WITH recipient (returns signed feeCommitment)
-const relayerHost = "https://fastrelay.xyz"; // mainnet; see Relayer API section for testnet
+const relayerHost = getRelayerHost(1); // mainnet; helper handles testnets too
 const nativeAsset = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 const quoteRes = await fetch(`${relayerHost}/relayer/quote`, {
   method: "POST",
@@ -621,6 +650,14 @@ const details = await detailsRes.json();
 if (withdrawalAmount < BigInt(details.minWithdrawAmount)) {
   throw new Error(
     `Withdrawal amount ${withdrawalAmount} is below relayer minimum ${details.minWithdrawAmount}`
+  );
+}
+
+// Step 1c: Validate that the quoted fee is within the on-chain maximum
+const assetConfig = await contracts.getAssetConfig(nativeAsset);
+if (BigInt(quote.feeBPS) > assetConfig.maxRelayFeeBPS) {
+  throw new Error(
+    `Quoted fee ${quote.feeBPS} BPS exceeds on-chain max ${assetConfig.maxRelayFeeBPS} BPS`
   );
 }
 
@@ -676,9 +713,23 @@ const requestRes = await fetch(`${relayerHost}/relayer/request`, {
     feeCommitment: quote.feeCommitment,  // pass through unchanged from quote response
   }),
 });
-if (!requestRes.ok) throw new Error(`Relayer request failed: ${requestRes.status}`);
+if (!requestRes.ok) {
+  // Relayer returns JSON error bodies with { message, error?, statusCode? } on failure.
+  // Common: 400 (bad proof/inputs), 422 (expired feeCommitment), 503 (relayer at capacity).
+  const errBody = await requestRes.json().catch(() => ({}));
+  throw new Error(`Relayer request failed (${requestRes.status}): ${errBody.message ?? "unknown"}`);
+}
 const result = await requestRes.json();
 // result: { success: true, txHash: "0x...", timestamp: ..., requestId: "..." }
+
+// Step 5: Wait for the relay transaction to be mined
+// The relayer returns a txHash but the tx may still be pending — wait for confirmation.
+import { createPublicClient, http } from "viem";
+const publicClient = createPublicClient({ chain: mainnet, transport: http(rpcUrl) });
+const receipt = await publicClient.waitForTransactionReceipt({ hash: result.txHash as `0x${string}` });
+if (receipt.status !== "success") {
+  throw new Error(`Relay transaction reverted: ${result.txHash}`);
+}
 ```
 
 ### Reading the label and committed value from deposit events
@@ -718,6 +769,22 @@ const label = myDeposit.label;              // bigint
 const committedValue = myDeposit.value;     // bigint (post-fee amount)
 ```
 
+**Other event ABIs for manual receipt decoding:**
+
+```typescript
+import { parseAbi } from "viem";
+
+// Withdrawn event (emitted by the pool contract on withdrawal)
+const withdrawnEvent = parseAbi([
+  "event Withdrawn(address indexed _processooor, uint256 _value, uint256 _spentNullifier, uint256 _newCommitment)"
+]);
+
+// Ragequit event (emitted by the pool contract on ragequit)
+const ragequitEvent = parseAbi([
+  "event Ragequit(address indexed _ragequitter, uint256 _commitment, uint256 _label, uint256 _value)"
+]);
+```
+
 ### Recovering deposits from a mnemonic
 
 To find which deposits belong to a given mnemonic, compute the expected precommitment hash for each sequential deposit index and match it against on-chain deposit events:
@@ -743,7 +810,34 @@ for (let i = 0n; ; i++) {
   myDeposits.push({ ...match, nullifier, secret, index: i });
 }
 // myDeposits now contains all your deposits with their secrets for withdrawal/ragequit
+
+// After recovery, determine the correct withdrawalIndex for each deposit.
+// withdrawalIndex is a global counter per label — count prior withdrawals to find the next index.
+const allWithdrawals = await dataService.getWithdrawals(pool);
+const spentNullifiers = new Set(allWithdrawals.map(w => w.spentNullifier.toString()));
+
+// Note: spentNullifier = Poseidon(nullifier). The SDK does not export Poseidon.
+// Install circomlibjs for manual matching (or use AccountService in production).
+import { buildPoseidon } from "circomlibjs";
+const poseidon = await buildPoseidon();
+
+for (const dep of myDeposits) {
+  // withdrawalIndex is global per label: 0n, 1n, 2n, ...
+  // Find the first index whose nullifier hash is NOT already spent.
+  let wi = 0n;
+  while (true) {
+    const { nullifier: wNullifier } = generateWithdrawalSecrets(masterKeys, dep.label, wi);
+    const wNullifierHash = BigInt(poseidon.F.toString(poseidon([wNullifier])));
+    if (!spentNullifiers.has(wNullifierHash.toString())) break;
+    wi++;
+  }
+  (dep as any).nextWithdrawalIndex = wi;
+}
+// For production recovery flows, use AccountService — it tracks withdrawal state automatically
+// and provides getSpendableCommitments() and createWithdrawalSecrets(commitment) methods.
 ```
+
+> **Determining `withdrawalIndex` after recovery:** The `withdrawalIndex` is a global counter per label — it does NOT reset for change commitments. After recovering deposits, you need to know how many withdrawals have already been made from each label to avoid reusing an index (which generates invalid secrets). The simplest production approach is `AccountService`, which tracks withdrawal state automatically via `createWithdrawalSecrets(commitment)`. For manual tracking, scan `WithdrawalEvent`s and match `spentNullifier` values against derived nullifier hashes for each sequential index until no match is found.
 
 ## Contract Read Methods
 
@@ -786,10 +880,15 @@ All write methods return `Promise<{ hash: string; wait: () => Promise<void> }>`.
 | Ethereum Mainnet | 1 | `import { mainnet } from "viem/chains"` | `0x6818809eefce719e480a7526d76bd3e561526b46` | `22153709n` |
 | Arbitrum | 42161 | `import { arbitrum } from "viem/chains"` | `0x44192215fed782896be2ce24e0bfbf0bf825d15e` | `404391804n` |
 | OP Mainnet | 10 | `import { optimism } from "viem/chains"` | `0x44192215fed782896be2ce24e0bfbf0bf825d15e` | `144288141n` |
+| Sepolia (testnet) | 11155111 | `import { sepolia } from "viem/chains"` | `0x34a2068192b1297f2a7f85d7d8cde66f8f0921cb` | `8461450n` |
+| OP Sepolia (testnet) | 11155420 | `import { optimismSepolia } from "viem/chains"` | `0x54aca0d27500669fa37867233e05423701f11ba1` | `32854673n` |
 
 Privacy Pools is also deployed on Starknet, but as of February 9, 2026 Starknet is **not supported by this SDK** (`@0xbow/privacy-pools-core-sdk`). Starknet integration requires a separate SDK (not viem-based). Engineering has indicated a public Starknet SDK is planned but not yet released.
 
-> **Sepolia testnet (Chain ID 11155111):** Sepolia appears in some examples below (ASP host helper, relayer API examples) because the testnet ASP and relayer are available at `dw.0xbow.io` and `testnet-relayer.privacypools.com` respectively. However, Sepolia does **not** have a stable public deployment listed at https://docs.privacypools.com/deployments — the pool and entrypoint addresses may change without notice. For production use, always target Ethereum Mainnet, Arbitrum, or OP Mainnet. If you need to test on Sepolia, contact the 0xbow team for current addresses.
+> **Testnet deployments:** Sepolia (`11155111`) and OP Sepolia (`11155420`) are for development/testing. Both use `dw.0xbow.io` for ASP API and `testnet-relayer.privacypools.com` for relayer API.  
+> Sepolia ETH pool: `0x644d5a2554d36e27509254f32ccfebe8cd58861f`  
+> OP Sepolia ETH pool: `0x9fa2c482313b75e5bc2297cc0d666ddec19d641e`  
+> OP Sepolia WETH pool: `0x6d79e6062c193f6ac31ca06d98d86dc370eedda6`
 
 Full pool addresses and asset addresses: https://docs.privacypools.com/deployments
 
@@ -820,6 +919,19 @@ interface Commitment {
     label: bigint;
     precommitment: { hash: Hash; nullifier: Secret; secret: Secret };
   };
+}
+
+// AccountCommitment is a flat structure used by AccountService for tracking.
+// proveWithdrawal() accepts both Commitment and AccountCommitment.
+interface AccountCommitment {
+  hash: Hash;
+  value: bigint;
+  label: Hash;
+  nullifier: Secret;
+  secret: Secret;
+  blockNumber: bigint;
+  timestamp?: bigint;
+  txHash: Hex;
 }
 
 interface CommitmentProof { proof: Groth16Proof; publicSignals: PublicSignals }
@@ -901,7 +1013,7 @@ Common failure modes:
 
 **Common contract revert reasons** (appear inside the generic `Error` message from contract write methods):
 - `NullifierAlreadySpent` — Double-withdraw attempt. The commitment was already spent.
-- `IncorrectASPRoot` — The proof's ASP root doesn't match `Entrypoint.latestRoot()`. Re-fetch from ASP API.
+- `IncorrectASPRoot` — The proof's ASP root doesn't match `Entrypoint.latestRoot()`. Re-fetch leaves and root from the ASP API, rebuild Merkle proofs, and **re-generate the ZK proof** — the ASP root is baked into the proof, so you cannot simply re-submit the old proof with a new root.
 - `InvalidProcessooor` — For direct withdrawal: `processooor` doesn't match `msg.sender`. For relay: `processooor` doesn't match the entrypoint address.
 - `InvalidProof` — The ZK proof failed on-chain verification. Check circuit inputs.
 - `PrecommitmentAlreadyUsed` — Duplicate precommitment hash on deposit.
@@ -934,8 +1046,8 @@ try {
 
 - Withdrawals require inclusion in the ASP-approved set. Most deposits are approved within 1 hour; some may take up to 7 days. Until approved, the only exit path is ragequit.
 - **Root freshness**: The contract accepts any of the last 64 state roots (historical buffer), so a slight delay between building your state tree and submitting is fine. However, the ASP root **must exactly match** the on-chain `Entrypoint.latestRoot()` — any difference will cause the withdrawal to revert with `IncorrectASPRoot`. There is no tolerance window; the roots must be identical. Use `onchainMtRoot` (not `mtRoot`) from the `mt-roots` response as your proof's `aspRoot`, and always verify `BigInt(onchainMtRoot) === Entrypoint.latestRoot()` before submitting. If `mtRoot !== onchainMtRoot`, wait and re-fetch until they converge.
-- Ragequit is always available as a public fallback path. It works on both original deposits and change commitments (from partial withdrawals), but can only be called by the original depositor address (`OnlyOriginalDepositor` revert otherwise).
-- Partial withdrawals are supported — `withdrawalAmount` can be less than the committed value. After a partial withdrawal, the old commitment is spent and a new "change commitment" is inserted into the state tree with the remaining balance. To continue withdrawing from the change commitment, reconstruct it: `const changeCommitment = getCommitment(existingValue - withdrawalAmount, label, newNullifier, newSecret)`. The `label` stays the same as the original deposit. **Important:** `withdrawalIndex` is a global counter across all withdrawals sharing the same label — it does NOT reset for each change commitment. If your first withdrawal used index 0n, the next withdrawal (from the resulting change commitment) must use index 1n, then 2n, etc. **Also important:** After each withdrawal, the state tree has a new leaf (the change commitment). You must re-fetch `stateTreeLeaves` from the ASP API (or re-scan events) before building a proof against the change commitment — the old leaf set is stale.
+- Ragequit is always available as a public fallback path. It works on both original deposits and change commitments (from partial withdrawals), but can only be called by the original depositor address (`OnlyOriginalDepositor` revert otherwise). **After ragequit, the commitment's nullifier is spent on-chain.** Attempting a private withdrawal of the same commitment will revert with `NullifierAlreadySpent`. These are mutually exclusive exit paths — use one or the other, never both.
+- Partial withdrawals are supported — `withdrawalAmount` can be less than the committed value. After a partial withdrawal, the old commitment is spent and a new "change commitment" is inserted into the state tree with the remaining balance. To continue withdrawing from the change commitment, reconstruct it: `const changeCommitment = getCommitment(existingValue - withdrawalAmount, label, newNullifier, newSecret)`. The `label` stays the same as the original deposit. **Critically:** `newNullifier` and `newSecret` here are the values generated by the `generateWithdrawalSecrets(masterKeys, label, withdrawalIndex)` call for the withdrawal that **created** this change commitment. If you lose them, re-derive with the same `withdrawalIndex` used in that withdrawal. **Important:** `withdrawalIndex` is a global counter across all withdrawals sharing the same label — it does NOT reset for each change commitment. If your first withdrawal used index 0n, the next withdrawal (from the resulting change commitment) must use index 1n, then 2n, etc. **Also important:** After each withdrawal, the state tree has a new leaf (the change commitment). You must re-fetch `stateTreeLeaves` from the ASP API (or re-scan events) before building a proof against the change commitment — the old leaf set is stale.
 - Full withdrawals (entire balance) still create a zero-value change commitment on-chain (it is inserted into the state tree), but it is not spendable. The SDK's account tracking automatically filters out zero-value commitments.
 - Both ETH and ERC20 pools are supported (use different deposit methods).
 - Protocol is non-custodial: users must store commitment secrets, labels, and master keys safely.
