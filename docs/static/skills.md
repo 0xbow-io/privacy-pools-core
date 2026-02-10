@@ -256,7 +256,7 @@ The `aspRoot` and `aspLabels` come from the Association Set Provider (ASP), oper
 Base URLs:
 - Mainnet: `https://api.0xbow.io`
 - Testnet: `https://dw.0xbow.io`
-- Swagger docs: `https://api.0xbow.io/api-docs` (⚠️ **Swagger schemas are inaccurate across multiple endpoints** — e.g., `mt-roots` advertises `{ root }` but returns `{ mtRoot, createdAt, onchainMtRoot }`; deposit/withdrawal endpoints return `depositEvents`/`withdrawalEvents` keys where Swagger says `events`; `pool-info` returns a completely different shape than the DTO. **Do not trust Swagger DTOs for response parsing.** Always use the response shapes documented in this file.)
+- Swagger docs: `https://api.0xbow.io/api-docs` (⚠️ **Swagger schemas are inaccurate across multiple endpoints** — e.g., `mt-roots` advertises `{ root }` but returns `{ mtRoot, createdAt, onchainMtRoot }`; deposit/withdrawal endpoints return `depositEvents`/`withdrawalEvents` keys where Swagger says `events`; `pool-info` returns a completely different shape than the DTO. **Do not trust Swagger DTOs for response parsing.** Always use the response shapes documented in this file. Engineering has committed to fixing the OpenAPI schemas to match live responses, but until that fix is deployed, continue using the shapes in this file as the canonical source of truth.)
 
 > **Note:** `request.0xbow.io` is a partner-only host (API-key gated) and does **not** serve the public `mt-roots` / `mt-leaves` endpoints documented below. Only use `api.0xbow.io` (mainnet) or `dw.0xbow.io` (testnet) for ASP data.
 
@@ -313,7 +313,9 @@ const allCommitmentHashes: bigint[] = stateTreeLeaves.map((s: string) => BigInt(
 - The `X-Pool-Scope` value must be a **decimal string** (hex/non-decimal values are rejected with a validation error).
 - Both endpoints are unauthenticated (no API key required) on the mainnet and testnet hosts.
 - No pagination — the full leaf arrays are returned in a single response.
-- The contract validates against the latest on-chain ASP root. Verify: `BigInt(mtRoot) === Entrypoint.latestRoot()` before submitting. If they differ, the ASP database may be ahead of the on-chain root — wait for the next `updateRoot` transaction or re-fetch.
+- The ASP root submitted in the proof **must exactly match** the on-chain `Entrypoint.latestRoot()`. Any difference will cause the withdrawal to revert with `IncorrectASPRoot`. Always verify `BigInt(mtRoot) === Entrypoint.latestRoot()` before submitting. If they differ, re-fetch from the ASP API until they converge.
+- If `X-Pool-Scope` is missing or invalid, the API currently returns HTTP 400 with a message like `"Pool scope is required in X-Pool-Scope header"`. Do not hardcode the full error body — match on status code and handle gracefully.
+- Rate-limit details are not published. Treat HTTP 403, 429, or any equivalent throttle response as a backoff signal and retry with exponential delay.
 
 #### `GET /{chainId}/health/liveness` — ASP availability check
 
@@ -406,8 +408,10 @@ const withdrawal: Withdrawal = { processooor: entrypointAddress, data: relayData
 The relayer is a **separate service** from the ASP API — it is NOT hosted on `api.0xbow.io` or `dw.0xbow.io`.
 
 Base URLs:
-- Testnet: `https://testnet-relayer.privacypools.com` (confirmed live)
-- Mainnet: not yet publicly documented — check with 0xbow engineering or the [docs site](https://docs.privacypools.com) for updates.
+- Mainnet: `https://fastrelay.xyz`
+- Testnet: `https://testnet-relayer.privacypools.com`
+
+The canonical production relayer is operated by Fat Solutions. The relayer code is open-source (`packages/relayer`) — anyone can host their own. The relayer supports EVM chains and assets currently served by `fastrelay.xyz`; verify each chain/asset pair with `GET /relayer/details?chainId={chainId}&assetAddress={asset}` before use.
 
 The API matches the OSS relayer contract (`packages/relayer`) exactly:
 
@@ -505,6 +509,7 @@ Example `POST /relayer/request` (schema: `zRelayRequest` in `packages/relayer/sr
 - `publicSignals`: must be exactly 8 elements (string array)
 - `proof.pi_a` / `pi_c`: 3-element string tuples; `proof.pi_b`: 3×2-element string tuples
 - `feeCommitment` is optional, but when present ALL 6 fields are required: `expiration`, `withdrawalData`, `asset`, `extraGas`, `amount`, `signedRelayerCommitment`
+- The `feeCommitment` expires **60 seconds** after the quote response. The full quote → proof generation → request submission flow must complete within this window. If the commitment has expired, re-fetch a new quote before retrying.
 - The `feeCommitment` fields come directly from the `/relayer/quote` response — pass them through unchanged
 
 Example response:
@@ -751,7 +756,7 @@ try {
 ## Key Constraints
 
 - Withdrawals require inclusion in the ASP-approved set. Most deposits are approved within 1 hour; some may take up to 7 days. Until approved, the only exit path is ragequit.
-- **Root freshness**: The contract accepts any of the last 64 state roots (historical buffer), so a slight delay between building your state tree and submitting is fine. However, the ASP root must match the **latest** ASP root exactly — if the ASP publishes a new root between proof generation and submission, the withdrawal will revert with `IncorrectASPRoot`. Fetch the ASP root as close to submission time as possible.
+- **Root freshness**: The contract accepts any of the last 64 state roots (historical buffer), so a slight delay between building your state tree and submitting is fine. However, the ASP root **must exactly match** the on-chain `Entrypoint.latestRoot()` — any difference will cause the withdrawal to revert with `IncorrectASPRoot`. There is no tolerance window; the roots must be identical. Fetch the ASP root as close to submission time as possible, and always verify `BigInt(mtRoot) === latestRoot()` before submitting the proof.
 - Ragequit is always available as a public fallback path. It works on both original deposits and change commitments (from partial withdrawals), but can only be called by the original depositor address (`OnlyOriginalDepositor` revert otherwise).
 - Partial withdrawals are supported — `withdrawalAmount` can be less than the committed value. After a partial withdrawal, the old commitment is spent and a new "change commitment" is inserted into the state tree with the remaining balance. To continue withdrawing from the change commitment, reconstruct it: `const changeCommitment = getCommitment(existingValue - withdrawalAmount, label, newNullifier, newSecret)`. The `label` stays the same as the original deposit. **Important:** `withdrawalIndex` is a global counter across all withdrawals sharing the same label — it does NOT reset for each change commitment. If your first withdrawal used index 0n, the next withdrawal (from the resulting change commitment) must use index 1n, then 2n, etc.
 - Full withdrawals (entire balance) still create a zero-value change commitment on-chain (it is inserted into the state tree), but it is not spendable. The SDK's account tracking automatically filters out zero-value commitments.
