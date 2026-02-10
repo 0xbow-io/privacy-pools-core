@@ -446,7 +446,7 @@ const relayData = encodeAbiParameters(
     { name: "feeRecipient", type: "address" },     // relayer address (receives the fee)
     { name: "relayFeeBPS", type: "uint256" },      // fee in basis points (e.g. 50 = 0.5%)
   ],
-  [recipientAddress, relayerAddress, relayFeeBPS]
+  [recipientAddress, relayerAddress, relayFeeBPS] // relayerAddress = feeReceiverAddress from GET /relayer/details
 );
 const withdrawal: Withdrawal = { processooor: entrypointAddress, data: relayData };
 ```
@@ -587,6 +587,8 @@ Example `GET /relayer/details?chainId=11155111&assetAddress=0xEeeeeEeeeEeEeeEeEe
 ### End-to-end relayed withdrawal
 
 This is the most common privacy-preserving flow: withdraw to a **different address** via the relayer. The steps are: (1) get a relayer fee quote with a signed commitment, (2) construct the relay Withdrawal object, (3) generate the ZK proof, (4) submit to the relayer. The entire flow must complete within 60 seconds (the feeCommitment TTL).
+
+**Recommended default:** use the hosted relayer (`https://fastrelay.xyz`) for production agent and human+agent workflows. Treat self-relay as an advanced fallback path.
 
 ```typescript
 // Prerequisites: you have commitment, masterKeys, label from your deposit,
@@ -763,7 +765,7 @@ for (let i = 0n; ; i++) {
 | `depositERC20(tokenAddress, amount, precommitment)` | `Address, bigint, bigint` | Deposit ERC20 tokens |
 | `approveERC20(spenderAddress, tokenAddress, amount)` | `Address, Address, bigint` | Approve ERC20 spending (call before depositERC20) |
 | `withdraw(withdrawal, proof, scope)` | `Withdrawal, WithdrawalProof, Hash` | Direct withdrawal. Internally resolves `scope` → pool address via `getScopeData()` and calls the **pool** contract's `withdraw()`. |
-| `relay(withdrawal, proof, scope)` | `Withdrawal, WithdrawalProof, Hash` | Relayed withdrawal. Calls `relay()` on the **entrypoint** contract (not the pool). |
+| `relay(withdrawal, proof, scope)` | `Withdrawal, WithdrawalProof, Hash` | Relayed withdrawal. Calls `relay()` on the **entrypoint** contract (not the pool). **Default path:** use the HTTP relayer flow (`fastrelay.xyz`) in this guide. Can be called by **anyone** — the contract only checks that `processooor == entrypointAddress`, not who `msg.sender` is. Self-relay (paying gas yourself) is supported, but should be treated as an advanced/fallback path. |
 | `ragequit(commitmentProof, poolAddress)` | `CommitmentProof, Address` | Emergency public exit |
 
 All write methods return `Promise<{ hash: string; wait: () => Promise<void> }>`. The `hash` is a hex tx hash string (e.g. `"0xabc..."`).
@@ -786,6 +788,8 @@ All write methods return `Promise<{ hash: string; wait: () => Promise<void> }>`.
 | OP Mainnet | 10 | `import { optimism } from "viem/chains"` | `0x44192215fed782896be2ce24e0bfbf0bf825d15e` | `144288141n` |
 
 Privacy Pools is also deployed on Starknet, but as of February 9, 2026 Starknet is **not supported by this SDK** (`@0xbow/privacy-pools-core-sdk`). Starknet integration requires a separate SDK (not viem-based). Engineering has indicated a public Starknet SDK is planned but not yet released.
+
+> **Sepolia testnet (Chain ID 11155111):** Sepolia appears in some examples below (ASP host helper, relayer API examples) because the testnet ASP and relayer are available at `dw.0xbow.io` and `testnet-relayer.privacypools.com` respectively. However, Sepolia does **not** have a stable public deployment listed at https://docs.privacypools.com/deployments — the pool and entrypoint addresses may change without notice. For production use, always target Ethereum Mainnet, Arbitrum, or OP Mainnet. If you need to test on Sepolia, contact the 0xbow team for current addresses.
 
 Full pool addresses and asset addresses: https://docs.privacypools.com/deployments
 
