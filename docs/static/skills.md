@@ -77,6 +77,10 @@ const contracts = sdk.createContractInstance(rpcUrl, mainnet, entrypointAddress,
 ### Deposit
 
 ```typescript
+// Step 0 (if needed): Generate a BIP-39 mnemonic (skip if user already has one)
+// import { generateMnemonic, english } from "viem/accounts";
+// const mnemonic = generateMnemonic(english);  // 12-word phrase — store securely
+
 // Step 1: Generate deterministic secrets from a mnemonic
 const masterKeys = generateMasterKeys(mnemonic);
 const scope = await contracts.getScope(privacyPoolAddress) as unknown as Hash; // getScope returns bigint; cast to branded Hash
@@ -137,15 +141,17 @@ const { nullifier: newNullifier, secret: newSecret } = generateWithdrawalSecrets
 // Step 1b: Validate withdrawal amount
 // withdrawalAmount must be > 0 and <= the commitment's value.
 // Exceeding the committed value causes a cryptic circuit error during proof generation.
+const committedValue = "preimage" in commitment ? commitment.preimage.value : commitment.value;
 if (withdrawalAmount <= 0n) throw new Error("Withdrawal amount must be > 0");
-if (withdrawalAmount > commitment.preimage.value) {
-  throw new Error(`Withdrawal amount ${withdrawalAmount} exceeds committed value ${commitment.preimage.value}`);
+if (withdrawalAmount > committedValue) {
+  throw new Error(`Withdrawal amount ${withdrawalAmount} exceeds committed value ${committedValue}`);
 }
 
 // Step 2: Reconstruct the state tree and build Merkle proofs
 // (see "Data Sourcing" section below for full details)
+const commitmentLabel = "preimage" in commitment ? commitment.preimage.label : commitment.label;
 const stateMerkleProof = generateMerkleProof(allCommitmentHashes, commitment.hash);
-const aspMerkleProof = generateMerkleProof(aspLabels, commitment.preimage.label);
+const aspMerkleProof = generateMerkleProof(aspLabels, commitmentLabel);
 
 // Step 3: Construct the Withdrawal object and compute context
 // IMPORTANT: For direct withdrawal, processooor MUST equal the tx signer (msg.sender).
@@ -185,12 +191,12 @@ await tx.wait();
 
 ```typescript
 // Step 1: Prove ownership of the original commitment (requires label from deposit event)
-const commitmentProof = await sdk.proveCommitment(
-  commitment.preimage.value,
-  commitment.preimage.label,
-  commitment.preimage.precommitment.nullifier,
-  commitment.preimage.precommitment.secret,
-);
+// Works with both Commitment (nested .preimage) and AccountCommitment (flat shape)
+const rqValue = "preimage" in commitment ? commitment.preimage.value : commitment.value;
+const rqLabel = "preimage" in commitment ? commitment.preimage.label : commitment.label;
+const rqNullifier = "preimage" in commitment ? commitment.preimage.precommitment.nullifier : commitment.nullifier;
+const rqSecret = "preimage" in commitment ? commitment.preimage.precommitment.secret : commitment.secret;
+const commitmentProof = await sdk.proveCommitment(rqValue, rqLabel, rqNullifier, rqSecret);
 
 // Step 2: Execute ragequit — funds returned to original depositor (public, non-private)
 const tx = await contracts.ragequit(commitmentProof, privacyPoolAddress);
@@ -230,8 +236,15 @@ const allCommitmentHashes: bigint[] = stateTreeLeaves.map((s: string) => BigInt(
 const aspLabels: bigint[] = aspLeaves.map((s: string) => BigInt(s));
 
 // Build Merkle proofs directly
+const commitmentLabel = "preimage" in commitment ? commitment.preimage.label : commitment.label;
 const stateMerkleProof = generateMerkleProof(allCommitmentHashes, commitment.hash);
-const aspMerkleProof = generateMerkleProof(aspLabels, commitment.preimage.label);
+const aspMerkleProof = generateMerkleProof(aspLabels, commitmentLabel);
+
+// Optional but recommended: validate that the ASP-sourced state tree matches on-chain root
+const onChainRoot = await contracts.getStateRoot(privacyPoolAddress);
+if (stateMerkleProof.root !== onChainRoot) {
+  throw new Error("ASP stateTreeLeaves do not match on-chain root — data may be stale or tampered");
+}
 ```
 
 **Fallback: Reconstruct from on-chain events.** If the API is unavailable, build the state tree from deposit and withdrawal event logs. Each deposit inserts a `commitment` leaf; each withdrawal inserts a `newCommitment` leaf (the change commitment). Ragequit does NOT insert a leaf — it only spends a nullifier. Leaves must be merged in **on-chain insertion order** (by block number, then log index within the block). The SDK event types don't expose `logIndex`, so the best available approach is to sort by `blockNumber` and rely on stable sort to preserve relative order. Since `DataService` returns events via `getLogs` (which preserves log ordering), each array from `getDeposits()` and `getWithdrawals()` is already internally ordered. Spread deposits before withdrawals and stable-sort by block — this is correct for the common case (a commitment must exist before it can be spent). Always validate the reconstructed root against the on-chain `currentRoot()` (e.g., `contracts.getStateRoot(privacyPoolAddress)`) to catch rare same-block interleaving mismatches.
@@ -281,7 +294,7 @@ const stateMerkleProof = generateMerkleProof(allCommitmentHashes, commitment.has
 
 ### ASP data
 
-The `aspRoot` and `aspLabels` come from the Association Set Provider (ASP), operated by 0xbow. The ASP screens deposits for compliance and publishes a Merkle tree of approved **labels** (not commitment hashes). The ZK circuit verifies that the deposit's `label` is a leaf in the ASP tree. Since the `label` stays the same across partial withdrawals, a single ASP approval covers the original deposit and all its subsequent change commitments. Most deposits are approved within 1 hour, though some may take up to 7 days. The ASP can also retroactively remove a label from the approved set — if removed, private withdrawal fails (the label will be absent from `aspLeaves`) but ragequit (public exit) always remains available. **Pre-withdrawal safety check:** Always verify your deposit's label is still present in `aspLeaves` before generating a withdrawal proof. If the label has been removed since your last check, the proof will be valid but the withdrawal will fail because the ASP Merkle proof won't include your label.
+The `aspRoot` and `aspLabels` come from the Association Set Provider (ASP), operated by 0xbow. The ASP screens deposits for compliance and publishes a Merkle tree of approved **labels** (not commitment hashes). The ZK circuit verifies that the deposit's `label` is a leaf in the ASP tree. Since the `label` stays the same across partial withdrawals, a single ASP approval covers the original deposit and all its subsequent change commitments. Most deposits are approved within 1 hour, though some may take up to 7 days. The ASP can also retroactively remove a label from the approved set — if removed, private withdrawal fails (the label will be absent from `aspLeaves`) but ragequit (public exit) always remains available. **Pre-withdrawal safety check:** Always verify your deposit's label is still present in `aspLeaves` before generating a withdrawal proof. If the label has been removed since your last check, the ASP Merkle proof won't include your label. Even if the label is removed AFTER you generate a proof but BEFORE you submit, the proof may still succeed if the on-chain ASP root hasn't been updated yet — but if the root has changed, you'll get `IncorrectASPRoot` and must regenerate with fresh ASP data.
 
 **Canonical source (engineering-confirmed): ASP HTTP API backed by database data.**
 
@@ -371,6 +384,8 @@ const labelStr = label.toString(); // label from your deposit event
 const isApproved = aspLeaves.includes(labelStr);
 // If not approved: wait and re-check (most deposits approved within 1 hour, up to 7 days).
 // While unapproved, ragequit is the only exit path.
+// If no deposits have been approved yet (new pool), aspLeaves will be empty
+// and generateMerkleProof will throw MERKLE_ERROR.
 ```
 
 #### `GET /{chainId}/health/liveness` — ASP availability check
@@ -584,9 +599,9 @@ Example `POST /relayer/request` (schema: `zRelayRequest` in `packages/relayer/sr
 **Schema notes:**
 - `scope`: decimal bigint string (not hex)
 - `publicSignals`: must be exactly 8 elements (string array)
-- `proof.pi_a` / `pi_c`: 3-element string tuples; `proof.pi_b`: 3×2-element string tuples
+- `proof.pi_a` / `pi_c`: 3-element string tuples; `proof.pi_b`: 3×2-element string tuples. The relayer only requires `pi_a`, `pi_b`, `pi_c` — extra fields like `protocol` and `curve` from the `Groth16Proof` type are ignored
 - `feeCommitment` is optional, but when present ALL 6 fields are required: `expiration`, `withdrawalData`, `asset`, `extraGas`, `amount`, `signedRelayerCommitment`
-- The `feeCommitment` expires **60 seconds** after the quote response. The full quote → proof generation → request submission flow must complete within this window. If the commitment has expired, re-fetch a new quote before retrying.
+- The `feeCommitment` expires **60 seconds** after the quote response. The full quote → proof generation → request submission flow must complete within this window. Proof generation typically takes 5–15 seconds in Node.js (varies by machine). If the commitment has expired, re-fetch a new quote before retrying. The relayer API does not support cancellation — if expired, simply re-quote.
 - The `feeCommitment` fields come directly from the `/relayer/quote` response — pass them through unchanged
 
 Example response:
@@ -681,8 +696,9 @@ const { nullifier: newNullifier, secret: newSecret } = generateWithdrawalSecrets
   masterKeys, label, withdrawalIndex
 );
 const stateRoot = await contracts.getStateRoot(privacyPoolAddress) as unknown as Hash;
+const commitmentLabel = "preimage" in commitment ? commitment.preimage.label : commitment.label;
 const stateMerkleProof = generateMerkleProof(allCommitmentHashes, commitment.hash);
-const aspMerkleProof = generateMerkleProof(aspLabels, commitment.preimage.label);
+const aspMerkleProof = generateMerkleProof(aspLabels, commitmentLabel);
 
 const withdrawalProof = await sdk.proveWithdrawal(commitment, {
   context,
@@ -730,6 +746,10 @@ const receipt = await publicClient.waitForTransactionReceipt({ hash: result.txHa
 if (receipt.status !== "success") {
   throw new Error(`Relay transaction reverted: ${result.txHash}`);
 }
+// Fallback: if the relayer is unreachable after proof generation, you can self-relay
+// by calling contracts.relay(withdrawal, withdrawalProof, scope) directly, paying gas
+// yourself. The proof is still valid — the contract only checks processooor == entrypointAddress,
+// not who submits the tx.
 ```
 
 ### Reading the label and committed value from deposit events
@@ -783,6 +803,23 @@ const withdrawnEvent = parseAbi([
 const ragequitEvent = parseAbi([
   "event Ragequit(address indexed _ragequitter, uint256 _commitment, uint256 _label, uint256 _value)"
 ]);
+
+// Key contract function ABIs (for direct contract interaction without the SDK):
+// Note: IERC20 is `address` at the ABI level; param names match IEntrypoint.sol exactly.
+const entrypointAbi = parseAbi([
+  "function deposit(uint256 _precommitment) payable",
+  "function deposit(address _asset, uint256 _value, uint256 _precommitment)",
+  "function relay((address processooor, bytes data) _withdrawal, (uint256[2] _pA, uint256[2][2] _pB, uint256[2] _pC, uint256[8] _pubSignals) _proof, uint256 _scope)",
+  "function latestRoot() view returns (uint256)",
+]);
+const poolAbi = parseAbi([
+  "function withdraw((address processooor, bytes data) _withdrawal, (uint256[2] _pA, uint256[2][2] _pB, uint256[2] _pC, uint256[8] _pubSignals) _proof)",
+  "function ragequit((uint256[2] _pA, uint256[2][2] _pB, uint256[2] _pC, uint256[4] _pubSignals) _commitmentProof)",
+  "function SCOPE() view returns (uint256)",
+  "function currentRoot() view returns (uint256)",
+  "function currentTreeSize() view returns (uint256)",
+]);
+// Full ABIs are available in the contracts package artifacts: packages/contracts/
 ```
 
 ### Recovering deposits from a mnemonic
@@ -839,6 +876,58 @@ for (const dep of myDeposits) {
 
 > **Determining `withdrawalIndex` after recovery:** The `withdrawalIndex` is a global counter per label — it does NOT reset for change commitments. After recovering deposits, you need to know how many withdrawals have already been made from each label to avoid reusing an index (which generates invalid secrets). The simplest production approach is `AccountService`, which tracks withdrawal state automatically via `createWithdrawalSecrets(commitment)`. For manual tracking, scan `WithdrawalEvent`s and match `spentNullifier` values against derived nullifier hashes for each sequential index until no match is found.
 
+### AccountService (production account tracking)
+
+`AccountService` manages deposit/withdrawal state automatically. It is the recommended way to track `withdrawalIndex`, spendable commitments, and change commitments in production.
+
+```typescript
+import { AccountService, DataService } from "@0xbow/privacy-pools-core-sdk";
+
+// Option A: Initialize from a mnemonic (fresh start)
+// The constructor alone does NOT scan on-chain events — it creates a blank account state.
+const dataService = new DataService([{ chainId, rpcUrl, privacyPoolAddress, startBlock }]);
+const accountService = new AccountService(dataService, { mnemonic });
+
+// Option B: Initialize from an existing account state (e.g., loaded from storage)
+// PrivacyPoolAccount is the serializable internal state object — see SDK types for its shape.
+// const accountService = new AccountService(dataService, { account: savedAccount });
+
+// Recommended: Initialize with on-chain event history to discover existing deposits.
+// initializeWithEvents scans on-chain events to find deposits, compute withdrawal history,
+// and build the internal commitment tracking state. Use this for existing wallets.
+// const { account: accountService, errors } =
+//   await AccountService.initializeWithEvents(dataService, { mnemonic }, pools);
+// if (errors.length > 0) {
+//   // Some pools failed to sync; retry with the same account + failed pools.
+// }
+
+// Key methods:
+// - getSpendableCommitments(): Map<bigint, AccountCommitment[]>
+//     Returns a map of scope → spendable commitments (excludes zero-value and spent)
+// - createDepositSecrets(scope, index?): auto-tracks deposit index per scope
+// - createWithdrawalSecrets(commitment): auto-tracks withdrawalIndex per label
+// - getDepositEvents(pool), getWithdrawalEvents(pool), getRagequitEvents(pool): fetch events
+//
+// Persisting state between sessions:
+// NOTE: PrivacyPoolAccount contains bigint and Map values. Plain JSON.stringify will fail.
+// const serialized = JSON.stringify(accountService.account, (_key, value) => {
+//   if (typeof value === "bigint") return { __type: "bigint", value: value.toString() };
+//   if (value instanceof Map) return { __type: "map", value: Array.from(value.entries()) };
+//   return value;
+// });
+// localStorage.setItem("pp-account", serialized);
+//
+// const savedState = localStorage.getItem("pp-account");
+// if (savedState) {
+//   const parsed = JSON.parse(savedState, (_key, value) => {
+//     if (value?.__type === "bigint") return BigInt(value.value);
+//     if (value?.__type === "map") return new Map(value.value);
+//     return value;
+//   });
+//   const restored = new AccountService(dataService, { account: parsed });
+// }
+```
+
 ## Contract Read Methods
 
 `ContractInteractionsService` (returned by `sdk.createContractInstance()`) provides these read methods:
@@ -849,7 +938,7 @@ for (const dep of myDeposits) {
 | `getStateRoot(poolAddress)` | `bigint` | Current state Merkle root of the pool (`currentRoot()`). |
 | `getStateSize(poolAddress)` | `bigint` | Current number of leaves in the state tree |
 | `getAssetConfig(assetAddress)` | `AssetConfig` | Pool address, minimum deposit, fee config |
-| `getScopeData(scope)` | `{ poolAddress, assetAddress }` | Reverse lookup: scope → pool + asset addresses |
+| `getScopeData(scope)` | `{ poolAddress, assetAddress }` | Reverse lookup: scope → pool + asset addresses (note: `poolAddress` here is the same value as `AssetConfig.pool`) |
 
 ## Contract Write Methods
 
@@ -932,6 +1021,16 @@ interface AccountCommitment {
   blockNumber: bigint;
   timestamp?: bigint;
   txHash: Hex;
+}
+
+// From snarkjs — used in proof objects
+type PublicSignals = string[];  // array of decimal bigint strings (exactly 8 elements for withdrawal proofs)
+interface Groth16Proof {
+  pi_a: [string, string, string];
+  pi_b: [[string, string], [string, string], [string, string]];
+  pi_c: [string, string, string];
+  protocol: string;  // "groth16"
+  curve: string;     // "bn128"
 }
 
 interface CommitmentProof { proof: Groth16Proof; publicSignals: PublicSignals }
@@ -1048,9 +1147,11 @@ try {
 - **Root freshness**: The contract accepts any of the last 64 state roots (historical buffer), so a slight delay between building your state tree and submitting is fine. However, the ASP root **must exactly match** the on-chain `Entrypoint.latestRoot()` — any difference will cause the withdrawal to revert with `IncorrectASPRoot`. There is no tolerance window; the roots must be identical. Use `onchainMtRoot` (not `mtRoot`) from the `mt-roots` response as your proof's `aspRoot`, and always verify `BigInt(onchainMtRoot) === Entrypoint.latestRoot()` before submitting. If `mtRoot !== onchainMtRoot`, wait and re-fetch until they converge.
 - Ragequit is always available as a public fallback path. It works on both original deposits and change commitments (from partial withdrawals), but can only be called by the original depositor address (`OnlyOriginalDepositor` revert otherwise). **After ragequit, the commitment's nullifier is spent on-chain.** Attempting a private withdrawal of the same commitment will revert with `NullifierAlreadySpent`. These are mutually exclusive exit paths — use one or the other, never both.
 - Partial withdrawals are supported — `withdrawalAmount` can be less than the committed value. After a partial withdrawal, the old commitment is spent and a new "change commitment" is inserted into the state tree with the remaining balance. To continue withdrawing from the change commitment, reconstruct it: `const changeCommitment = getCommitment(existingValue - withdrawalAmount, label, newNullifier, newSecret)`. The `label` stays the same as the original deposit. **Critically:** `newNullifier` and `newSecret` here are the values generated by the `generateWithdrawalSecrets(masterKeys, label, withdrawalIndex)` call for the withdrawal that **created** this change commitment. If you lose them, re-derive with the same `withdrawalIndex` used in that withdrawal. **Important:** `withdrawalIndex` is a global counter across all withdrawals sharing the same label — it does NOT reset for each change commitment. If your first withdrawal used index 0n, the next withdrawal (from the resulting change commitment) must use index 1n, then 2n, etc. **Also important:** After each withdrawal, the state tree has a new leaf (the change commitment). You must re-fetch `stateTreeLeaves` from the ASP API (or re-scan events) before building a proof against the change commitment — the old leaf set is stale.
+- There is no protocol-enforced limit on the number of partial withdrawals from a single deposit chain, as long as the remaining balance is > 0.
+- Batch withdrawals are not supported by the protocol contracts or SDK APIs. Each transaction can process exactly one commitment spend (one `withdraw`/`relay` call with one proof).
 - Full withdrawals (entire balance) still create a zero-value change commitment on-chain (it is inserted into the state tree), but it is not spendable. The SDK's account tracking automatically filters out zero-value commitments.
 - Both ETH and ERC20 pools are supported (use different deposit methods).
-- Protocol is non-custodial: users must store commitment secrets, labels, and master keys safely.
+- Protocol is non-custodial: users must store commitment secrets, labels, and master keys safely. Never log `Commitment` objects or `MasterKeys` — they contain nullifier and secret values that control fund access. The same mnemonic can safely be used across different chains/pools because `generateDepositSecrets` incorporates the pool's unique `scope`, producing different secrets per pool.
 - The `label` is generated on-chain during deposit — it is NOT a user-provided input.
 
 ## Repository
