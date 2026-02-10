@@ -17,6 +17,8 @@ Privacy Pools breaks the on-chain link between deposit and withdrawal addresses.
 
 ## SDK Quick Start
 
+The SDK is built on [viem](https://viem.sh) — it uses viem's `Chain` objects, `Address`/`Hex` types, and `PublicClient` internally. If your project uses ethers.js, you can still use the SDK's standalone crypto functions (`generateMasterKeys`, `hashPrecommitment`, etc.) but `ContractInteractionsService` requires viem types.
+
 ```bash
 npm install @0xbow/privacy-pools-core-sdk
 ```
@@ -60,6 +62,16 @@ const contracts = sdk.createContractInstance(rpcUrl, mainnet, entrypointAddress,
 // Read-only usage: DataService can be used standalone without PrivacyPoolSDK or a private key.
 // It only needs an RPC URL. ContractInteractionsService (above) always requires a privateKey,
 // even for read-only methods like getScope() — this is a constructor requirement.
+// If you need scope without a private key (e.g., for DataService), you can read it directly
+// from the pool contract via viem:
+//   import { createPublicClient, http } from "viem";
+//   const client = createPublicClient({ transport: http(rpcUrl) });
+//   const scope = await client.readContract({
+//     address: privacyPoolAddress, abi: [{ name: "SCOPE", type: "function",
+//       inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" }],
+//     functionName: "SCOPE",
+//   });
+// This avoids needing ContractInteractionsService for read-only workflows.
 ```
 
 ### Deposit
@@ -849,7 +861,17 @@ interface RagequitEvent {
 - `DepositEvent.precommitment` = `Commitment.nullifierHash` = `Poseidon(nullifier, secret)` — the precommitment hash submitted on-chain during deposit.
 - `WithdrawalEvent.spentNullifier` = `Poseidon(nullifier)` — the circuit's nullifier hash (single input, NOT the precommitment).
 
-To match a withdrawal to its source deposit, compute `Poseidon(nullifier)` from the deposit's nullifier and compare: `withdrawalEvent.spentNullifier === poseidon([commitment.preimage.precommitment.nullifier])`. You cannot match directly against `depositEvent.precommitment` because they are different hashes.
+To match a withdrawal to its source deposit, compute `Poseidon(nullifier)` from the deposit's nullifier and compare against `withdrawalEvent.spentNullifier`. You cannot match directly against `depositEvent.precommitment` because they are different hashes. **Note:** The SDK does not export Poseidon. To compute this hash, install `circomlibjs` (or `maci-crypto`, which the SDK uses internally) and call `poseidon([nullifier])`:
+
+```typescript
+// npm install circomlibjs
+import { buildPoseidon } from "circomlibjs";
+const poseidon = await buildPoseidon();
+const nullifierHash = BigInt(
+  poseidon.F.toString(poseidon([commitment.preimage.precommitment.nullifier]))
+);
+const isMatch = nullifierHash === withdrawalEvent.spentNullifier;
+```
 
 DataService event parsing uses explicit `null`/`undefined` checks for required fields, so valid `0n` values are handled correctly in `getDeposits()`, `getWithdrawals()`, and `getRagequits()`. If you are pinned to an older SDK release and observe `invalidLog` errors on zero-value events, upgrade to the latest SDK or use ASP API `mt-leaves` as a temporary fallback for tree reconstruction.
 
@@ -862,6 +884,7 @@ The SDK uses typed errors for proof and data operations, but contract write meth
 | `ProofError` | Proof generation or verification fails | `PROOF_GENERATION_FAILED`, `PROOF_VERIFICATION_FAILED`, `INVALID_PROOF` |
 | `SDKError` | Base class; DataService failures | `NETWORK_ERROR`, `INVALID_INPUT` |
 | `PrivacyPoolError` | Merkle proof and crypto operations | `MERKLE_ERROR` |
+| `ContractError` | Contract read methods when data is invalid | `CONTRACT_ERROR` (helper constructors include `assetNotFound`, `scopeNotFound`) |
 | `Error` (generic) | Contract write methods (`deposit`, `withdraw`, `ragequit`, etc.) | N/A — wraps the underlying viem/RPC error message |
 
 **Important:** `PrivacyPoolError` extends `Error` directly (NOT `SDKError`). It is thrown by `generateMerkleProof` and other crypto functions, but it is **not exported** from the SDK's public API. You cannot use `instanceof PrivacyPoolError`. Instead, check for the `code` property:
@@ -871,6 +894,15 @@ Common failure modes:
 - **`PROOF_GENERATION_FAILED`**: Circuit inputs are invalid — check that value, label, nullifier, and secret match the original deposit.
 - **Contract reverts**: On-chain tx revert — typically a spent nullifier (double-withdraw attempt) or invalid proof. Contract write methods throw generic `Error` with a message like `"Failed to Withdraw: ..."`.
 - **`PrecommitmentAlreadyUsed`**: On-chain revert when attempting to deposit with a precommitment hash that was already used by a previous deposit. Generate a fresh precommitment (new `depositIndex`) before retrying.
+
+**Common contract revert reasons** (appear inside the generic `Error` message from contract write methods):
+- `NullifierAlreadySpent` — Double-withdraw attempt. The commitment was already spent.
+- `IncorrectASPRoot` — The proof's ASP root doesn't match `Entrypoint.latestRoot()`. Re-fetch from ASP API.
+- `InvalidProcessooor` — For direct withdrawal: `processooor` doesn't match `msg.sender`. For relay: `processooor` doesn't match the entrypoint address.
+- `InvalidProof` — The ZK proof failed on-chain verification. Check circuit inputs.
+- `PrecommitmentAlreadyUsed` — Duplicate precommitment hash on deposit.
+- `OnlyOriginalDepositor` — Ragequit called from a different address than the original depositor.
+- `NoRootsAvailable` — `Entrypoint.latestRoot()` called before any ASP root has been pushed on-chain.
 
 ```typescript
 try {
@@ -899,7 +931,7 @@ try {
 - Withdrawals require inclusion in the ASP-approved set. Most deposits are approved within 1 hour; some may take up to 7 days. Until approved, the only exit path is ragequit.
 - **Root freshness**: The contract accepts any of the last 64 state roots (historical buffer), so a slight delay between building your state tree and submitting is fine. However, the ASP root **must exactly match** the on-chain `Entrypoint.latestRoot()` — any difference will cause the withdrawal to revert with `IncorrectASPRoot`. There is no tolerance window; the roots must be identical. Use `onchainMtRoot` (not `mtRoot`) from the `mt-roots` response as your proof's `aspRoot`, and always verify `BigInt(onchainMtRoot) === Entrypoint.latestRoot()` before submitting. If `mtRoot !== onchainMtRoot`, wait and re-fetch until they converge.
 - Ragequit is always available as a public fallback path. It works on both original deposits and change commitments (from partial withdrawals), but can only be called by the original depositor address (`OnlyOriginalDepositor` revert otherwise).
-- Partial withdrawals are supported — `withdrawalAmount` can be less than the committed value. After a partial withdrawal, the old commitment is spent and a new "change commitment" is inserted into the state tree with the remaining balance. To continue withdrawing from the change commitment, reconstruct it: `const changeCommitment = getCommitment(existingValue - withdrawalAmount, label, newNullifier, newSecret)`. The `label` stays the same as the original deposit. **Important:** `withdrawalIndex` is a global counter across all withdrawals sharing the same label — it does NOT reset for each change commitment. If your first withdrawal used index 0n, the next withdrawal (from the resulting change commitment) must use index 1n, then 2n, etc.
+- Partial withdrawals are supported — `withdrawalAmount` can be less than the committed value. After a partial withdrawal, the old commitment is spent and a new "change commitment" is inserted into the state tree with the remaining balance. To continue withdrawing from the change commitment, reconstruct it: `const changeCommitment = getCommitment(existingValue - withdrawalAmount, label, newNullifier, newSecret)`. The `label` stays the same as the original deposit. **Important:** `withdrawalIndex` is a global counter across all withdrawals sharing the same label — it does NOT reset for each change commitment. If your first withdrawal used index 0n, the next withdrawal (from the resulting change commitment) must use index 1n, then 2n, etc. **Also important:** After each withdrawal, the state tree has a new leaf (the change commitment). You must re-fetch `stateTreeLeaves` from the ASP API (or re-scan events) before building a proof against the change commitment — the old leaf set is stale.
 - Full withdrawals (entire balance) still create a zero-value change commitment on-chain (it is inserted into the state tree), but it is not spendable. The SDK's account tracking automatically filters out zero-value commitments.
 - Both ETH and ERC20 pools are supported (use different deposit methods).
 - Protocol is non-custodial: users must store commitment secrets, labels, and master keys safely.
