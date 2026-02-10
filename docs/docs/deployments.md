@@ -97,19 +97,19 @@ Use **`144288141n`** as `startBlock` when initializing `DataService` for OP Main
 
 ### Core Contracts
 
-| Contract | Address | Deployment Block | Deployment Tx |
-|----------|---------|------------------|---------------|
-| WithdrawalVerifier | `0x23ee06ec2b5a6fcd00a426973d27cd168c7eb00d` | `32854673` | `0x30c1dbcaca4ce5e0707a145ae0b365e55ed3f6f947657c637de21158ce2e0102` |
-| RagequitVerifier | `0x6b54109d73891163fd3362241182a127482dd87d` | `32854675` | `0xd4fd1675e84559feed3d57e218be41f5238160d68bb550ba4a0d81d67cd35fc6` |
-| Entrypoint (Implementation) | `0x3a8ce23ed895eb9d7a714667573cb86513447109` | `32854676` | `0xe7bf81a1a8e2f22564e01182d37ee8f9f63a9f0535e3a75eee54f903aee10ca8` |
-| Entrypoint (Proxy) | `0x54aca0d27500669fa37867233e05423701f11ba1` | `32854677` | `0x8ec97c5cc82a2a60fb90f51a9ab775bda308ed94676b502c3e1431194330059d` |
+| Contract | Address | Deployment Block |
+|----------|---------|-----------------|
+| WithdrawalVerifier | `0x23ee06ec2b5a6fcd00a426973d27cd168c7eb00d` | `32854673` |
+| RagequitVerifier | `0x6b54109d73891163fd3362241182a127482dd87d` | `32854675` |
+| Entrypoint (Implementation) | `0x3a8ce23ed895eb9d7a714667573cb86513447109` | `32854676` |
+| Entrypoint (Proxy) | `0x54aca0d27500669fa37867233e05423701f11ba1` | `32854677` |
 
 ### Pool Contracts
 
-| Asset | Contract Type | Pool Address | Asset Address | Deployment Block | Deployment Tx |
-|-------|---------------|--------------|---------------|------------------|---------------|
-| ETH | PrivacyPoolSimple | `0x9fa2c482313b75e5bc2297cc0d666ddec19d641e` | `0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee` | `32854678` | `0x8f41bf8c8e799c1eb4d3808a6d2dbba490b929b7de145342b855d4b5b7f10f27` |
-| WETH | PrivacyPoolComplex | `0x6d79e6062c193f6ac31ca06d98d86dc370eedda6` | `0x4200000000000000000000000000000000000006` | `32900681` | `0xbe969058140fddab9d9f8409f74e340c790ec7112ce73bad3c1ac7930b0a7f73` |
+| Asset | Contract Type | Pool Address | Asset Address | Deployment Block |
+|-------|---------------|-------------|---------------|-----------------|
+| ETH | PrivacyPoolSimple | `0x9fa2c482313b75e5bc2297cc0d666ddec19d641e` | `0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee` | `32854678` |
+| WETH | PrivacyPoolComplex | `0x6d79e6062c193f6ac31ca06d98d86dc370eedda6` | `0x4200000000000000000000000000000000000006` | `32900681` |
 
 ### Deployment Start Block
 
@@ -131,11 +131,6 @@ Use **`32854673n`** as `startBlock` when initializing `DataService` for OP Sepol
 | Asset | Contract Type | Pool Address | Asset Address | Deployment Block |
 |-------|---------------|-------------|---------------|-----------------|
 | ETH | PrivacyPoolSimple | `0x644d5a2554d36e27509254f32ccfebe8cd58861f` | `0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee` | `8461454` |
-
-Reference deployment transactions (Sepolia clarifications):
-- Entrypoint (Proxy): `0x6461f96642a61dcd1b8be3dca4e97897457a3646c19bed03462e6f789522a750`
-- Entrypoint (Implementation): `0x2d875604b9bd57ec54b1b8ac0d5f8ee1ebdb84b29905508a1f35db0870394a44`
-- PrivacyPoolSimple (ETH): `0xa7aef300db99232db303d33fb852601c63083621d9290797f9ed22546a9d5de6`
 
 ### Deployment Start Block
 
