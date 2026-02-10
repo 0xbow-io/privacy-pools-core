@@ -74,7 +74,16 @@ const { nullifier, secret } = generateDepositSecrets(masterKeys, scope, depositI
 // Step 2: Compute precommitment hash (this is what gets submitted on-chain)
 const precommitment = hashPrecommitment(nullifier, secret);
 
-// Step 3: Submit deposit on-chain
+// Step 3: Validate amount against the pool's minimum deposit
+// The SDK does NOT check this — the contract enforces it on-chain and the tx will revert
+// with a confusing error if below minimum. Always check before submitting.
+const nativeAsset = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"; // ETH sentinel address
+const assetConfig = await contracts.getAssetConfig(nativeAsset);
+if (amount < assetConfig.minimumDepositAmount) {
+  throw new Error(`Deposit amount ${amount} is below minimum ${assetConfig.minimumDepositAmount}`);
+}
+
+// Step 4: Submit deposit on-chain
 // amount is in the token's smallest unit (wei for ETH, token decimals for ERC20)
 // ETH: 100000000000000000n = 0.1 ETH (18 decimals)
 // USDC: 1000000n = 1 USDC (6 decimals)
@@ -87,17 +96,17 @@ await tx.wait();
 // const tx = await contracts.depositERC20(tokenAddress, amount, precommitment);
 // await tx.wait();
 
-// Step 4: Capture the label AND committedValue from the Deposited event
+// Step 5: Capture the label AND committedValue from the Deposited event
 // The pool contract generates label = keccak256(scope, nonce) % SNARK_SCALAR_FIELD
 // and emits: Deposited(depositor, commitment, label, value, precommitmentHash)
 // You must read `label` and `value` from the event logs of the deposit transaction.
 // IMPORTANT: The event's `value` is the post-fee committed amount (after vettingFeeBPS
 // deduction), which may be less than what you sent. Always use this value, not `amount`.
 
-// Step 5: Reconstruct the full commitment locally using the on-chain label and value
+// Step 6: Reconstruct the full commitment locally using the on-chain label and value
 const commitment = getCommitment(committedValue, label, nullifier, secret);
 
-// Step 6 (optional): Generate commitment proof now (needed for ragequit)
+// Step 7 (optional): Generate commitment proof now (needed for ragequit)
 const commitmentProof = await sdk.proveCommitment(committedValue, label, nullifier, secret);
 
 // IMPORTANT: Store commitment, masterKeys, label, nullifier, and secret locally.
@@ -325,6 +334,23 @@ const allCommitmentHashes: bigint[] = stateTreeLeaves.map((s: string) => BigInt(
 - If `X-Pool-Scope` is missing, the API currently returns HTTP 400 with a message like `"Pool scope is required in X-Pool-Scope header"`. If the header is present but does not match a known decimal scope value (including hex-encoded scope), the API returns 404. Do not hardcode the full error body — match on status code and handle gracefully.
 - Rate-limit details are not published. Treat HTTP 403, 429, or any equivalent throttle response as a backoff signal and retry with exponential delay.
 
+**Checking if a deposit is ASP-approved:**
+
+To check whether a deposit has been approved for private withdrawal, fetch the ASP labels and look for the deposit's `label`:
+
+```typescript
+const aspApiHost = getAspApiHost(chainId);
+const scope = await contracts.getScope(privacyPoolAddress);
+const res = await fetch(`${aspApiHost}/${chainId}/public/mt-leaves`, {
+  headers: { "X-Pool-Scope": scope.toString() },
+});
+const { aspLeaves } = await res.json();
+const labelStr = label.toString(); // label from your deposit event
+const isApproved = aspLeaves.includes(labelStr);
+// If not approved: wait and re-check (most deposits approved within 1 hour, up to 7 days).
+// While unapproved, ragequit is the only exit path.
+```
+
 #### `GET /{chainId}/health/liveness` — ASP availability check
 
 Returns the current health status of the ASP API for a given chain. Use this before making ASP data calls to verify the service is reachable.
@@ -546,6 +572,101 @@ Example `GET /relayer/details?chainId=11155111&assetAddress=0xEeeeeEeeeEeEeeEeEe
 }
 ```
 
+### End-to-end relayed withdrawal
+
+This is the most common privacy-preserving flow: withdraw to a **different address** via the relayer. The steps are: (1) get a relayer fee quote with a signed commitment, (2) construct the relay Withdrawal object, (3) generate the ZK proof, (4) submit to the relayer. The entire flow must complete within 60 seconds (the feeCommitment TTL).
+
+```typescript
+// Prerequisites: you have commitment, masterKeys, label from your deposit,
+// and aspRoot/aspLabels/allCommitmentHashes from the ASP API (see Data Sourcing above).
+
+// Step 1: Get a relayer fee quote WITH recipient (returns signed feeCommitment)
+const relayerHost = "https://fastrelay.xyz"; // mainnet; see Relayer API section for testnet
+const nativeAsset = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
+const quoteRes = await fetch(`${relayerHost}/relayer/quote`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    chainId: 1,
+    amount: String(withdrawalAmount),
+    asset: nativeAsset,
+    extraGas: false,
+    recipient: recipientAddress,  // the final recipient of withdrawn funds
+  }),
+});
+if (!quoteRes.ok) throw new Error(`Relayer quote request failed: ${quoteRes.status}`);
+const quote = await quoteRes.json();
+// quote.feeCommitment expires in 60 seconds — complete the remaining steps quickly
+
+// Step 1b: Get relayer details for the canonical fee receiver and limits
+const detailsRes = await fetch(
+  `${relayerHost}/relayer/details?chainId=1&assetAddress=${nativeAsset}`
+);
+if (!detailsRes.ok) throw new Error(`Relayer details request failed: ${detailsRes.status}`);
+const details = await detailsRes.json();
+if (withdrawalAmount < BigInt(details.minWithdrawAmount)) {
+  throw new Error(
+    `Withdrawal amount ${withdrawalAmount} is below relayer minimum ${details.minWithdrawAmount}`
+  );
+}
+
+// Step 2: Construct the relay Withdrawal object
+// processooor MUST be entrypointAddress (NOT the relayer, NOT the recipient)
+import { encodeAbiParameters } from "viem";
+const relayData = encodeAbiParameters(
+  [
+    { name: "recipient", type: "address" },
+    { name: "feeRecipient", type: "address" },
+    { name: "relayFeeBPS", type: "uint256" },
+  ],
+  [recipientAddress, details.feeReceiverAddress, BigInt(quote.feeBPS)]
+);
+const withdrawal: Withdrawal = { processooor: entrypointAddress, data: relayData };
+
+// Step 3: Generate the ZK proof (same as direct withdrawal, but with relay-specific context)
+const scope = await contracts.getScope(privacyPoolAddress) as unknown as Hash;
+const context = BigInt(calculateContext(withdrawal, scope));
+const { nullifier: newNullifier, secret: newSecret } = generateWithdrawalSecrets(
+  masterKeys, label, withdrawalIndex
+);
+const stateRoot = await contracts.getStateRoot(privacyPoolAddress) as unknown as Hash;
+const stateMerkleProof = generateMerkleProof(allCommitmentHashes, commitment.hash);
+const aspMerkleProof = generateMerkleProof(aspLabels, commitment.preimage.label);
+
+const withdrawalProof = await sdk.proveWithdrawal(commitment, {
+  context,
+  withdrawalAmount,
+  stateMerkleProof,
+  aspMerkleProof,
+  stateRoot,
+  stateTreeDepth: 32n,
+  aspRoot: aspRoot as unknown as Hash,
+  aspTreeDepth: 32n,
+  newNullifier,
+  newSecret,
+});
+
+// Step 4: Submit to the relayer (NOT on-chain directly)
+const requestRes = await fetch(`${relayerHost}/relayer/request`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    chainId: 1,
+    scope: scope.toString(),  // decimal string
+    withdrawal: {
+      processooor: entrypointAddress,
+      data: relayData,
+    },
+    proof: withdrawalProof.proof,
+    publicSignals: withdrawalProof.publicSignals,
+    feeCommitment: quote.feeCommitment,  // pass through unchanged from quote response
+  }),
+});
+if (!requestRes.ok) throw new Error(`Relayer request failed: ${requestRes.status}`);
+const result = await requestRes.json();
+// result: { success: true, txHash: "0x...", timestamp: ..., requestId: "..." }
+```
+
 ### Reading the label and committed value from deposit events
 
 The `label` and `value` (post-fee committed amount) are generated on-chain during deposit. You must read them from the `Deposited` event emitted by the pool contract.
@@ -629,8 +750,8 @@ for (let i = 0n; ; i++) {
 | `depositETH(amount, precommitment)` | `bigint, bigint` | Deposit ETH into the pool |
 | `depositERC20(tokenAddress, amount, precommitment)` | `Address, bigint, bigint` | Deposit ERC20 tokens |
 | `approveERC20(spenderAddress, tokenAddress, amount)` | `Address, Address, bigint` | Approve ERC20 spending (call before depositERC20) |
-| `withdraw(withdrawal, proof, scope)` | `Withdrawal, WithdrawalProof, Hash` | Direct withdrawal |
-| `relay(withdrawal, proof, scope)` | `Withdrawal, WithdrawalProof, Hash` | Relayed withdrawal via entrypoint |
+| `withdraw(withdrawal, proof, scope)` | `Withdrawal, WithdrawalProof, Hash` | Direct withdrawal. Internally resolves `scope` → pool address via `getScopeData()` and calls the **pool** contract's `withdraw()`. |
+| `relay(withdrawal, proof, scope)` | `Withdrawal, WithdrawalProof, Hash` | Relayed withdrawal. Calls `relay()` on the **entrypoint** contract (not the pool). |
 | `ragequit(commitmentProof, poolAddress)` | `CommitmentProof, Address` | Emergency public exit |
 
 All write methods return `Promise<{ hash: string; wait: () => Promise<void> }>`. The `hash` is a hex tx hash string (e.g. `"0xabc..."`).
@@ -739,11 +860,14 @@ The SDK uses typed errors for proof and data operations, but contract write meth
 | Error Class | When | Common Codes |
 |-------------|------|-------------|
 | `ProofError` | Proof generation or verification fails | `PROOF_GENERATION_FAILED`, `PROOF_VERIFICATION_FAILED`, `INVALID_PROOF` |
-| `SDKError` | Base class; DataService failures, Merkle errors | `NETWORK_ERROR`, `MERKLE_ERROR`, `INVALID_INPUT` |
+| `SDKError` | Base class; DataService failures | `NETWORK_ERROR`, `INVALID_INPUT` |
+| `PrivacyPoolError` | Merkle proof and crypto operations | `MERKLE_ERROR` |
 | `Error` (generic) | Contract write methods (`deposit`, `withdraw`, `ragequit`, etc.) | N/A — wraps the underlying viem/RPC error message |
 
+**Important:** `PrivacyPoolError` extends `Error` directly (NOT `SDKError`). It is thrown by `generateMerkleProof` and other crypto functions, but it is **not exported** from the SDK's public API. You cannot use `instanceof PrivacyPoolError`. Instead, check for the `code` property:
+
 Common failure modes:
-- **`MERKLE_ERROR`**: Leaf not found in tree — your commitment isn't in the provided leaf set (wrong pool, stale data, or commitment not yet indexed).
+- **`MERKLE_ERROR`**: Leaf not found in tree — your commitment isn't in the provided leaf set (wrong pool, stale data, or commitment not yet indexed). Thrown as `PrivacyPoolError` (has `.code === "MERKLE_ERROR"`).
 - **`PROOF_GENERATION_FAILED`**: Circuit inputs are invalid — check that value, label, nullifier, and secret match the original deposit.
 - **Contract reverts**: On-chain tx revert — typically a spent nullifier (double-withdraw attempt) or invalid proof. Contract write methods throw generic `Error` with a message like `"Failed to Withdraw: ..."`.
 - **`PrecommitmentAlreadyUsed`**: On-chain revert when attempting to deposit with a precommitment hash that was already used by a previous deposit. Generate a fresh precommitment (new `depositIndex`) before retrying.
@@ -757,7 +881,13 @@ try {
   if (error instanceof ProofError) {
     // Bad circuit inputs — check commitment secrets match deposit
   } else if (error instanceof SDKError) {
-    // DataService failures, Merkle errors, etc.
+    // DataService failures (network, invalid input, etc.)
+  } else if (error instanceof Error && "code" in error) {
+    // PrivacyPoolError (not exported — check by duck-typing the `code` property)
+    const code = (error as any).code;
+    if (code === "MERKLE_ERROR") {
+      // Leaf not found in tree — wrong pool, stale data, or commitment not indexed
+    }
   } else {
     // On-chain revert or unknown error
   }
