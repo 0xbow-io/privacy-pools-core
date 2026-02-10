@@ -145,7 +145,8 @@ const withdrawalProof = await sdk.proveWithdrawal(commitment, {
 });
 
 // Step 5: Submit on-chain (direct withdrawal — funds go to signerAddress)
-await contracts.withdraw(withdrawal, withdrawalProof, scope);
+const tx = await contracts.withdraw(withdrawal, withdrawalProof, scope);
+await tx.wait();
 // For relayed withdrawals (third-party recipient), you must construct a DIFFERENT withdrawal
 // object with processooor = entrypointAddress and ABI-encoded RelayData in data.
 // See "Constructing the Withdrawal object" section below for the full relay example.
@@ -163,7 +164,8 @@ const commitmentProof = await sdk.proveCommitment(
 );
 
 // Step 2: Execute ragequit — funds returned to original depositor (public, non-private)
-await contracts.ragequit(commitmentProof, privacyPoolAddress);
+const tx = await contracts.ragequit(commitmentProof, privacyPoolAddress);
+await tx.wait();
 ```
 
 ## Data Sourcing
@@ -175,7 +177,7 @@ The withdrawal flow requires several inputs sourced from on-chain state and exte
 | `scope` | Pool contract | `contracts.getScope(privacyPoolAddress)` |
 | `stateRoot` | Pool contract | `contracts.getStateRoot(privacyPoolAddress)` |
 | `allCommitmentHashes` | ASP API (preferred) or on-chain events | **Preferred:** `GET /{chainId}/public/mt-leaves` → `response.stateTreeLeaves` (pre-ordered). **Fallback:** reconstruct from `DataService` events (see below) |
-| `aspRoot` | ASP API | `GET /{chainId}/public/mt-roots` → `response.mtRoot`. Requires `X-Pool-Scope` header. Verify against on-chain `Entrypoint.latestRoot()` before submitting |
+| `aspRoot` | ASP API | `GET /{chainId}/public/mt-roots` → `response.onchainMtRoot`. Requires `X-Pool-Scope` header. Verify against on-chain `Entrypoint.latestRoot()` before submitting |
 | `aspLabels` | ASP API | `GET /{chainId}/public/mt-leaves` → `response.aspLeaves`. Requires `X-Pool-Scope` header. Returns `string[]` of decimal bigint labels |
 | `label` | Deposit event | Read from `Deposited` event logs after deposit tx |
 | `withdrawal` | Constructed by user | `{ processooor: signerAddress, data: "0x" }` (direct) or `{ processooor: entrypointAddress, data: relayData }` (relayed) |
@@ -287,10 +289,16 @@ const res = await fetch(`${aspApiHost}/${chainId}/public/mt-roots`, {
   headers: { "X-Pool-Scope": scope.toString() },
 });
 const { mtRoot, createdAt, onchainMtRoot } = await res.json();
-// mtRoot: string — current ASP Merkle root (decimal bigint string) from the database
+// mtRoot: string — latest ASP Merkle root (decimal bigint string) from the database
 // createdAt: string — ISO timestamp of this root
-// onchainMtRoot: string — the on-chain root value (may lag slightly behind mtRoot)
-const aspRoot = BigInt(mtRoot) as unknown as Hash;
+// onchainMtRoot: string — the root value currently committed on-chain via Entrypoint.latestRoot()
+//
+// IMPORTANT: The proof's aspRoot must match Entrypoint.latestRoot(). Use onchainMtRoot for the
+// proof — it reflects what the contract will validate against. mtRoot may be ahead of
+// onchainMtRoot if the ASP has computed a new root that hasn't been pushed on-chain yet.
+// The mt-leaves endpoint returns leaves corresponding to mtRoot, so if mtRoot !== onchainMtRoot,
+// wait and re-fetch until they converge before building the proof.
+const aspRoot = BigInt(onchainMtRoot) as unknown as Hash;
 ```
 
 #### `GET /{chainId}/public/mt-leaves` — ASP labels + state tree leaves
@@ -310,11 +318,11 @@ const allCommitmentHashes: bigint[] = stateTreeLeaves.map((s: string) => BigInt(
 ```
 
 **Important notes:**
-- The `X-Pool-Scope` value must be a **decimal string** (hex/non-decimal values are rejected with a validation error).
+- The `X-Pool-Scope` value must be a **decimal string**. Hex or other non-decimal values will not match any pool (the API treats the header as a literal string lookup, so a hex-encoded scope returns 404, not a validation error).
 - Both endpoints are unauthenticated (no API key required) on the mainnet and testnet hosts.
 - No pagination — the full leaf arrays are returned in a single response.
-- The ASP root submitted in the proof **must exactly match** the on-chain `Entrypoint.latestRoot()`. Any difference will cause the withdrawal to revert with `IncorrectASPRoot`. Always verify `BigInt(mtRoot) === Entrypoint.latestRoot()` before submitting. If they differ, re-fetch from the ASP API until they converge.
-- If `X-Pool-Scope` is missing or invalid, the API currently returns HTTP 400 with a message like `"Pool scope is required in X-Pool-Scope header"`. Do not hardcode the full error body — match on status code and handle gracefully.
+- The ASP root submitted in the proof **must exactly match** the on-chain `Entrypoint.latestRoot()`. Any difference will cause the withdrawal to revert with `IncorrectASPRoot`. Use `onchainMtRoot` from the `mt-roots` response (not `mtRoot`) as your proof's `aspRoot`. Always verify `BigInt(onchainMtRoot) === Entrypoint.latestRoot()` before submitting. If `mtRoot !== onchainMtRoot`, the leaves may not yet reflect the on-chain state — wait and re-fetch until they converge.
+- If `X-Pool-Scope` is missing, the API currently returns HTTP 400 with a message like `"Pool scope is required in X-Pool-Scope header"`. If the header is present but does not match a known decimal scope value (including hex-encoded scope), the API returns 404. Do not hardcode the full error body — match on status code and handle gracefully.
 - Rate-limit details are not published. Treat HTTP 403, 429, or any equivalent throttle response as a backoff signal and retry with exponential delay.
 
 #### `GET /{chainId}/health/liveness` — ASP availability check
@@ -351,7 +359,7 @@ const { chains } = await res.json();
 // Example: { ethereum: { entrypoint: "0x6818...", fromBlock: 22167294, chainId: "1" }, ... }
 ```
 
-> **Note:** Treat `GET /global/public/entrypoints` as discovery data, not an automatic allowlist. For this SDK workflow, filter to the chains listed in the **Supported Networks** table below (Ethereum, Arbitrum, OP Mainnet) unless you have separately validated additional chains.
+> **Note:** Treat `GET /global/public/entrypoints` as discovery data, not an automatic allowlist. For this SDK workflow, filter to the chains listed in the **Supported Networks** table below (Ethereum, Arbitrum, OP Mainnet) unless you have separately validated additional chains. **Important:** The `fromBlock` in this response is the entrypoint deployment block, which may be later than the optimal `startBlock` for event scanning. Always use the `startBlock` values from the **Supported Networks** table for `DataService` — using the entrypoints `fromBlock` could miss early deposit events.
 
 #### `GET /{chainId}/public/deposits-larger-than` — Anonymity set size
 
@@ -364,10 +372,12 @@ const res = await fetch(
   `${aspApiHost}/${chainId}/public/deposits-larger-than?amount=1000000000000000000`,
   { headers: { "X-Pool-Scope": scope.toString() } }
 );
-const { eligibleDeposits, totalDeposits, percentage } = await res.json();
+const { eligibleDeposits, totalDeposits, percentage, rank, uniqueAmountsAbove } = await res.json();
 // eligibleDeposits: number — count of deposits >= the threshold
 // totalDeposits: number — total deposit count in the pool
 // percentage: number — eligibleDeposits / totalDeposits * 100
+// rank: number — ordinal rank of this amount among unique deposit amounts
+// uniqueAmountsAbove: number — count of distinct deposit amounts above the threshold
 ```
 
 **On-chain/IPFS (supplemental, not canonical client source):**
@@ -736,6 +746,7 @@ Common failure modes:
 - **`MERKLE_ERROR`**: Leaf not found in tree — your commitment isn't in the provided leaf set (wrong pool, stale data, or commitment not yet indexed).
 - **`PROOF_GENERATION_FAILED`**: Circuit inputs are invalid — check that value, label, nullifier, and secret match the original deposit.
 - **Contract reverts**: On-chain tx revert — typically a spent nullifier (double-withdraw attempt) or invalid proof. Contract write methods throw generic `Error` with a message like `"Failed to Withdraw: ..."`.
+- **`PrecommitmentAlreadyUsed`**: On-chain revert when attempting to deposit with a precommitment hash that was already used by a previous deposit. Generate a fresh precommitment (new `depositIndex`) before retrying.
 
 ```typescript
 try {
@@ -756,7 +767,7 @@ try {
 ## Key Constraints
 
 - Withdrawals require inclusion in the ASP-approved set. Most deposits are approved within 1 hour; some may take up to 7 days. Until approved, the only exit path is ragequit.
-- **Root freshness**: The contract accepts any of the last 64 state roots (historical buffer), so a slight delay between building your state tree and submitting is fine. However, the ASP root **must exactly match** the on-chain `Entrypoint.latestRoot()` — any difference will cause the withdrawal to revert with `IncorrectASPRoot`. There is no tolerance window; the roots must be identical. Fetch the ASP root as close to submission time as possible, and always verify `BigInt(mtRoot) === latestRoot()` before submitting the proof.
+- **Root freshness**: The contract accepts any of the last 64 state roots (historical buffer), so a slight delay between building your state tree and submitting is fine. However, the ASP root **must exactly match** the on-chain `Entrypoint.latestRoot()` — any difference will cause the withdrawal to revert with `IncorrectASPRoot`. There is no tolerance window; the roots must be identical. Use `onchainMtRoot` (not `mtRoot`) from the `mt-roots` response as your proof's `aspRoot`, and always verify `BigInt(onchainMtRoot) === Entrypoint.latestRoot()` before submitting. If `mtRoot !== onchainMtRoot`, wait and re-fetch until they converge.
 - Ragequit is always available as a public fallback path. It works on both original deposits and change commitments (from partial withdrawals), but can only be called by the original depositor address (`OnlyOriginalDepositor` revert otherwise).
 - Partial withdrawals are supported — `withdrawalAmount` can be less than the committed value. After a partial withdrawal, the old commitment is spent and a new "change commitment" is inserted into the state tree with the remaining balance. To continue withdrawing from the change commitment, reconstruct it: `const changeCommitment = getCommitment(existingValue - withdrawalAmount, label, newNullifier, newSecret)`. The `label` stays the same as the original deposit. **Important:** `withdrawalIndex` is a global counter across all withdrawals sharing the same label — it does NOT reset for each change commitment. If your first withdrawal used index 0n, the next withdrawal (from the resulting change commitment) must use index 1n, then 2n, etc.
 - Full withdrawals (entire balance) still create a zero-value change commitment on-chain (it is inserted into the state tree), but it is not spendable. The SDK's account tracking automatically filters out zero-value commitments.
