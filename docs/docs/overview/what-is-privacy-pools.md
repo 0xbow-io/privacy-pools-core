@@ -28,31 +28,35 @@ Privacy Pools' architecture consists of three distinct layers:
 ```mermaid
 flowchart TD
     subgraph A["Association Set Provider (ASP) Layer"]
+        direction LR
         ASP["Association Set Provider"]
-        SET["Approved labels set"]
+        SET["Approved labels"]
         POST["Authorized accounts"]
         ASP --> SET
         ASP --> POST
     end
 
     subgraph Z["Zero-Knowledge Layer"]
+        direction LR
         CC["Commitment circuits"]
         WC["Withdrawal circuits"]
         V["On-chain verifiers"]
-        CC --> V
-        WC --> V
+        CC -.-> V
+        WC -.-> V
     end
 
     subgraph C["Contract Layer"]
+        direction LR
         E["Entrypoint (upgradeable)"]
-        PP["Asset-specific Privacy Pools"]
+        PP["Privacy Pools (per asset)"]
         S["Pool state"]
-        E --> PP --> S
+        E -->|"deposit + relay routing"| PP
+        PP --> S
     end
 
     SET -.->|"membership inputs"| WC
     POST -->|"publish latest ASP root"| E
-    V -->|"proof validity"| PP
+    PP -->|"verify withdrawal/ragequit proofs"| V
 ```
 
 1. **[Contract Layer](/layers/contracts)**
