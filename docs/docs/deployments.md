@@ -58,6 +58,8 @@ Use **`22153709n`** as `startBlock` when initializing `DataService` for Ethereum
 
 | Contract | Address | Deployment Block |
 |----------|---------|-----------------|
+| WithdrawalVerifier | `0x022891f938ae7fdc8ab9ead0fbf50aba8c897d6d` | `404391795` |
+| RagequitVerifier | `0xa45aca8604a73d80c551faad6355a5c3a5565ec6` | `404391799` |
 | Entrypoint (Implementation) | `0x1cabfda9a9c14d16302dd7c8f4b6e2a57aa7b364` | `404391804` |
 | Entrypoint (Proxy) | `0x44192215fed782896be2ce24e0bfbf0bf825d15e` | `404391809` |
 
@@ -71,7 +73,7 @@ Use **`22153709n`** as `startBlock` when initializing `DataService` for Ethereum
 
 ### Deployment Start Block
 
-Use **`404391804n`** as `startBlock` when initializing `DataService` for Arbitrum.
+Use **`404391795n`** as `startBlock` when initializing `DataService` for Arbitrum. This is the earliest deployment block (WithdrawalVerifier) and ensures all pool events are captured.
 
 ## OP Mainnet (Chain ID: 10)
 
@@ -79,6 +81,8 @@ Use **`404391804n`** as `startBlock` when initializing `DataService` for Arbitru
 
 | Contract | Address | Deployment Block |
 |----------|---------|-----------------|
+| WithdrawalVerifier | `0x022891f938ae7fdc8ab9ead0fbf50aba8c897d6d` | `144288139` |
+| RagequitVerifier | `0xa45aca8604a73d80c551faad6355a5c3a5565ec6` | `144288140` |
 | Entrypoint (Implementation) | `0x1cabfda9a9c14d16302dd7c8f4b6e2a57aa7b364` | `144288141` |
 | Entrypoint (Proxy) | `0x44192215fed782896be2ce24e0bfbf0bf825d15e` | `144288142` |
 
@@ -91,7 +95,7 @@ Use **`404391804n`** as `startBlock` when initializing `DataService` for Arbitru
 
 ### Deployment Start Block
 
-Use **`144288141n`** as `startBlock` when initializing `DataService` for OP Mainnet.
+Use **`144288139n`** as `startBlock` when initializing `DataService` for OP Mainnet. This is the earliest deployment block (WithdrawalVerifier) and ensures all pool events are captured.
 
 ## OP Sepolia (Chain ID: 11155420)
 

@@ -973,8 +973,8 @@ All write methods return `Promise<{ hash: string; wait: () => Promise<void> }>`.
 | Network | Chain ID | viem import | Entrypoint (Proxy) | `startBlock` |
 |---------|----------|-------------|-------------------|-------------|
 | Ethereum Mainnet | 1 | `import { mainnet } from "viem/chains"` | `0x6818809eefce719e480a7526d76bd3e561526b46` | `22153709n` |
-| Arbitrum | 42161 | `import { arbitrum } from "viem/chains"` | `0x44192215fed782896be2ce24e0bfbf0bf825d15e` | `404391804n` |
-| OP Mainnet | 10 | `import { optimism } from "viem/chains"` | `0x44192215fed782896be2ce24e0bfbf0bf825d15e` | `144288141n` |
+| Arbitrum | 42161 | `import { arbitrum } from "viem/chains"` | `0x44192215fed782896be2ce24e0bfbf0bf825d15e` | `404391795n` |
+| OP Mainnet | 10 | `import { optimism } from "viem/chains"` | `0x44192215fed782896be2ce24e0bfbf0bf825d15e` | `144288139n` |
 | Sepolia (testnet) | 11155111 | `import { sepolia } from "viem/chains"` | `0x34a2068192b1297f2a7f85d7d8cde66f8f0921cb` | `8461450n` |
 | OP Sepolia (testnet) | 11155420 | `import { optimismSepolia } from "viem/chains"` | `0x54aca0d27500669fa37867233e05423701f11ba1` | `32854673n` |
 
