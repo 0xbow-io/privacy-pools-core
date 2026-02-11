@@ -55,7 +55,7 @@ mkdir -p ~/.agents/skills/privacy-pools
 cp skills/privacy-pools/SKILL.md ~/.agents/skills/privacy-pools/SKILL.md
 ```
 
-### LLM Retrieval Systems
+### Other LLM Tools
 
 For systems that ingest a single document, use `llms-full.txt`. It includes `skills-core.md` and `skills.md` at the top, followed by all docs pages, so the highest-value content loads first.
 
