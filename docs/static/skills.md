@@ -456,15 +456,21 @@ interface Withdrawal {
   processooor: Address;  // Direct: signer's own address (msg.sender). Relayed: MUST be the Entrypoint address.
   data: Hex;             // "0x" for direct withdrawals; ABI-encoded RelayData for relayed
 }
+```
 
-// Direct withdrawal — funds go to the signer's own address (processooor == msg.sender required)
+Direct withdrawal:
+
+```typescript
 const withdrawal: Withdrawal = { processooor: signerAddress, data: "0x" };
+```
 
-// Relayed withdrawal — processooor MUST be the Entrypoint address (not the relayer).
-// The Entrypoint.relay() function checks: _withdrawal.processooor == address(this).
+Relayed withdrawal:
+
+```typescript
+import { encodeAbiParameters } from "viem";
+// processooor MUST be the Entrypoint address (not the relayer).
 // The actual recipient and fee recipient are encoded in the data field as RelayData.
 // Fee is bounded by maxRelayFeeBPS from getAssetConfig().
-import { encodeAbiParameters } from "viem";
 const relayData = encodeAbiParameters(
   [
     { name: "recipient", type: "address" },       // final recipient of withdrawn funds
@@ -599,8 +605,8 @@ Example `POST /relayer/request` (schema: `zRelayRequest` in `packages/relayer/sr
 **Schema notes:**
 - `scope`: decimal bigint string (not hex)
 - `publicSignals`: must be exactly 8 elements (string array)
-- `proof.pi_a` / `pi_c`: 3-element string tuples; `proof.pi_b`: 3×2-element string tuples. The relayer only requires `pi_a`, `pi_b`, `pi_c` — extra fields like `protocol` and `curve` from the `Groth16Proof` type are ignored
-- `feeCommitment` is optional, but when present ALL 6 fields are required: `expiration`, `withdrawalData`, `asset`, `extraGas`, `amount`, `signedRelayerCommitment`
+- `proof.pi_a` / `pi_c`: 3-element string tuples; `proof.pi_b`: 3×2-element string tuples. The relayer only requires `pi_a`, `pi_b`, `pi_c` — extra fields like `protocol` and `curve` from the `Groth16Proof` type are accepted and ignored (not rejected)
+- `feeCommitment` is optional at schema level, but for production relayed withdrawals it should be included from `/relayer/quote` to lock a signed fee. When present, ALL 6 fields are required: `expiration`, `withdrawalData`, `asset`, `extraGas`, `amount`, `signedRelayerCommitment`
 - The `feeCommitment` expires **60 seconds** after the quote response. The full quote → proof generation → request submission flow must complete within this window. Proof generation typically takes 5–15 seconds in Node.js (varies by machine). If the commitment has expired, re-fetch a new quote before retrying. The relayer API does not support cancellation — if expired, simply re-quote.
 - The `feeCommitment` fields come directly from the `/relayer/quote` response — pass them through unchanged
 
@@ -972,7 +978,7 @@ All write methods return `Promise<{ hash: string; wait: () => Promise<void> }>`.
 | Sepolia (testnet) | 11155111 | `import { sepolia } from "viem/chains"` | `0x34a2068192b1297f2a7f85d7d8cde66f8f0921cb` | `8461450n` |
 | OP Sepolia (testnet) | 11155420 | `import { optimismSepolia } from "viem/chains"` | `0x54aca0d27500669fa37867233e05423701f11ba1` | `32854673n` |
 
-Privacy Pools is also deployed on Starknet, but as of February 9, 2026 Starknet is **not supported by this SDK** (`@0xbow/privacy-pools-core-sdk`). Starknet integration requires a separate SDK (not viem-based). Engineering has indicated a public Starknet SDK is planned but not yet released.
+Privacy Pools is also deployed on Starknet, but Starknet is **not currently supported by this SDK** (`@0xbow/privacy-pools-core-sdk`). Starknet integration requires a separate SDK (not viem-based). Engineering has indicated a public Starknet SDK is planned but not yet released.
 
 > **Testnet deployments:** Sepolia (`11155111`) and OP Sepolia (`11155420`) are for development/testing. Both use `dw.0xbow.io` for ASP API and `testnet-relayer.privacypools.com` for relayer API.  
 > Sepolia ETH pool: `0x644d5a2554d36e27509254f32ccfebe8cd58861f`  
@@ -1082,8 +1088,11 @@ To match a withdrawal to its source deposit, compute `Poseidon(nullifier)` from 
 // npm install circomlibjs
 import { buildPoseidon } from "circomlibjs";
 const poseidon = await buildPoseidon();
+const nullifier = "preimage" in commitment
+  ? commitment.preimage.precommitment.nullifier
+  : commitment.nullifier;
 const nullifierHash = BigInt(
-  poseidon.F.toString(poseidon([commitment.preimage.precommitment.nullifier]))
+  poseidon.F.toString(poseidon([nullifier]))
 );
 const isMatch = nullifierHash === withdrawalEvent.spentNullifier;
 ```

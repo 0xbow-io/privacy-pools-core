@@ -19,6 +19,10 @@ Privacy Pools supports two types of withdrawals:
 
 Both methods require [zero-knowledge proofs](/layers/zk/withdrawal) to prove commitment ownership and maintain privacy.
 
+> Integration note:
+> For production integrations, relayed withdrawals typically use `https://fastrelay.xyz` on production chains and `https://testnet-relayer.privacypools.com` on Sepolia testnets.  
+> For exact request/response schemas (`/relayer/quote`, `/relayer/request`, `/relayer/details`) and `feeCommitment` timing constraints, see `/skills.md`.
+
 ## Withdrawal Types Comparison
 
 | Aspect                   | Direct Withdrawal  | Relayed Withdrawal                      |
@@ -89,7 +93,7 @@ sequenceDiagram
 
     User->>Relayer: Submit withdrawal + proof
     Relayer->>Relayer: Verify proof locally
-    Relayer->>Entrypoint: relay(withdrawal, proof)
+    Relayer->>Entrypoint: relay(withdrawal, proof, scope)
 
     activate Entrypoint
     Entrypoint->>Pool: withdraw(withdrawal, proof)

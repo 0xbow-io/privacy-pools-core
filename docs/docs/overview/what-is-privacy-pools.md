@@ -26,41 +26,38 @@ Privacy Pool enables private withdrawals through a combination of zero-knowledge
 Privacy Pools' architecture consists of three distinct layers:
 
 ```mermaid
-graph TB
-    subgraph "Contract Layer"
-        EP[Entrypoint Contract]
-        PP1[ETH Pool]
-        PP2[ERC20 Pool]
+flowchart TD
+    subgraph A["Association Set Provider (ASP) Layer"]
+        ASP["Association Set Provider"]
+        SET["Approved labels set"]
+        POST["Authorized accounts"]
+        ASP --> SET
+        ASP --> POST
     end
 
-    subgraph "Zero-Knowledge Layer"
-        CC[Commitment Circuit]
-        WC[Withdrawal Circuit]
-        MT[LeanIMT Merkle Tree]
-        V[On-chain Verifiers]
+    subgraph Z["Zero-Knowledge Layer"]
+        CC["Commitment circuits"]
+        WC["Withdrawal circuits"]
+        V["On-chain verifiers"]
+        CC --> V
+        WC --> V
     end
 
-    subgraph "ASP Layer"
-        ASP[Association Set Provider]
-        AL[Approved Labels Set]
+    subgraph C["Contract Layer"]
+        E["Entrypoint (upgradeable)"]
+        PP["Asset-specific Privacy Pools"]
+        S["Pool state"]
+        E --> PP --> S
     end
 
-    EP --> PP1
-    EP --> PP2
-    PP1 --> CC
-    PP1 --> WC
-    PP2 --> CC
-    PP2 --> WC
-    CC --> MT
-    WC --> V
-    ASP --> AL
-    AL -.->|approves deposits| PP1
-    AL -.->|approves deposits| PP2
+    SET -.->|"membership inputs"| WC
+    POST -->|"publish latest ASP root"| E
+    V -->|"proof validity"| PP
 ```
 
 1. **[Contract Layer](/layers/contracts)**
-   - An upgradeable [Entrypoint](/layers/contracts/entrypoint) contract that coordinates ASP-operated privacy pool
-   - Asset-specific [privacy pools](/layers/contracts/privacy-pools) that hold funds and manage state
+   - An upgradeable [Entrypoint](/layers/contracts/entrypoint) contract that coordinates ASP-operated privacy pools
+   - Asset-specific [Privacy Pools](/layers/contracts/privacy-pools) that hold funds and manage state
 2. **[Zero-Knowledge Layer](/layers/zk)**
    - [Commitment circuits](/layers/zk/commitment) for secure deposit registration
    - [Withdrawal circuits](/layers/zk/withdrawal) that enable private asset withdrawals
@@ -71,6 +68,8 @@ graph TB
    - Enables regulatory compliance without compromising privacy
 
 These layers work together to create a secure privacy-preserving system: the contract layer manages assets and state, the zero-knowledge layer ensures privacy, and the ASP layer provides compliance capabilities.
+
+Privacy Pools also supports an optional relayed withdrawal path via Entrypoint for users who want recipient privacy from the transaction sender. For flow details, see [Withdrawal](/protocol/withdrawal). For integration-level API details, see `/skills.md`.
 
 ## Key features and capabilities
 

@@ -168,6 +168,14 @@ code:not([class^="language-"]) {
   border-color: var(--ifm-border-color);
 }
 
+.markdown table {
+  font-size: 1.28rem;
+}
+
+.markdown table th {
+  font-size: 1.28rem;
+}
+
 /* Add this new section for main content styling */
 .markdown {
   font-size: 2rem; /* 22.4px for main content */

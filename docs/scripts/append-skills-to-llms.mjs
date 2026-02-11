@@ -35,8 +35,8 @@ if (!existsSync(skillsCorePath)) {
   process.exit(0);
 }
 
-const skillsCore = readFileSync(skillsCorePath, "utf8");
-const llmsFull = readFileSync(llmsFullPath, "utf8");
+const skillsCore = readFileSync(skillsCorePath, "utf8").trimEnd();
+const llmsFull = readFileSync(llmsFullPath, "utf8").trimEnd();
 const marker = "<!-- skills-core-prepended -->";
 
 if (llmsFull.includes(marker)) {
@@ -56,7 +56,7 @@ const coreHeader = [
 
 let deepSection = "";
 if (existsSync(skillsDeepPath)) {
-  const skillsDeep = readFileSync(skillsDeepPath, "utf8");
+  const skillsDeep = readFileSync(skillsDeepPath, "utf8").trimEnd();
   deepSection = [
     "",
     "---",

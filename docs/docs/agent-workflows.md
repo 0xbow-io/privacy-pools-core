@@ -12,66 +12,59 @@ keywords:
 
 # Agent Workflows
 
-This page explains the agent-facing documentation architecture for Privacy Pools.
-
-Design goal: one canonical source of truth with thin wrappers per runtime.
+Privacy Pools documentation is layered for AI agents: one canonical source of truth with thin wrappers per runtime.
 
 ## File Map
 
-| File | Purpose | Primary Audience | Notes |
+| File | Purpose | Audience | Notes |
 |---|---|---|---|
-| `docs/static/skills.md` | Canonical deep operational reference | Agents + engineers | Source of truth for SDK/API/protocol integration details |
-| `docs/static/skills-core.md` | Short operational quickstart | Autonomous agents and human+agent sessions | Start here to reduce context cost |
-| `AGENTS.md` | Repo-level operating guidance | Codex and similar coding agents | Includes build/test/security constraints |
-| `CLAUDE.md` | Thin Claude Code router | Claude Code | Points to canonical/core docs; avoids duplicate protocol logic |
-| `skills/privacy-pools/SKILL.md` | Installable Codex skill wrapper | Codex skill users | Frontmatter-driven trigger + concise workflow |
-| `llms.txt` | Lightweight LLM index | Crawlers and retrieval systems | Discovery and routing |
-| `llms-full.txt` | Expanded LLM corpus | Retrieval systems with larger context | Prepends `skills-core.md` + `skills.md`; fully self-contained |
+| `skills-core.md` | Operational quickstart | Agents, human+agent sessions | Start here; covers all flows with minimal context |
+| `skills.md` | Canonical deep reference | Agents + engineers | Source of truth for SDK, API schemas, types, error handling |
+| `deployments.md` | Contract addresses and start blocks | All | Authoritative chain-specific deployment data |
+| `CLAUDE.md` | Claude Code config | Claude Code | Auto-loaded at repo root; routes to canonical docs |
+| `AGENTS.md` | Repo-level guidance | Codex and similar coding agents | Build/test commands, security constraints, repo structure |
+| `SKILL.md` | Installable skill wrapper | Codex skill users | Frontmatter-driven; thin wrapper around canonical docs (canonical source: `skills/privacy-pools/SKILL.md`, repo-scoped mirror: `.agents/skills/privacy-pools/SKILL.md`) |
+| `llms.txt` | Lightweight site index | Crawlers, retrieval systems | Auto-generated at build; discovery and routing |
+| `llms-full.txt` | Complete LLM corpus | Retrieval systems | Prepends `skills-core.md` + `skills.md`; fully self-contained |
 
-## Recommended Runtime Strategy
-
-1. Load `skills-core.md` first.
-2. Load only required sections from `skills.md`.
-3. Pull chain addresses and start blocks from `deployments.md`.
-4. Validate all proof-critical inputs against on-chain state and live API responses.
-
-## How To Use (Codex and Claude Code)
-
-### Codex
-
-1. Open the repository root so `AGENTS.md` is discoverable.
-2. Start with `docs/static/skills-core.md`.
-3. Escalate to `docs/static/skills.md` only for advanced/edge-case handling.
-4. Use `docs/docs/deployments.md` for authoritative addresses and start blocks.
-
-For reusable skill installation in Codex environments:
-
-1. Install/copy `skills/privacy-pools/SKILL.md` into your Codex skills directory.
-2. Trigger with prompts like "integrate Privacy Pools deposit + relayed withdrawal flow."
-3. Keep the skill wrapper thin; update canonical content in `skills.md`.
+## How To Use
 
 ### Claude Code
 
-1. Open the repository root so `CLAUDE.md` is loaded.
-2. Follow `CLAUDE.md` read order (core -> canonical -> deployments).
-3. Prefer relayed withdrawals as default flow; keep self-relay as fallback.
+Claude Code auto-discovers `CLAUDE.md` at the repository root — no setup needed. It routes the agent to:
 
-## Why This Layout
+1. `docs/static/skills-core.md` — read first for operational flows and safety rules.
+2. `docs/static/skills.md` — read relevant sections for SDK details, API schemas, or edge cases.
+3. `docs/docs/deployments.md` — pull chain addresses and `startBlock` values.
 
-- Keeps one canonical deep document (`skills.md`) to prevent drift.
-- Reduces context bloat during normal agent execution (`skills-core.md`).
-- Supports multiple runtimes without duplicating protocol logic (`AGENTS.md`, `CLAUDE.md`, and Codex `SKILL.md` stay thin).
+### Codex
 
-## Maintenance Rules
+Codex reads `AGENTS.md` at the repository root for build commands, repo structure, and security constraints. For protocol integration work:
 
-- Treat `docs/static/skills.md` as canonical.
-- Update `docs/static/skills-core.md` whenever operational guidance changes.
-- Keep wrappers thin and reference canonical/core docs instead of repeating details.
-- Avoid hardcoding addresses in wrappers; use `deployments.md`.
-- Rebuild docs after changes: `cd docs && yarn build`.
+1. Start with `docs/static/skills-core.md` for the operational path.
+2. Escalate to `docs/static/skills.md` only for advanced implementation details.
+3. Use `docs/docs/deployments.md` for authoritative addresses and start blocks.
+
+For repo-scoped auto-discovery, use `.agents/skills/privacy-pools/SKILL.md`. For user-scoped installation, copy `skills/privacy-pools/SKILL.md` into `~/.agents/skills/privacy-pools/SKILL.md`.
+
+### LLM Retrieval Systems
+
+For systems that ingest a single document, use `llms-full.txt` — it prepends both `skills-core.md` and `skills.md` ahead of all docs pages, so the most operationally critical content appears first even if the context window truncates.
 
 ## Integration Endpoints
 
-- Canonical docs: https://docs.privacypools.com/skills.md
-- Agent quickstart: https://docs.privacypools.com/skills-core.md
-- LLM full index: https://docs.privacypools.com/llms-full.txt
+| Resource | URL |
+|---|---|
+| Agent quickstart | https://docs.privacypools.com/skills-core.md |
+| Canonical deep reference | https://docs.privacypools.com/skills.md |
+| Deployments | https://docs.privacypools.com/deployments |
+| Full LLM corpus | https://docs.privacypools.com/llms-full.txt |
+| Site index | https://docs.privacypools.com/llms.txt |
+
+## Maintenance
+
+- `skills.md` is the canonical source of truth. Update it first; keep wrappers thin.
+- Update `skills-core.md` whenever operational guidance changes.
+- Keep `skills/privacy-pools/SKILL.md` and `.agents/skills/privacy-pools/SKILL.md` in sync (`skills/privacy-pools/SKILL.md` is canonical).
+- Avoid hardcoding addresses in wrappers — reference `deployments.md` instead.
+- Rebuild after changes: `cd docs && yarn build`.
