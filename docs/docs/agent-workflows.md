@@ -20,6 +20,7 @@ Privacy Pools documentation is layered for AI agents: one canonical source of tr
 |---|---|---|---|
 | `skills-core.md` | Operational quickstart | Agents, human+agent sessions | Start here; covers all flows with minimal context |
 | `skills.md` | Canonical deep reference | Agents + engineers | Source of truth for SDK, API schemas, types, error handling |
+| `integrations.md` | Human-facing production integration path | Engineers, human+agent sessions | Located at `/protocol/integrations`; concise onboarding + safety checks + deep-reference links |
 | `deployments.md` | Contract addresses and start blocks | All | Authoritative chain-specific deployment data |
 | `CLAUDE.md` | Claude Code config | Claude Code | Auto-loaded at repo root; routes to canonical docs |
 | `AGENTS.md` | Repo-level guidance | Codex and similar coding agents | Build/test commands, security constraints, repo structure |
@@ -62,6 +63,7 @@ For systems that ingest a single document, use `llms-full.txt` — it prepends b
 |---|---|
 | Agent quickstart | https://docs.privacypools.com/skills-core.md |
 | Canonical deep reference | https://docs.privacypools.com/skills.md |
+| Human integration path | https://docs.privacypools.com/protocol/integrations |
 | Deployments | https://docs.privacypools.com/deployments |
 | Full LLM corpus | https://docs.privacypools.com/llms-full.txt |
 | Site index | https://docs.privacypools.com/llms.txt |

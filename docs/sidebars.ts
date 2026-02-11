@@ -59,7 +59,12 @@ const sidebars: SidebarsConfig = {
       type: "category",
       collapsible: false,
       label: "Using Privacy Pools",
-      items: ["protocol/deposit", "protocol/withdrawal", "protocol/ragequit"],
+      items: [
+        "protocol/integrations",
+        "protocol/deposit",
+        "protocol/withdrawal",
+        "protocol/ragequit",
+      ],
     },
     {
       type: "category",

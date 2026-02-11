@@ -21,7 +21,7 @@ Both methods require [zero-knowledge proofs](/layers/zk/withdrawal) to prove com
 
 > Integration note:
 > For production integrations, relayed withdrawals typically use `https://fastrelay.xyz` on production chains and `https://testnet-relayer.privacypools.com` on Sepolia testnets.  
-> For exact request/response schemas (`/relayer/quote`, `/relayer/request`, `/relayer/details`) and `feeCommitment` timing constraints, see `/skills.md`.
+> For a concise integration path, see [Integrations](/protocol/integrations). For exact request/response schemas (`/relayer/quote`, `/relayer/request`, `/relayer/details`) and `feeCommitment` timing constraints, see [skills.md](https://docs.privacypools.com/skills.md).
 
 ## Withdrawal Types Comparison
 

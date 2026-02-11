@@ -11,6 +11,8 @@ keywords:
   - integration
 ---
 
+For production onboarding and required safety checks, start with [Integrations](/protocol/integrations). For full end-to-end operational guidance and API payload schemas, see [skills.md](https://docs.privacypools.com/skills.md).
+
 
 ## `PrivacyPoolSDK`
 

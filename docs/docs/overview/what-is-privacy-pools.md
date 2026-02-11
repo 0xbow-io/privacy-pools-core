@@ -73,7 +73,7 @@ flowchart TD
 
 These layers work together to create a secure privacy-preserving system: the contract layer manages assets and state, the zero-knowledge layer ensures privacy, and the ASP layer provides compliance capabilities.
 
-Privacy Pools also supports an optional relayed withdrawal path via Entrypoint for users who want recipient privacy from the transaction sender. For flow details, see [Withdrawal](/protocol/withdrawal). For integration-level API details, see `/skills.md`.
+Privacy Pools also supports an optional relayed withdrawal path via Entrypoint for users who want recipient privacy from the transaction sender. For flow details, see [Withdrawal](/protocol/withdrawal). For production onboarding, see [Integrations](/protocol/integrations). For integration-level API details, see [skills.md](https://docs.privacypools.com/skills.md).
 
 ## Key features and capabilities
 

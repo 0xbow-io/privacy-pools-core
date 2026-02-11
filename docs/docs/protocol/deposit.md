@@ -14,6 +14,9 @@ keywords:
 
 The deposit operation is the entry point into the Privacy Pools protocol. It allows users to publicly deposit assets (ETH or ERC20 tokens) into a pool, creating a private commitment that can later be used for [private withdrawals](/protocol/withdrawal) or public [ragequit](/protocol/ragequit) operations.
 
+> Integration note:
+> For production onboarding and required runtime checks, start with [Integrations](/protocol/integrations). For full end-to-end implementation guidance, see [skills.md](https://docs.privacypools.com/skills.md).
+
 ## Protocol Flow
 
 ```mermaid

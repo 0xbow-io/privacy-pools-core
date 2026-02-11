@@ -12,6 +12,8 @@ keywords:
 ---
 
 
+For end-to-end usage, pair this circuit reference with [Integrations](/protocol/integrations) and [Withdrawal](/protocol/withdrawal).
+
 **`CommitmentHasher`**
 
 Creates commitment proofs using Poseidon hash.
