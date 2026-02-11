@@ -14,14 +14,14 @@ keywords:
 
 This page covers the recommended production integration path for Privacy Pools, including required safety checks and key references.
 
-## Recommended Read Order
+## Key References
 
 1. [Deployments](/deployments) — chain-specific addresses and `startBlock`
 2. [SDK Utilities](/reference/sdk) — SDK types and functions
 3. [Deposit](/protocol/deposit), [Withdrawal](/protocol/withdrawal), [Ragequit](/protocol/ragequit) — protocol behavior
 4. [skills.md](https://docs.privacypools.com/skills.md) — end-to-end code paths, API schemas, and edge cases
 
-## Default Production Path
+## Getting Started
 
 1. Use `@0xbow/privacy-pools-core-sdk` for proof generation and contract interactions.
 2. Use ASP API endpoints (`/public/mt-roots`, `/public/mt-leaves`) for association-set data.

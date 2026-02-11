@@ -12,7 +12,7 @@ keywords:
 
 # Agent Workflows
 
-Privacy Pools documentation is layered for AI agents: one canonical source of truth with thin wrappers per runtime.
+Privacy Pools provides a single canonical reference (`skills.md`) with lightweight entry files for each AI coding tool.
 
 ## File Map
 
@@ -30,6 +30,8 @@ Privacy Pools documentation is layered for AI agents: one canonical source of tr
 
 ## How To Use
 
+Hosted links are in the [File Map](#file-map) above. The paths below are local repo paths used in editor/agent workflows.
+
 ### Claude Code
 
 Claude Code auto-discovers `CLAUDE.md` at the repository root — no setup needed. It routes the agent to:
@@ -43,7 +45,7 @@ Claude Code auto-discovers `CLAUDE.md` at the repository root — no setup neede
 Codex reads `AGENTS.md` at the repository root for build commands, repo structure, and security constraints. For protocol integration work:
 
 1. Start with `docs/static/skills-core.md` for the operational path.
-2. Escalate to `docs/static/skills.md` only for advanced implementation details.
+2. Refer to `docs/static/skills.md` for advanced implementation details.
 3. Use `docs/docs/deployments.md` for authoritative addresses and start blocks.
 
 For repo-scoped auto-discovery, use `.agents/skills/privacy-pools/SKILL.md`. For user-scoped installation:
@@ -55,9 +57,9 @@ cp skills/privacy-pools/SKILL.md ~/.agents/skills/privacy-pools/SKILL.md
 
 ### LLM Retrieval Systems
 
-For systems that ingest a single document, use `llms-full.txt` — it prepends both `skills-core.md` and `skills.md` ahead of all docs pages, so the most operationally critical content appears first even if the context window truncates.
+For systems that ingest a single document, use `llms-full.txt`. It includes `skills-core.md` and `skills.md` at the top, followed by all docs pages, so the highest-value content loads first.
 
-## Integration Endpoints
+## Hosted References
 
 | Resource | URL |
 |---|---|
