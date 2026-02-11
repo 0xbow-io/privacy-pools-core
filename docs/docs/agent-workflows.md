@@ -18,15 +18,15 @@ Privacy Pools documentation is layered for AI agents: one canonical source of tr
 
 | File | Purpose | Audience | Notes |
 |---|---|---|---|
-| `skills-core.md` | Operational quickstart | Agents, human+agent sessions | Start here; covers all flows with minimal context |
-| `skills.md` | Canonical deep reference | Agents + engineers | Source of truth for SDK, API schemas, types, error handling |
-| `integrations.md` | Human-facing production integration path | Engineers, human+agent sessions | Located at `/protocol/integrations`; concise onboarding + safety checks + deep-reference links |
-| `deployments.md` | Contract addresses and start blocks | All | Authoritative chain-specific deployment data |
-| `CLAUDE.md` | Claude Code config | Claude Code | Auto-loaded at repo root; routes to canonical docs |
-| `AGENTS.md` | Repo-level guidance | Codex and similar coding agents | Build/test commands, security constraints, repo structure |
-| `SKILL.md` | Installable skill wrapper | Codex skill users | Frontmatter-driven; thin wrapper around canonical docs (canonical source: `skills/privacy-pools/SKILL.md`, repo-scoped mirror: `.agents/skills/privacy-pools/SKILL.md`) |
-| `llms.txt` | Lightweight site index | Crawlers, retrieval systems | Auto-generated at build; discovery and routing |
-| `llms-full.txt` | Complete LLM corpus | Retrieval systems | Prepends `skills-core.md` + `skills.md`; fully self-contained |
+| [skills-core.md](https://docs.privacypools.com/skills-core.md) | Operational quickstart | Agents, human+agent sessions | Start here; covers all flows with minimal context |
+| [skills.md](https://docs.privacypools.com/skills.md) | Canonical deep reference | Agents + engineers | Source of truth for SDK, API schemas, types, error handling |
+| [integrations.md](/protocol/integrations) | Human-facing production integration path | Engineers, human+agent sessions | Concise onboarding + safety checks + deep-reference links |
+| [deployments.md](/deployments) | Contract addresses and start blocks | All | Authoritative chain-specific deployment data |
+| [CLAUDE.md](https://github.com/0xbow-io/privacy-pools-core/blob/main/CLAUDE.md) | Claude Code config | Claude Code | Auto-loaded at repo root; routes to canonical docs |
+| [AGENTS.md](https://github.com/0xbow-io/privacy-pools-core/blob/main/AGENTS.md) | Repo-level guidance | Codex and similar coding agents | Build/test commands, security constraints, repo structure |
+| [SKILL.md](https://github.com/0xbow-io/privacy-pools-core/blob/main/skills/privacy-pools/SKILL.md) | Installable skill wrapper | Codex skill users | Frontmatter-driven; thin wrapper around canonical docs (canonical source: `skills/privacy-pools/SKILL.md`, repo-scoped mirror: `.agents/skills/privacy-pools/SKILL.md`) |
+| [llms.txt](https://docs.privacypools.com/llms.txt) | Lightweight site index | Crawlers, retrieval systems | Auto-generated at build; discovery and routing |
+| [llms-full.txt](https://docs.privacypools.com/llms-full.txt) | Complete LLM corpus | Retrieval systems | Prepends `skills-core.md` + `skills.md`; fully self-contained |
 
 ## How To Use
 
