@@ -45,7 +45,12 @@ Codex reads `AGENTS.md` at the repository root for build commands, repo structur
 2. Escalate to `docs/static/skills.md` only for advanced implementation details.
 3. Use `docs/docs/deployments.md` for authoritative addresses and start blocks.
 
-For repo-scoped auto-discovery, use `.agents/skills/privacy-pools/SKILL.md`. For user-scoped installation, copy `skills/privacy-pools/SKILL.md` into `~/.agents/skills/privacy-pools/SKILL.md`.
+For repo-scoped auto-discovery, use `.agents/skills/privacy-pools/SKILL.md`. For user-scoped installation:
+
+```bash
+mkdir -p ~/.agents/skills/privacy-pools
+cp skills/privacy-pools/SKILL.md ~/.agents/skills/privacy-pools/SKILL.md
+```
 
 ### LLM Retrieval Systems
 
