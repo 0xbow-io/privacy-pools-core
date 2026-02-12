@@ -43,6 +43,11 @@ This page covers the recommended production integration path for Privacy Pools, 
 
 ASP API docs: `https://api.0xbow.io/api-docs`
 
+`request.0xbow.io` is a partner-only host and does not serve public `mt-roots` / `mt-leaves` endpoints.
+For public ASP reads, use `api.0xbow.io` (mainnet chains) or `dw.0xbow.io` (testnet chains).
+
+Note: OpenAPI/Swagger schemas may lag live responses. For canonical response-shape guidance, use [skills.md](https://docs.privacypools.com/skills.md).
+
 ## Critical API Endpoints
 
 | Endpoint | Purpose |
