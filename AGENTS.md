@@ -19,7 +19,7 @@ Yarn workspaces monorepo (Node.js >= 20, Yarn 1.x):
 - `docs/static/skills-core.md` — quick operational guide for autonomous agents and human+agent workflows (start here).
 - `docs/static/skills.md` — canonical deep reference and source of truth.
 - `CLAUDE.md` — thin Claude Code router for this repo.
-- `.agents/skills/privacy-pools/SKILL.md` — repo-scoped Codex skill (auto-discovered); canonical source: `skills/privacy-pools/SKILL.md`.
+- `.agents/skills/privacy-pools/SKILL.md` — repo-scoped Codex skill (official Codex discovery path); canonical source: `skills/privacy-pools/SKILL.md`.
 
 ## Key Domain Concepts
 
