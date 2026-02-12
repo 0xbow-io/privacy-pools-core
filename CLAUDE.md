@@ -1,8 +1,6 @@
 # Privacy Pools Claude Code Guide
 
-This file is a thin routing layer for Claude Code.
-
-Do not treat this file as the canonical protocol reference.
+Route all Privacy Pools tasks through the docs below. Do not treat this file as the canonical protocol reference.
 
 ## Canonical Docs
 
@@ -18,7 +16,6 @@ Do not treat this file as the canonical protocol reference.
 2. Read `docs/static/skills-core.md`.
 3. Read only the relevant section(s) in `docs/static/skills.md`.
 4. Pull addresses/startBlock from `docs/docs/deployments.md`.
-5. Execute with minimal assumptions and validate all on-chain/API invariants.
 
 ## Quick Task Router
 
