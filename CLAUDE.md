@@ -6,6 +6,7 @@ Do not treat this file as the canonical protocol reference.
 
 ## Canonical Docs
 
+- Integrator-friendly onboarding: `docs/docs/protocol/integrations.md`
 - Primary operational quickstart: `docs/static/skills-core.md`
 - Canonical deep reference (source of truth): `docs/static/skills.md`
 - Deployments and start blocks: `docs/docs/deployments.md`
@@ -13,10 +14,18 @@ Do not treat this file as the canonical protocol reference.
 
 ## Recommended Read Order
 
-1. Read `docs/static/skills-core.md`.
-2. Read only the relevant section(s) in `docs/static/skills.md`.
-3. Pull addresses/startBlock from `docs/docs/deployments.md`.
-4. Execute with minimal assumptions and validate all on-chain/API invariants.
+1. Read `docs/docs/protocol/integrations.md` for fast orientation.
+2. Read `docs/static/skills-core.md`.
+3. Read only the relevant section(s) in `docs/static/skills.md`.
+4. Pull addresses/startBlock from `docs/docs/deployments.md`.
+5. Execute with minimal assumptions and validate all on-chain/API invariants.
+
+## Quick Task Router
+
+- If the task is first-time protocol integration, start with `docs/docs/protocol/integrations.md`.
+- If the task needs exact SDK/API payloads or edge-case handling, use `docs/static/skills.md`.
+- If the task needs chain addresses/start blocks, use `docs/docs/deployments.md`.
+- If the task is about agent file behavior/discovery, use `docs/docs/agent-workflows.md`.
 
 ## Workflow Rules
 
