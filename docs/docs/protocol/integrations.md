@@ -32,6 +32,17 @@ This page covers the recommended production integration path for Privacy Pools, 
 5. Fall back to self-relay only when the relayer service is unavailable.
 6. Use ragequit as a last-resort exit when private withdrawal cannot proceed.
 
+## API Hosts
+
+| Service | Network scope | Base URL |
+|---|---|---|
+| ASP API | Mainnet chains (`1`, `42161`, `10`) | `https://api.0xbow.io` |
+| ASP API | Testnet chains (`11155111`, `11155420`) | `https://dw.0xbow.io` |
+| Relayer API | Production chains | `https://fastrelay.xyz` |
+| Relayer API | Sepolia testnets | `https://testnet-relayer.privacypools.com` |
+
+ASP API docs: `https://api.0xbow.io/api-docs`
+
 ## Critical API Endpoints
 
 | Endpoint | Purpose |
