@@ -27,7 +27,25 @@ Privacy Pools' architecture consists of three distinct layers:
 
 ```mermaid
 flowchart TD
-    subgraph A["Association Set Provider (ASP) Layer"]
+    subgraph C["Contract Layer"]
+        direction LR
+        E["Entrypoint (upgradeable)"]
+        PP["Privacy Pools (per asset)"]
+        S["Pool state"]
+        E --> PP
+        PP --> S
+    end
+
+    subgraph Z["Zero-Knowledge Layer"]
+        direction LR
+        CC["Commitment circuits"]
+        WC["Withdrawal circuits"]
+        V["On-chain verifiers"]
+        CC -.->|"proofs"| V
+        WC -.->|"proofs"| V
+    end
+
+    subgraph A["ASP Layer"]
         direction LR
         ASP["Association Set Provider"]
         SET["Approved labels"]
@@ -36,27 +54,14 @@ flowchart TD
         ASP --> POST
     end
 
-    subgraph Z["Zero-Knowledge Layer"]
-        direction LR
-        CC["Commitment circuits"]
-        WC["Withdrawal circuits"]
-        V["On-chain verifiers"]
-        CC -.-> V
-        WC -.-> V
-    end
-
-    subgraph C["Contract Layer"]
-        direction LR
-        E["Entrypoint (upgradeable)"]
-        PP["Privacy Pools (per asset)"]
-        S["Pool state"]
-        E -->|"deposit + relay routing"| PP
-        PP --> S
-    end
-
+    POST -->|"publish ASP root"| E
+    PP -->|"verify proofs"| V
     SET -.->|"membership inputs"| WC
-    POST -->|"publish latest ASP root"| E
-    PP -->|"verify withdrawal/ragequit proofs"| V
+    S -.->|"state proof inputs"| WC
+
+    %% Invisible layout constraints to keep layer order aligned with the list:
+    E ~~~ WC
+    WC ~~~ ASP
 ```
 
 1. **[Contract Layer](/layers/contracts)**
