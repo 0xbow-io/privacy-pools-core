@@ -32,7 +32,7 @@ contract IntegrationBase is IntegrationUtils {
   using InternalLeanIMT for LeanIMTData;
 
   /*///////////////////////////////////////////////////////////////
-                      STATE VARIABLES 
+                      STATE VARIABLES
   //////////////////////////////////////////////////////////////*/
 
   uint256 internal constant _FORK_BLOCK = 18_920_905;
@@ -150,7 +150,7 @@ contract IntegrationBase is IntegrationUtils {
   }
 
   /*///////////////////////////////////////////////////////////////
-                           DEPOSIT 
+                           DEPOSIT
   //////////////////////////////////////////////////////////////*/
 
   function _deposit(DepositParams memory _params) internal returns (Commitment memory _commitment) {
@@ -250,8 +250,7 @@ contract IntegrationBase is IntegrationUtils {
 
     // Build `Withdrawal` object for relayed withdrawal
     IPrivacyPool.Withdrawal memory _withdrawal = IPrivacyPool.Withdrawal({
-      processooor: address(_entrypoint),
-      data: abi.encode(_params.recipient, _RELAYER, _VETTING_FEE_BPS)
+      processooor: address(_entrypoint), data: abi.encode(_params.recipient, _RELAYER, _VETTING_FEE_BPS)
     });
 
     // Withdraw

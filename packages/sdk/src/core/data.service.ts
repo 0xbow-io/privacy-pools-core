@@ -24,7 +24,7 @@ const RAGEQUIT_EVENT = parseAbiItem('event Ragequit(address indexed _ragequitter
 /**
  * Service responsible for fetching and managing privacy pool events across multiple chains.
  * Handles event retrieval, parsing, and validation for deposits, withdrawals, and ragequits.
- * 
+ *
  * @remarks
  * This service uses viem's PublicClient to efficiently fetch and process blockchain events.
  * It supports multiple chains and provides robust error handling and validation.
@@ -36,7 +36,7 @@ export class DataService {
 
   /**
    * Initialize the data service with chain configurations
-   * 
+   *
    * @param chainConfigs - Array of chain configurations containing chainId, RPC URL, and API key
    * @throws {DataError} If client initialization fails for any chain
    */
@@ -50,7 +50,9 @@ export class DataService {
         }
 
         const client = createPublicClient({
-          transport: http(config.rpcUrl),
+          transport: http(config.rpcUrl, {
+            timeout: 20_000,
+          }),
         });
         this.clients.set(config.chainId, client);
       }
@@ -65,7 +67,7 @@ export class DataService {
 
   /**
    * Get deposit events for a specific chain
-   * 
+   *
    * @param chainId - Chain ID to fetch events from
    * @param options - Event filter options including fromBlock, toBlock, and other filters
    * @returns Array of deposit events with properly typed fields (bigint for numbers, Hash for commitments)
@@ -130,7 +132,7 @@ export class DataService {
 
   /**
    * Get withdrawal events for a specific chain
-   * 
+   *
    * @param chainId - Chain ID to fetch events from
    * @param options - Event filter options including fromBlock, toBlock, and other filters
    * @returns Array of withdrawal events with properly typed fields (bigint for numbers, Hash for commitments)
@@ -192,7 +194,7 @@ export class DataService {
 
   /**
    * Get ragequit events for a specific chain
-   * 
+   *
    * @param chainId - Chain ID to fetch events from
    * @param options - Event filter options including fromBlock, toBlock, and other filters
    * @returns Array of ragequit events with properly typed fields (bigint for numbers, Hash for commitments)
