@@ -28,11 +28,16 @@ describe('DataService with Sepolia', () => {
   };
 
   beforeAll(() => {
+    const apiKey = process.env.HYPERSYNC_API_KEY;
+    if (!apiKey) {
+      throw new Error('HYPERSYNC_API_KEY environment variable is not set. Please create a .env file with your API key.');
+    }
+
     const config: ChainConfig = {
       chainId: SEPOLIA_CHAIN_ID,
       privacyPoolAddress: POOL_ADDRESS,
       startBlock: START_BLOCK,
-      rpcUrl: 'https://sepolia.rpc.hypersync.xyz',
+      rpcUrl: `https://sepolia.rpc.hypersync.xyz/${apiKey}`,
     };
 
     dataService = new DataService([config]);
@@ -182,4 +187,4 @@ describe('DataService with Sepolia', () => {
       expect(event.blockNumber).toBeGreaterThanOrEqual(fromBlock);
     }
   });
-}); 
+});
