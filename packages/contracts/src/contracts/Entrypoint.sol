@@ -176,7 +176,7 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
   }
 
   /*///////////////////////////////////////////////////////////////
-                          POOL MANAGEMENT 
+                          POOL MANAGEMENT
   //////////////////////////////////////////////////////////////*/
 
   /// @inheritdoc IEntrypoint
@@ -272,7 +272,7 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
   }
 
   /*///////////////////////////////////////////////////////////////
-                           VIEW METHODS 
+                           VIEW METHODS
   //////////////////////////////////////////////////////////////*/
 
   /// @inheritdoc IEntrypoint
@@ -301,7 +301,7 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
   }
 
   /*///////////////////////////////////////////////////////////////
-                        INTERNAL METHODS 
+                        INTERNAL METHODS
   //////////////////////////////////////////////////////////////*/
 
   /// @inheritdoc UUPSUpgradeable
