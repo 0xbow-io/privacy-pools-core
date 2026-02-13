@@ -23,6 +23,24 @@ const config: Config = {
   onBrokenLinks: "throw",
   headTags: [
     {
+      tagName: "link",
+      attributes: {
+        rel: "icon",
+        href: "/img/favicon-light.svg",
+        type: "image/svg+xml",
+        media: "(prefers-color-scheme: light)",
+      },
+    },
+    {
+      tagName: "link",
+      attributes: {
+        rel: "icon",
+        href: "/img/favicon-dark.svg",
+        type: "image/svg+xml",
+        media: "(prefers-color-scheme: dark)",
+      },
+    },
+    {
       tagName: "meta",
       attributes: { property: "og:type", content: "website" },
     },
@@ -117,6 +135,12 @@ const config: Config = {
   themeConfig: {
     // Replace with your project's social card
     image: "img/privacy-pools-banner.png",
+    mermaid: {
+      theme: {
+        light: "neutral",
+        dark: "dark",
+      },
+    },
     sidebar: {
       autoCollapseCategories: false,
     },
@@ -125,6 +149,7 @@ const config: Config = {
       logo: {
         alt: "Privacy Pools Logo",
         src: "img/logo.svg",
+        srcDark: "img/logo-dark.svg",
       },
       items: [
         {
