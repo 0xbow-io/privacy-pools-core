@@ -15,9 +15,7 @@ export class BlockchainProvider implements IBlockchainProvider {
 
     this.client = createPublicClient({
       chain: mainnet,
-      transport: http(rpcUrl, {
-        timeout: 20_000,
-      }),
+      transport: http(rpcUrl),
     });
   }
 

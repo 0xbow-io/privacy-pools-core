@@ -55,17 +55,13 @@ export class ContractInteractionsService implements ContractInteractions {
 
     this.walletClient = createWalletClient({
       chain: chain,
-      transport: http(rpcUrl, {
-        timeout: 20_000,
-      }),
+      transport: http(rpcUrl),
       account: this.account,
     });
 
     this.publicClient = createPublicClient({
       chain: chain,
-      transport: http(rpcUrl, {
-        timeout: 20_000,
-      }),
+      transport: http(rpcUrl),
     });
 
     this.entrypointAddress = entrypointAddress;
