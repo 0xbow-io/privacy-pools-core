@@ -18,6 +18,7 @@ import {
 } from "../types/events.js";
 
 import { Logger } from "../utils/logger.js";
+import { batchWithConcurrency } from "../utils/concurrency.js";
 import { AccountError } from "../errors/account.error.js";
 import { ErrorCode } from "../errors/base.error.js";
 import { EventError } from "../errors/events.error.js";
@@ -561,38 +562,44 @@ export class AccountService {
   }
 
   /**
-   * Fetches events for a given set of pools
+   * Fetches events for a given set of pools with concurrency control
    *
    * @param pools - The pools to fetch events for
+   * @param maxConcurrency - Maximum number of concurrent pool fetches (default: 5)
    *
    * @returns A map of pool scopes to their events
    */
-  public async getEvents(pools: PoolInfo[]): Promise<PoolEventsResult> {
+  public async getEvents(
+    pools: PoolInfo[],
+    maxConcurrency: number = 5
+  ): Promise<PoolEventsResult> {
     const events: PoolEventsResult = new Map();
 
-    const poolEventResults = await Promise.allSettled(
-      pools.map(async (pool) => {
-        this.logger.info(`Fetching events for pool`, {
-          poolAddress: pool.address,
-          poolChainId: pool.chainId,
-          poolDeploymentBlock: pool.deploymentBlock,
-        });
+    // Create tasks for batched execution
+    const tasks = pools.map((pool) => async () => {
+      this.logger.info(`Fetching events for pool`, {
+        poolAddress: pool.address,
+        poolChainId: pool.chainId,
+        poolDeploymentBlock: pool.deploymentBlock,
+      });
 
-        const [depositEvents, withdrawalEvents, ragequitEvents] =
-          await Promise.all([
-            this.getDepositEvents(pool),
-            this.getWithdrawalEvents(pool),
-            this.getRagequitEvents(pool),
-          ]);
+      const [depositEvents, withdrawalEvents, ragequitEvents] =
+        await Promise.all([
+          this.getDepositEvents(pool),
+          this.getWithdrawalEvents(pool),
+          this.getRagequitEvents(pool),
+        ]);
 
-        return {
-          scope: pool.scope,
-          depositEvents,
-          withdrawalEvents,
-          ragequitEvents,
-        };
-      })
-    );
+      return {
+        scope: pool.scope,
+        depositEvents,
+        withdrawalEvents,
+        ragequitEvents,
+      };
+    });
+
+    // Execute with concurrency control
+    const poolEventResults = await batchWithConcurrency(tasks, maxConcurrency);
 
     for (const result of poolEventResults) {
       if (result.status === "fulfilled") {
@@ -783,10 +790,11 @@ export class AccountService {
    * @param dataService - The data service to use for fetching events
    * @param source - The source to use for initializing the account. Either a mnemonic or an existing account service instance
    * @param pools - The pools to fetch events for
+   * @param maxConcurrency - Maximum number of concurrent pool fetches (default: 5)
    *
    * @remarks
    * This method performs the following steps for each pool:
-   * 1. Fetches deposit, withdrawal, and ragequit events for each pool
+   * 1. Fetches deposit, withdrawal, and ragequit events for each pool (with concurrency control)
    * 2. Processes deposit events and creates pool accounts
    * 3. Processes withdrawal events and adds commitments to pool accounts
    * 4. Processes ragequit events and adds ragequit to pool accounts
@@ -807,7 +815,8 @@ export class AccountService {
       | {
         service: AccountService;
       },
-    pools: PoolInfo[]
+    pools: PoolInfo[],
+    maxConcurrency: number = 5
   ): Promise<{ account: AccountService; errors: PoolEventsError[] }> {
     // Log the start of the history retrieval process
     const logger = new Logger({ prefix: "Account" });
@@ -830,7 +839,7 @@ export class AccountService {
         : { account: source.service.account }
     );
 
-    const events = await account.getEvents(pools);
+    const events = await account.getEvents(pools, maxConcurrency);
 
     for (const [scope, result] of events.entries()) {
       if ("reason" in result) {
