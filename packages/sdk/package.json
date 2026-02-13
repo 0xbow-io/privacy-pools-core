@@ -1,6 +1,6 @@
 {
   "name": "@0xbow/privacy-pools-core-sdk",
-  "version": "0.0.0-b21c14bf",
+  "version": "1.0.4",
   "description": "Typescript SDK for the Privacy Pool protocol",
   "repository": "https://github.com/0xbow-io/privacy-pools-core",
   "license": "Apache-2.0",
