@@ -144,6 +144,7 @@ const config: Config = {
             { label: "llms-full.txt", href: "https://docs.privacypools.com/llms-full.txt" },
             { label: "skills-core.md", href: "https://docs.privacypools.com/skills-core.md" },
             { label: "skills.md", href: "https://docs.privacypools.com/skills.md" },
+            { label: "agent-workflows", to: "/agent-workflows" },
           ],
         },
       ],
