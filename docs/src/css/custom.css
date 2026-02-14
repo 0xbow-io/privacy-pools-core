@@ -54,6 +54,7 @@
   /* Border colors */
   --ifm-color-emphasis-300: #b8bbbf;
   --ifm-border-color: #000000;
+  --pp-footer-divider: rgba(0, 0, 0, 0.14);
 
 }
 
@@ -79,6 +80,7 @@
   /* Border colors */
   --ifm-color-emphasis-300: #4d4d4d;
   --ifm-border-color: #ffffff;
+  --pp-footer-divider: rgba(255, 255, 255, 0.12);
 
 }
 
@@ -244,7 +246,7 @@ code:not([class^="language-"]) {
 
 .footer {
   background: var(--ifm-background-color);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--pp-footer-divider);
   padding: 1.2rem 0 0.8rem;
   color: var(--ifm-font-color-base);
 }
