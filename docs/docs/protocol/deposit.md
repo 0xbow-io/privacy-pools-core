@@ -14,8 +14,9 @@ keywords:
 
 The deposit operation is the entry point into the Privacy Pools protocol. It allows users to publicly deposit assets (ETH or ERC20 tokens) into a pool, creating a private commitment that can later be used for [private withdrawals](/protocol/withdrawal) or public [ragequit](/protocol/ragequit) operations.
 
-> Integration note:
-> For production onboarding and required runtime checks, start with [Integrations](/protocol/integrations). For full end-to-end implementation guidance, see [skills.md](https://docs.privacypools.com/skills.md).
+:::info Integration
+For production workflow guidance, see [Integrations](/protocol/integrations) and [skills.md](https://docs.privacypools.com/skills.md).
+:::
 
 ## Protocol Flow
 
@@ -86,18 +87,18 @@ graph TD
 - User generates random `nullifier` and `secret` values
 - User computes `precommitment = hash(nullifier, secret)`
 
-1. **Deposit Transaction**
+2. **Deposit Transaction**
 
 - User calls Entrypoint's deposit function with asset, amount, and precommitment
 - For ETH: `deposit(precommitment)` with ETH value
 - For ERC20: `deposit(token, amount, precommitment)` after approval
 
-1. **Fee Processing**
+3. **Fee Processing**
 
 - Entrypoint calculates and retains vetting fee (configurable per pool)
 - Remaining amount is forwarded to pool
 
-1. **Commitment Generation**
+4. **Commitment Generation**
 
 - Pool generates unique `label` using scope and incremental nonce
 - Computes commitment hash using value, label, and precommitment

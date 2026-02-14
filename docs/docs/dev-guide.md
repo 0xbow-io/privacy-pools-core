@@ -42,7 +42,7 @@ git clone https://github.com/0xbow-io/privacy-pools-core.git
 cd privacy-pools-core
 ```
 
-1. Install dependencies:
+2. Install dependencies:
 
 ```bash
 yarn install

@@ -19,7 +19,7 @@ This page covers the recommended production integration path for Privacy Pools, 
 1. [Deployments](/deployments) — chain-specific addresses and `startBlock`
 2. [SDK Utilities](/reference/sdk) — SDK types and functions
 3. [Deposit](/protocol/deposit), [Withdrawal](/protocol/withdrawal), [Ragequit](/protocol/ragequit) — protocol behavior
-4. [skills.md](https://docs.privacypools.com/skills.md) — end-to-end code paths, API schemas, and edge cases
+4. [skills.md](https://docs.privacypools.com/skills.md) — single-document reference covering all endpoints, schemas, and edge cases
 
 ## Getting Started
 

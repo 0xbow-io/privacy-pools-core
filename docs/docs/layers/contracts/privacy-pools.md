@@ -120,12 +120,11 @@ Allows graceful shutdown:
 
 ### Security Features
 
-1. **Access Control**:
+1. **Access Control**
+   - `onlyEntrypoint` modifier for sensitive operations
+   - `validWithdrawal` modifier for proof validation
 
-- `onlyEntrypoint` modifier for sensitive operations
-- `validWithdrawal` modifier for proof validation
-
-1. **Withdrawal Validation**:
+2. **Withdrawal Validation**
 
 ```solidity
 modifier validWithdrawal(Withdrawal memory _withdrawal, ProofLib.WithdrawProof memory _proof) {
@@ -147,11 +146,10 @@ modifier validWithdrawal(Withdrawal memory _withdrawal, ProofLib.WithdrawProof m
 }
 ```
 
-1. **Proof Verification**:
-
-- Validates zero-knowledge proofs using Groth16 verifiers
-- Verifies nullifier hash uniqueness
-- Checks commitment existence
+3. **Proof Verification**
+   - Validates zero-knowledge proofs using Groth16 verifiers
+   - Verifies nullifier hash uniqueness
+   - Checks commitment existence
 
 ### Asset Handling
 

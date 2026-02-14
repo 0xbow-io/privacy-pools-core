@@ -55,14 +55,6 @@
   --ifm-color-emphasis-300: #b8bbbf;
   --ifm-border-color: #000000;
 
-  /* Mermaid palette (light) */
-  --pp-mermaid-cluster-fill: #f4f7fb;
-  --pp-mermaid-cluster-stroke: #b9c7df;
-  --pp-mermaid-node-fill: #ffffff;
-  --pp-mermaid-node-stroke: #8fa3c3;
-  --pp-mermaid-text: #1a2433;
-  --pp-mermaid-edge: #5f6f89;
-  --pp-mermaid-label-bg: #e9eef8;
 }
 
 /* For readability concerns, you should choose a lighter palette in dark mode. */
@@ -88,14 +80,6 @@
   --ifm-color-emphasis-300: #4d4d4d;
   --ifm-border-color: #ffffff;
 
-  /* Mermaid palette (dark) */
-  --pp-mermaid-cluster-fill: #2a3341;
-  --pp-mermaid-cluster-stroke: #667894;
-  --pp-mermaid-node-fill: #141a22;
-  --pp-mermaid-node-stroke: #93a4c2;
-  --pp-mermaid-text: #eef2f9;
-  --pp-mermaid-edge: #b6c0d4;
-  --pp-mermaid-label-bg: #3a4659;
 }
 
 html {
@@ -207,6 +191,21 @@ code:not([class^="language-"]) {
   font-size: 1.54rem; /* 27.7px for list items */
 }
 
+/* Keep list markers and body text clear of the sidebar divider. */
+.theme-doc-markdown {
+  padding-left: 0.6rem;
+}
+
+.theme-doc-markdown > ul,
+.theme-doc-markdown > ol {
+  padding-inline-start: 2.1rem;
+}
+
+.theme-doc-markdown li > ul,
+.theme-doc-markdown li > ol {
+  padding-inline-start: 1.8rem;
+}
+
 /* Mermaid labels use embedded HTML nodes; reset typography so global
    markdown paragraph sizing does not clip node/edge text. */
 .markdown .mermaid .nodeLabel p,
@@ -218,44 +217,6 @@ code:not([class^="language-"]) {
   font-size: 1.2rem !important;
   line-height: 1.2 !important;
   margin: 0 !important;
-}
-
-/* Mermaid visual tuning: subtle color accents while preserving contrast. */
-.markdown .mermaid .cluster rect {
-  fill: var(--pp-mermaid-cluster-fill) !important;
-  stroke: var(--pp-mermaid-cluster-stroke) !important;
-}
-
-.markdown .mermaid .node rect,
-.markdown .mermaid .node polygon,
-.markdown .mermaid .node circle,
-.markdown .mermaid .node ellipse {
-  fill: var(--pp-mermaid-node-fill) !important;
-  stroke: var(--pp-mermaid-node-stroke) !important;
-}
-
-.markdown .mermaid .nodeLabel,
-.markdown .mermaid .edgeLabel,
-.markdown .mermaid .cluster-label text,
-.markdown .mermaid .label text {
-  color: var(--pp-mermaid-text) !important;
-  fill: var(--pp-mermaid-text) !important;
-}
-
-.markdown .mermaid .edgePath .path,
-.markdown .mermaid .flowchart-link {
-  stroke: var(--pp-mermaid-edge) !important;
-}
-
-.markdown .mermaid .arrowheadPath,
-.markdown .mermaid marker path {
-  fill: var(--pp-mermaid-edge) !important;
-  stroke: var(--pp-mermaid-edge) !important;
-}
-
-.markdown .mermaid .edgeLabel rect {
-  fill: var(--pp-mermaid-label-bg) !important;
-  stroke: transparent !important;
 }
 
 /* Keep code blocks at a smaller size for readability */
@@ -405,4 +366,10 @@ code:not([class^="language-"]) {
 
 .theme-doc-breadcrumbs .breadcrumbsContainer_Z_bl {
   --ifm-breadcrumb-size-multiplier: 1.2;
+}
+
+@media (max-width: 996px) {
+  .theme-doc-markdown {
+    padding-left: 0;
+  }
 }

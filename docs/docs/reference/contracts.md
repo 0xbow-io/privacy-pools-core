@@ -11,9 +11,6 @@ keywords:
   - events
 ---
 
-
-For workflow-level integration guidance, start with [Integrations](/protocol/integrations). For contract behavior and sequencing, also see [Deposit](/protocol/deposit), [Withdrawal](/protocol/withdrawal), and [Ragequit](/protocol/ragequit).
-
 **`IPrivacyPool`**
 
 Core interface for privacy pools smart contracts that handle deposits and withdrawals.
