@@ -50,6 +50,7 @@
   "dependencies": {
     "@types/snarkjs": "0.7.9",
     "@zk-kit/lean-imt": "2.2.4",
+    "async": "3.2.6",
     "maci-crypto": "2.5.0",
     "snarkjs": "0.7.5",
     "typescript": "^5.7.3",
@@ -57,6 +58,7 @@
   },
   "devDependencies": {
     "@commitlint/config-conventional": "19.4.1",
+    "@types/async": "3.2.24",
     "@eslint/js": "9.18.0",
     "@ianvs/prettier-plugin-sort-imports": "4.3.1",
     "@rollup/plugin-alias": "5.1.1",
