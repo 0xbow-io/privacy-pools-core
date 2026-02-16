@@ -5,7 +5,9 @@ import { Hash } from '../../src/types/commitment.js';
 import { DataError } from '../../src/errors/data.error.js';
 import { PoolInfo } from '../../src/types/account.js';
 
-describe.skip('DataService with Sepolia', () => {
+const apiKey = process.env.HYPERSYNC_API_KEY;
+
+describe.skipIf(!apiKey)('DataService with Sepolia', () => {
   let dataService: DataService;
   const SEPOLIA_CHAIN_ID = 11155111;
   const POOL_ADDRESS = '0xbbe3b00d54f0ee032eff07a47139da8d44095c96';
@@ -32,7 +34,7 @@ describe.skip('DataService with Sepolia', () => {
       chainId: SEPOLIA_CHAIN_ID,
       privacyPoolAddress: POOL_ADDRESS,
       startBlock: START_BLOCK,
-      rpcUrl: process.env.TEST_RPC_URL!,  // Set some rpc
+      rpcUrl: `https://sepolia.rpc.hypersync.xyz/${apiKey!}`,
     };
 
     dataService = new DataService([config], { concurrency: 10 });
@@ -182,4 +184,4 @@ describe.skip('DataService with Sepolia', () => {
       expect(event.blockNumber).toBeGreaterThanOrEqual(fromBlock);
     }
   }, 0);
-}); 
+});
