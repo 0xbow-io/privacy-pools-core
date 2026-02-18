@@ -623,9 +623,12 @@ export class AccountService {
           ragequitEvents,
         });
       } else {
-        events.set(result.reason.details?.scope as Hash, {
+        const errorWithDetails = result.reason as Error & { details?: { scope?: Hash } };
+        const scope = errorWithDetails.details?.scope as Hash;
+
+        events.set(scope, {
           reason: result.reason.message,
-          scope: result.reason.details?.scope as Hash,
+          scope: scope,
         });
       }
     }
