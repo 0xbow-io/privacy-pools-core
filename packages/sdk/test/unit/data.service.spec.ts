@@ -37,7 +37,10 @@ describe.skipIf(!apiKey)('DataService with Sepolia', () => {
       rpcUrl: `https://sepolia.rpc.hypersync.xyz/${apiKey!}`,
     };
 
-    dataService = new DataService([config], { concurrency: 10 });
+    const logFetchConfig = new Map();
+    logFetchConfig.set(SEPOLIA_CHAIN_ID, { concurrency: 10 });
+
+    dataService = new DataService([config], logFetchConfig);
   });
 
   it('should throw error when chain is not configured', async () => {

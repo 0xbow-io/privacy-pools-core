@@ -52,6 +52,12 @@ export const DEFAULT_LOG_FETCH_CONFIG: LogFetchConfig = {
 };
 
 /**
+ * Per-chain log fetch configuration map
+ * Maps chainId to its specific LogFetchConfig
+ */
+export type ChainLogFetchConfig = Map<number, Partial<LogFetchConfig>>;
+
+/**
  * Block range for chunked fetching
  */
 export interface BlockRange {
