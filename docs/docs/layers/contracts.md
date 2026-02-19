@@ -1,26 +1,36 @@
 ---
 title: Smart Contracts Layer
+description: "Architecture of the smart contract layer, covering Entrypoint, asset-specific pools, verifiers, and protocol state responsibilities."
+keywords:
+  - privacy pools
+  - smart contracts
+  - entrypoint
+  - privacy pool
+  - verifiers
+  - solidity
+  - architecture
 ---
 
-### Contract architecture overview
+
+## Contract architecture overview
 
 The Privacy Pools protocol is built on three core contracts:
 
-1. **Entrypoint**
+1. **[Entrypoint](/layers/contracts/entrypoint)**
    - Central access point for deposits
    - Manages pool registry and ASP root updates
    - Handles fee collection and relay operations
    - Controls protocol-wide settings
-2. **Privacy Pools**
+2. **[Privacy Pools](/layers/contracts/privacy-pools)**
    - `PrivacyPoolSimple`: Handles native asset (ETH)
    - `PrivacyPoolComplex`: Handles ERC20 tokens
    - Both inherit from base `PrivacyPool` and `State` contracts
 3. **Verifiers**
-   - `CommitmentVerifier`: Validates ragequit proofs
-   - `WithdrawalVerifier`: Validates withdrawal proofs
+   - `CommitmentVerifier`: Validates [ragequit](/protocol/ragequit) proofs
+   - `WithdrawalVerifier`: Validates [withdrawal](/protocol/withdrawal) proofs
    - Both implement Groth16 verification
 
-### Component interaction
+## Component interaction
 
 - User operations flow through the Entrypoint:
   - Deposits route funds to appropriate pools
@@ -35,7 +45,7 @@ The Privacy Pools protocol is built on three core contracts:
   - Root updates via authorized postman
   - Label verification during withdrawals
 
-### State management basics
+## State management basics
 
 Each Privacy Pools maintains:
 

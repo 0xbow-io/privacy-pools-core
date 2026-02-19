@@ -1,12 +1,24 @@
 ---
 title: Developer Guide
+description: "Developer setup and integration guide covering prerequisites, monorepo structure, and implementation workflows."
+keywords:
+  - privacy pools
+  - developer guide
+  - setup
+  - monorepo
+  - foundry
+  - circom
+  - integration
 ---
+
+For production protocol integration, start with [Integrations](/protocol/integrations), then use [SDK Utilities](/reference/sdk) and [Deployments](/deployments).
+
 
 ## Prerequisites
 
 Before you begin, ensure you have the following installed:
 
-- Node.js (v18 or later)
+- Node.js (v20 or later)
 - Yarn (v1.22 or later)
 - Foundry (for smart contracts)
 - Docker (for running the relayer)
@@ -16,9 +28,9 @@ Before you begin, ensure you have the following installed:
 
 The project is organized as a monorepo with the following packages:
 
-- `contracts`: Solidity smart contracts
-- `circuits`: Zero-knowledge circuits in Circom
-- `sdk`: TypeScript SDK for interacting with the protocol
+- `contracts`: [Solidity smart contracts](/layers/contracts)
+- `circuits`: [Zero-knowledge circuits](/layers/zk) in Circom
+- `sdk`: [TypeScript SDK](/reference/sdk) for interacting with the protocol
 - `relayer`: Note relayer service
 
 ## Installation
@@ -26,11 +38,11 @@ The project is organized as a monorepo with the following packages:
 1. Clone the repository:
 
 ```bash
-git clone <https://github.com/0xbow-io/privacy-pools-core.git>
+git clone https://github.com/0xbow-io/privacy-pools-core.git
 cd privacy-pools-core
 ```
 
-1. Install dependencies:
+2. Install dependencies:
 
 ```bash
 yarn install
@@ -180,7 +192,7 @@ ENTRYPOINT_ADDRESS=
   "fee_receiver_address": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
   "provider_url": "http://0.0.0.0:8545", // Anvil port
   "fee_bps": "1000",
-  "signer_private_key": "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+  "signer_private_key": "<ANVIL_PRIVATE_KEY>",  // e.g. Anvil Account #0: 0xac0974bec...f2ff80 — NEVER use a real key here
   "sqlite_db_path": "/tmp/pp_relayer.sqlite",
   "entrypoint_address": "0xa513e6e4b8f2a923d98304ec87f64353c4d5c853",
   "chain": {

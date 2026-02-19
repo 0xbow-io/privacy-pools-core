@@ -1,6 +1,16 @@
 ---
 title: Circuit Architecture Overview
+description: "Overview of the Circom zero-knowledge layer, including commitment hashing, LeanIMT inclusion proofs, and withdrawal proof composition."
+keywords:
+  - privacy pools
+  - circom
+  - zero-knowledge
+  - commitment hasher
+  - leanimt
+  - withdrawal circuit
+  - proof system
 ---
+
 
 The Privacy Pools protocol uses three main Circom circuits:
 

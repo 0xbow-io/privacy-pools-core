@@ -1,6 +1,16 @@
 ---
 title: LeanIMT Circuit
+description: "LeanIMT circuit details for membership proofs, sibling path validation, and efficient incremental Merkle tree root computation."
+keywords:
+  - privacy pools
+  - leanimt
+  - merkle inclusion
+  - circom
+  - state tree
+  - siblings
+  - zk
 ---
+
 
 The merkle tree circuit (`merkleTree.circom`) implements efficient inclusion proofs:
 

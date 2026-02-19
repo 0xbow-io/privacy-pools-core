@@ -1,8 +1,15 @@
 ---
 title: Privacy Policy
+description: "Privacy Policy and Cookies Statement describing personal data processing practices for 0xbow properties."
+keywords:
+  - 0xbow
+  - privacy policy
+  - cookies
+  - personal data
+  - data protection
+  - legal
 ---
 
-# Privacy Policy and Cookies Statement
 
 This **Privacy Policy and Cookies Statement** ("**Policy**") describes how **0xbow Ltd**. and its affiliated companies (referred to in this document as "**0xbow**," "we," "us" or "our") collects, uses, shares and otherwise processes Personal Data (defined below) including:
 
@@ -56,7 +63,7 @@ We may also share aggregated or de-identified information, which cannot reasonab
 
 **Specific provisions for EU-residents:** This Section 6 applies to you, if you are from the European Union. 0xbow adopted the following provisions, to comply with the EU 2016/679 Directive General Data Protection Regulation ("GDPR"), pursuant to which 0xbow will be considered as a "Data Controller" with respect to our use of Personal Information of resident of the European Union.
 
-**Legal Basis**. We base our processing of any personal data as "Data Controllers" based on the following lawful grounds: 0xbow relies, primarily, on your consent to the terms of this Policy and the terms set forth under our [Terms of](https://www.dynamic.xyz/terms-conditions) Use, as a legal basis for processing:
+**Legal Basis**. We base our processing of any personal data as "Data Controllers" based on the following lawful grounds: 0xbow relies, primarily, on your consent to the terms of this Policy and the terms set forth under our [Terms of Use](/toc), as a legal basis for processing:
 
 any Personal Information related to you or communicating any other promotional material
 
