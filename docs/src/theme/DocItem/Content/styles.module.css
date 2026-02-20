@@ -1,0 +1,29 @@
+.headerRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.title {
+  margin: 0;
+}
+
+.actionsOnlyRow {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.85rem;
+}
+
+@media (max-width: 996px) {
+  .headerRow {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .actionsOnlyRow {
+    justify-content: flex-start;
+  }
+}
