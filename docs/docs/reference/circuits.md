@@ -1,5 +1,14 @@
 ---
 title: Circuits Interfaces
+description: "Circuit interface reference describing public and private inputs, outputs, and constraints for commitment and withdrawal proofs."
+keywords:
+  - privacy pools
+  - circuit interfaces
+  - circom
+  - public inputs
+  - private inputs
+  - outputs
+  - constraints
 ---
 
 **`CommitmentHasher`**

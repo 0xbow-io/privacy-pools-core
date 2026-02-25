@@ -1,0 +1,27 @@
+User-agent: *
+Allow: /
+
+# AI crawlers — explicitly allowed
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Bytespider
+Disallow: /
+
+# LLM-friendly documentation
+# llms.txt index: https://docs.privacypools.com/llms.txt
+# Full docs for LLMs: https://docs.privacypools.com/llms-full.txt
+
+Sitemap: https://docs.privacypools.com/sitemap.xml

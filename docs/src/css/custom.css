@@ -54,6 +54,8 @@
   /* Border colors */
   --ifm-color-emphasis-300: #b8bbbf;
   --ifm-border-color: #000000;
+  --pp-footer-divider: rgba(0, 0, 0, 0.14);
+
 }
 
 /* For readability concerns, you should choose a lighter palette in dark mode. */
@@ -78,6 +80,8 @@
   /* Border colors */
   --ifm-color-emphasis-300: #4d4d4d;
   --ifm-border-color: #ffffff;
+  --pp-footer-divider: rgba(255, 255, 255, 0.12);
+
 }
 
 html {
@@ -168,6 +172,14 @@ code:not([class^="language-"]) {
   border-color: var(--ifm-border-color);
 }
 
+.markdown table {
+  font-size: 1.28rem;
+}
+
+.markdown table th {
+  font-size: 1.28rem;
+}
+
 /* Add this new section for main content styling */
 .markdown {
   font-size: 2rem; /* 22.4px for main content */
@@ -179,6 +191,34 @@ code:not([class^="language-"]) {
 
 .markdown li {
   font-size: 1.54rem; /* 27.7px for list items */
+}
+
+/* Keep list markers and body text clear of the sidebar divider. */
+.theme-doc-markdown {
+  padding-left: 0.6rem;
+}
+
+.theme-doc-markdown > ul,
+.theme-doc-markdown > ol {
+  padding-inline-start: 2.1rem;
+}
+
+.theme-doc-markdown li > ul,
+.theme-doc-markdown li > ol {
+  padding-inline-start: 1.8rem;
+}
+
+/* Mermaid labels use embedded HTML nodes; reset typography so global
+   markdown paragraph sizing does not clip node/edge text. */
+.markdown .mermaid .nodeLabel p,
+.markdown .mermaid .edgeLabel p,
+.markdown .mermaid p,
+.markdown .mermaid .cluster-label text,
+.markdown .mermaid .edgeLabel text,
+.markdown .mermaid .label text {
+  font-size: 1.2rem !important;
+  line-height: 1.2 !important;
+  margin: 0 !important;
 }
 
 /* Keep code blocks at a smaller size for readability */
@@ -205,7 +245,113 @@ code:not([class^="language-"]) {
 }
 
 .footer {
-  background: #1a1a1a;
+  background: var(--ifm-background-color);
+  border-top: 1px solid var(--pp-footer-divider);
+  padding: 1.2rem 0 0.8rem;
+  color: var(--ifm-font-color-base);
+}
+
+/* Keep footer legible in both themes even when using footer.style = "dark". */
+.footer--dark {
+  --ifm-footer-background-color: var(--ifm-background-color);
+  --ifm-footer-color: var(--ifm-font-color-base);
+  --ifm-footer-link-color: var(--ifm-font-color-base);
+  --ifm-footer-title-color: var(--ifm-font-color-base);
+}
+
+.footer__container {
+  max-width: 840px;
+}
+
+.footer__links {
+  display: flex;
+  justify-content: center;
+  margin: 0 auto 0.7rem;
+}
+
+.footer__col {
+  flex: 0 0 auto;
+  width: auto;
+  max-width: 100%;
+  margin: 0;
+  text-align: center;
+}
+
+.footer__title {
+  margin: 0 0 0.55rem;
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.9;
+  color: var(--ifm-font-color-base);
+}
+
+.footer__items {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+}
+
+.footer__item {
+  margin: 0;
+  padding: 0;
+  line-height: 1.2;
+  display: inline-flex;
+  align-items: center;
+}
+
+.footer__item:not(:first-child)::before {
+  content: "|";
+  margin: 0 0.6rem 0 0.45rem;
+  font-size: 0.92rem;
+  opacity: 0.45;
+}
+
+.footer__link-item {
+  font-size: 1.08rem;
+  opacity: 0.92;
+  color: var(--ifm-font-color-base);
+}
+
+.footer__link-item:hover {
+  opacity: 1;
+  text-decoration: none;
+  color: var(--ifm-font-color-base);
+}
+
+/* Hide external-link glyphs in footer only to reduce visual clutter. */
+.footer .footer__link-item [class*="iconExternalLink"],
+.footer .footer__link-item svg[class*="iconExternalLink"],
+.footer .footer__link-item svg[aria-label="(opens in new tab)"] {
+  display: none !important;
+}
+
+.footer__copyright {
+  margin-top: 0.4rem;
+  font-size: 1.02rem;
+  opacity: 0.82;
+  color: var(--ifm-font-color-base);
+}
+
+@media (max-width: 996px) {
+  .footer {
+    padding: 1rem 0 0.7rem;
+  }
+
+  .footer__title {
+    font-size: 1rem;
+  }
+
+  .footer__item:not(:first-child)::before {
+    margin: 0 0.5rem 0 0.35rem;
+  }
+
+  .footer__link-item {
+    font-size: 1rem;
+  }
 }
 
 .table-of-contents {
@@ -222,4 +368,10 @@ code:not([class^="language-"]) {
 
 .theme-doc-breadcrumbs .breadcrumbsContainer_Z_bl {
   --ifm-breadcrumb-size-multiplier: 1.2;
+}
+
+@media (max-width: 996px) {
+  .theme-doc-markdown {
+    padding-left: 0;
+  }
 }

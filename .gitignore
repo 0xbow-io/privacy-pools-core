@@ -1,15 +1,21 @@
 # General
 yarn-error.log
 node_modules
-.DS_STORE
+*.tsbuildinfo
+.DS_Store
 .vscode
 .idea
 
 # Config files
 .env
+.env.*
+!.env.example
 
 # Avoid ignoring gitkeep
 !/**/.gitkeep
 
 # Cursor rules files
 .cursorrules*
+
+# Local AI/agent tooling and private planning notes
+.claude/
