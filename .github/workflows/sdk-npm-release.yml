@@ -1,0 +1,54 @@
+name: SDK / Release
+
+on: workflow_dispatch
+
+concurrency:
+  group: ${{github.workflow}}-${{github.ref}}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: packages/sdk
+
+jobs:
+  canary-release:
+    name: SDK Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out github repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: "yarn"
+          registry-url: "https://registry.npmjs.org/"
+
+      - name: Install dependencies
+        run: yarn --frozen-lockfile --network-concurrency 1
+
+      - name: Build SDK
+        run: |
+          yarn clean
+          yarn build
+          chmod +x ./scripts/copy_circuits.sh
+          bash ./scripts/copy_circuits.sh
+        working-directory: packages/sdk
+
+      - name: Get current version and set new version
+        run: |
+          CURRENT_VERSION=$(npm view @0xbow/privacy-pools-core-sdk | grep latest | cut -d' ' -f2)
+          IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
+          PATCH_VERSION=$((VERSION_PARTS[2] + 1))
+          NEW_VERSION="${VERSION_PARTS[0]}.${VERSION_PARTS[1]}.$PATCH_VERSION"
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+          yarn version --new-version $NEW_VERSION --no-git-tag-version
+
+      - name: Publish canary
+        run: npm publish --access public --tag latest
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

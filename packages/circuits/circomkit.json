@@ -1,0 +1,6 @@
+{
+  "version": "2.1.2",
+  "proofSystem": "groth16",
+  "curve": "bn128",
+  "include": "../../node_modules/"
+}

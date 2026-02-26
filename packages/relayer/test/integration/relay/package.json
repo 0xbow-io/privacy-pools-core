@@ -1,0 +1,22 @@
+{
+  "name": "api-test",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p ./tsconfig.json",
+    "tree-cache": "node ./dist/main.js tree --fromBlock $(echo $(cast bn) - 50 | bc) --output ./tree-cache",
+    "main": "node dist/main.js"
+  },
+  "dependencies": {
+    "minimist": "1.2.8",
+    "viem": "2.22.14"
+  },
+  "devDependencies": {
+    "@types/minimist": "1.2.5",
+    "@0xbow/privacy-pools-core-sdk": "0.1.21",
+    "@types/node": "^22.13.0",
+    "typescript": "5.5.4"
+  }
+}

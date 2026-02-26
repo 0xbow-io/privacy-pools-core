@@ -1,0 +1,31 @@
+services: 
+  relayer:
+    image: us-central1-docker.pkg.dev/oxbow-406621/privacy-pools-core/staging/relayer
+    serviceAccount: relayer-staging
+    command: node
+    args: ["dist/index.js"]
+    environment:
+      - name: CONFIG_PATH
+        value: /etc/secrets/config.json
+    resources:
+      cpu: 100m
+      memory: 2Gi
+
+    service:
+      type: ClusterIP
+      port: 80
+      protocol: TCP
+      targetPort: 3000
+
+    secretMounts:
+    - name: relayer-config-staging
+      mount: /etc/secrets/
+
+    ingress:
+      host: testnet-relayer.privacypools.com
+      paths:
+      - /
+      tls:
+        - secretName: privacypools-tls
+          hosts:
+            - testnet-relayer.privacypools.com

@@ -1,0 +1,81 @@
+{
+  "name": "@0xbow/privacy-pools-core-sdk",
+  "version": "0.1.1",
+  "description": "Typescript SDK for the Privacy Pool protocol",
+  "repository": "https://github.com/0xbow-io/privacy-pools-core",
+  "license": "Apache-2.0",
+  "author": "Wonderland",
+  "type": "module",
+  "main": "./dist/node/index.mjs",
+  "module": "./dist/esm/index.mjs",
+  "browser": "./dist/esm/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    "node": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/node/index.mjs"
+    },
+    "import": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/esm/index.mjs"
+    },
+    "browser": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/esm/index.mjs"
+    }
+  },
+  "directories": {
+    "src": "src"
+  },
+  "files": [
+    "dist/*",
+    "src",
+    "package.json",
+    "!**/*.tsbuildinfo"
+  ],
+  "scripts": {
+    "circuits:setup": "cd ../circuits/ && yarn install && yarn compile && yarn setup:all",
+    "circuits:copy": "sh ./scripts/copy_circuits.sh",
+    "build": "yarn clean && rollup -c ./configs/rollup.config.mjs",
+    "build:bundle": "yarn clean && rollup -c ./configs/rollup.config.mjs && yarn circuits:copy",
+    "check-types": "tsc --noEmit -p ./tsconfig.json",
+    "clean": "rm -rf dist .rollup.cache tsconfig.build.tsbuildinfo",
+    "format": "prettier --check \"{src,test}/**/*.{js,ts,json}\"",
+    "format:fix": "prettier --write \"{src,test}/**/*.{js,ts,json}\"",
+    "lint": "eslint \"{src,test}/**/*.{js,ts,json}\"",
+    "lint:fix": "eslint \"{src,test}/**/*.{js,ts,json}\" --fix",
+    "test": "vitest run --config vitest.config.ts --passWithNoTests",
+    "test:cov": "vitest run --config vitest.config.ts --coverage"
+  },
+  "dependencies": {
+    "@types/snarkjs": "0.7.9",
+    "@zk-kit/lean-imt": "2.2.4",
+    "maci-crypto": "2.5.0",
+    "snarkjs": "0.7.5",
+    "typescript": "^5.7.3",
+    "viem": "2.22.14"
+  },
+  "devDependencies": {
+    "@commitlint/config-conventional": "19.4.1",
+    "@eslint/js": "9.18.0",
+    "@ianvs/prettier-plugin-sort-imports": "4.3.1",
+    "@rollup/plugin-alias": "5.1.1",
+    "@rollup/plugin-commonjs": "28.0.2",
+    "@rollup/plugin-inject": "5.0.5",
+    "@rollup/plugin-json": "6.1.0",
+    "@rollup/plugin-node-resolve": "16.0.0",
+    "@rollup/plugin-typescript": "12.1.2",
+    "@rollup/plugin-wasm": "6.2.2",
+    "@types/node": "20.3.1",
+    "@types/snarkjs": "0.7.9",
+    "commitlint": "19.4.1",
+    "globals": "15.14.0",
+    "husky": "9.1.5",
+    "lint-staged": "15.2.10",
+    "memfs": "4.17.0",
+    "rollup": "4.30.1",
+    "rollup-plugin-dts": "6.1.1",
+    "snarkjs": "0.7.5",
+    "sort-package-json": "2.10.1"
+  }
+}

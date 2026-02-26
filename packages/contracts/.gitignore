@@ -1,0 +1,29 @@
+# General
+yarn-error.log
+node_modules
+.DS_STORE
+.vscode
+
+# Foundry files
+cache
+out-via-ir
+
+# Config files
+.env
+
+# Avoid ignoring gitkeep
+!/**/.gitkeep
+
+# Keep the latest deployment only
+broadcast/*/*/*
+
+# Out dir
+out
+crytic-export
+
+# Echidna corpus
+test/invariants/fuzz/echidna_coverage
+*/**/corpus
+
+# Coverage files
+lcov.info

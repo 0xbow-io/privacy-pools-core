@@ -1,0 +1,47 @@
+{
+  "name": "@privacy-pool-core/circuits",
+  "version": "0.1.0",
+  "description": "Circom circuits for the Privacy Pool protocol",
+  "repository": "https://github.com/defi-wonderland/privacy-pool-core",
+  "license": "Apache-2.0",
+  "author": "Wonderland",
+  "scripts": {
+    "compile": "npx ts-node ./src/index.ts",
+    "test": "npx mocha",
+    "test:merkle": "npx mocha --ignore tests/commitment.test.ts --ignore tests/withdrawal.test.ts",
+    "test:withdraw": "npx mocha --ignore tests/commitment.test.ts --ignore tests/lean-imt.test.ts",
+    "test:commitment": "npx mocha --ignore tests/withdrawal.test.ts --ignore tests/lean-imt.test.ts",
+    "circomspect": "circomspect -L ../../node_modules/circomlib/circuits/comparators.circom -L ../../node_modules/circomlib/circuits/mux1.circom -L ../../node_modules/circomlib/circuits/poseidon.circom ./circuits/*",
+    "info:withdraw": "npx circomkit info withdraw",
+    "info:commitment": "npx circomkit info commitment",
+    "setup:ptau": "npx circomkit ptau withdraw",
+    "setup:all": "yarn setup:ptau && yarn setup:withdraw && yarn setup:merkle && yarn setup:commitment",
+    "setup:withdraw": "npx circomkit setup withdraw ptau/powersOfTau28_hez_final_16.ptau",
+    "setup:commitment": "npx circomkit setup commitment ptau/powersOfTau28_hez_final_16.ptau",
+    "setup:merkle": "npx circomkit setup merkleTree ptau/powersOfTau28_hez_final_16.ptau",
+    "present": "sh ./scripts/present.sh",
+    "prove:withdraw": "npx circomkit prove withdraw default",
+    "prove:commitment": "npx circomkit prove commitment default",
+    "verify:withdraw": "npx circomkit verify withdraw default",
+    "verify:commitment": "npx circomkit verify commitment default",
+    "gencontract:withdraw": "npx snarkjs zkey export solidityverifier trusted-setup/final-keys/withdraw.zkey WithdrawalVerifier.sol",
+    "gencontract:commitment": "npx snarkjs zkey export solidityverifier trusted-setup/final-keys/commitment.zkey CommitmentVerifier.sol"
+  },
+  "dependencies": {
+    "@zk-kit/lean-imt": "2.2.2",
+    "chai": "5.1.2",
+    "circomkit": "0.3.2",
+    "circomlib": "2.0.5",
+    "maci-circuits": "2.5.0",
+    "maci-crypto": "2.5.0",
+    "snarkjs": "0.7.5",
+    "viem": "2.21.57"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.1",
+    "@types/node": "20.3.1",
+    "mocha": "^10.2.0",
+    "ts-node": "^10.9.1",
+    "typescript": "5.5.4"
+  }
+}

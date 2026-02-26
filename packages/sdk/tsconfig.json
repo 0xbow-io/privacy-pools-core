@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": ["**/*", ".*.js"],
+  "exclude": ["node_modules", "dist"],
+  "compilerOptions": {
+    /* Added DOM to be able perform some platform introspection runtime checks.
+    If more were needed we should consider multiple implementations or polyfills. */
+    "lib": ["es2022", "DOM"]
+  }
+}

@@ -1,0 +1,176 @@
+Entrypoint::constructor
+└── When deployed
+    └── It disables initializers
+
+Entrypoint::initialize
+├── Given valid owner and postman
+│   ├── It initializes upgradeable contracts
+│   ├── It initializes roles
+│   ├── It grants owner role
+│   └── It grants postman role
+└── When already initialized
+    └── It reverts with InvalidInitialization
+
+Entrypoint::updateRoot
+├── Given caller has postman role
+│   ├── Given valid root and ipfs hash
+│   │   ├── It adds new association set
+│   │   ├── It sets block timestamp
+│   │   ├── It returns correct index
+│   │   └── It emits RootUpdated event
+│   ├── When root is zero
+│   │   └── It reverts with EmptyRoot
+│   └── When ipfs CID is longer or shorter than expected
+│       └── It reverts with InvalidIPFSCIDLength
+└── When caller lacks postman role
+    └── It reverts with AccessControlUnauthorizedAccount
+
+Entrypoint::deposit (ETH)
+├── Given no reentrant call
+│   ├── Given pool exists
+│   │   ├── Given value meets minimum
+│   │   │   ├── It deducts correct fees
+│   │   │   ├── It forwards ETH to pool
+│   │   │   ├── It maintains contract balance
+│   │   │   └── It emits Deposited event
+│   │   ├── When value below minimum
+│   │   │   └── It reverts with MinimumDepositAmount
+│   │   └── When precommitment already used
+│   │       └── It reverts with PrecommitmentAlreadyUsed
+│   └── When pool not found
+│       └── It reverts with PoolNotFound
+└── When reentrant call
+    └── It reverts
+
+Entrypoint::deposit (ERC20)
+├── Given no reentrant call
+│   ├── Given pool exists
+│   │   ├── Given value meets minimum
+│   │   │   ├── It transfers tokens from sender
+│   │   │   ├── It deducts correct fees
+│   │   │   ├── It deposits to pool
+│   │   │   └── It emits Deposited event
+│   │   ├── When value below minimum
+│   │   │   └── It reverts with MinimumDepositAmount
+│   │   └── When precommitment already used
+│   │       └── It reverts with PrecommitmentAlreadyUsed
+│   └── When pool not found
+│       └── It reverts with PoolNotFound
+└── When reentrant call
+    └── It reverts
+
+Entrypoint::relay
+├── Given no reentrant call
+│   ├── Given pool exists
+│   │   ├── Given valid processooor
+│   │   │   ├── Given valid withdrawal and proof
+│   │   │   │   ├── Given withdrawal amount is not zero
+│   │   │   │   │   ├── Given relay fee within max limit
+│   │   │   │   │   │   ├── It processes withdrawal
+│   │   │   │   │   │   ├── It transfers correct amounts
+│   │   │   │   │   │   ├── It maintains pool balance
+│   │   │   │   │   │   └── It emits WithdrawalRelayed event
+│   │   │   │   │   └── When relay fee exceeds max limit
+│   │   │   │   │       └── It reverts with RelayFeeGreaterThanMax
+│   │   │   │   └── When withdrawal amount is zero
+│   │   │   │       └── It reverts with InvalidWithdrawalAmount
+│   │   │   └── When pool state is invalid
+│   │   │       └── It reverts with InvalidPoolState
+│   │   ├── When recipient is address zero
+│   │   │   └── It reverts with ZeroAddress
+│   │   ├── When fee recipient is address zero
+│   │   │   └── It reverts with ZeroAddress
+│   │   └── When invalid processooor
+│   │       └── It reverts with InvalidProcessooor
+│   └── When pool not found
+│       └── It reverts with PoolNotFound
+└── When reentrant call
+    └── It reverts
+
+Entrypoint::registerPool
+├── Given caller has owner role
+│   ├── Given pool not registered
+│   │   ├── It registers pool
+│   │   ├── It sets asset config
+│   │   ├── It approves pool for asset
+│   │   └── It emits PoolRegistered event
+│   ├── When asset pool exists
+│   │   └── It reverts with AssetPoolAlreadyRegistered
+│   ├── When scope pool exists
+│   │   └── It reverts with ScopePoolAlreadyRegistered
+│   ├── When pool is dead
+│   │   └── It reverts with PoolIsDead
+│   └── When pool's Entrypoint address mismatches
+│       └── It reverts with InvalidEntrypointForPool
+└── When caller lacks owner role
+    └── It reverts with AccessControlUnauthorizedAccount
+
+Entrypoint::removePool
+├── Given caller has owner role
+│   ├── Given pool exists
+│   │   ├── It sets allowance to zero
+│   │   ├── It removes scope mapping
+│   │   ├── It removes asset config
+│   │   └── It emits PoolRemoved event
+│   └── When pool not found
+│       └── It reverts with PoolNotFound
+└── When caller lacks owner role
+    └── It reverts with AccessControlUnauthorizedAccount
+
+Entrypoint::updatePoolConfiguration
+├── Given caller has owner role
+│   ├── Given valid pool and configuration
+│   │   ├── Given fee BPS less than 100%
+│   │   │   ├── It updates minimum deposit amount
+│   │   │   ├── It updates fee basis points
+│   │   │   └── It emits PoolConfigurationUpdated event
+│   │   └── When fee BPS is 100% or greater
+│   │       └── It reverts with InvalidFeeBPS
+│   └── When pool not found
+│       └── It reverts with PoolNotFound
+└── When caller lacks owner role
+    └── It reverts with AccessControlUnauthorizedAccount
+
+Entrypoint::windDownPool
+├── Given caller has owner role
+│   ├── Given pool exists
+│   │   ├── It calls pool windDown
+│   │   └── It emits PoolWindDown event
+│   └── When pool not found
+│       └── It reverts with PoolNotFound
+└── When caller lacks owner role
+    └── It reverts with AccessControlUnauthorizedAccount
+
+Entrypoint::withdrawFees
+├── Given caller has owner role
+│   ├── Given no reentrant call
+│   │   ├── Given asset is native asset
+│   │   │   ├── When balance exists
+│   │   │   │   ├── It transfers full balance
+│   │   │   │   └── It emits FeesWithdrawn event
+│   │   │   └── When transfer fails
+│   │   │       └── It reverts with NativeAssetTransferFailed
+│   │   └── Given asset is ERC20
+│   │       ├── When token balance exists
+│   │       │   ├── It transfers full balance
+│   │       │   └── It emits FeesWithdrawn event
+│   │       └── When token transfer fails
+│   │           └── It reverts
+│   └── When reentrant call
+│       └── It reverts
+├── When recipient is address zero
+│   └── It reverts with ZeroAddress
+└── When caller lacks owner role
+    └── It reverts with AccessControlUnauthorizedAccount
+
+Entrypoint::latestRoot
+├── Given association sets exist
+│   └── It returns most recent root
+└── When no association sets exist
+    └── It reverts with NoRootsAvailable
+
+Entrypoint::rootByIndex
+├── Given valid index
+│   └── It returns correct root
+└── When index invalid
+    └── It reverts with InvalidIndex

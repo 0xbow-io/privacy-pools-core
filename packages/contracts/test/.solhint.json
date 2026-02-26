@@ -1,0 +1,14 @@
+{
+  "rules": {
+    "compiler-version": "off",
+    "custom-errors": "off",
+    "max-states-count": "off",
+    "no-global-import": "off",
+    "no-unused-vars": "off",
+    "one-contract-per-file": "off",
+    "ordering": "off",
+    "private-vars-leading-underscore": "off",
+    "state-visibility": "off",
+    "style-guide-casing": "off"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "declarationMap": true,
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    /* Base Options: */
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "target": "es2022",
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "moduleDetection": "force",
+    "isolatedModules": true,
+    "verbatimModuleSyntax": false,
+    /* Strictness */
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "useUnknownInCatchVariables": true,
+    "forceConsistentCasingInFileNames": true,
+    "noImplicitOverride": true,
+    /* If transpiling with TypeScript: */
+    "module": "NodeNext",
+    "sourceMap": true,
+    /* If your code doesn't run in the DOM: */
+    "lib": ["es2022"]
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "test", "coverage"]
+}

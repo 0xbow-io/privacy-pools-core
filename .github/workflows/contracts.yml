@@ -1,0 +1,203 @@
+name: Contracts
+
+on:
+  pull_request:
+    paths:
+      - "packages/contracts/**"
+      - ".github/workflows/**"
+  push:
+    branches: [main, dev]
+
+concurrency:
+  group: ${{github.workflow}}-${{github.ref}}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: packages/contracts
+
+env:
+  ETHEREUM_MAINNET_RPC: ${{ secrets.ETHEREUM_MAINNET_RPC }}
+  ETHEREUM_SEPOLIA_RPC: ${{ secrets.ETHEREUM_SEPOLIA_RPC }}
+  GNOSIS_RPC: ${{ secrets.GNOSIS_RPC }}
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn --frozen-lockfile --network-concurrency 1
+
+      - name: Precompile
+        run: yarn build
+
+      - name: Run tests
+        shell: bash
+        run: yarn test:unit
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v0.3.0
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn --frozen-lockfile --network-concurrency 1
+
+      - name: Precompile
+        run: yarn build
+
+      - name: Run tests
+        run: yarn test:integration
+
+  lint:
+    name: Lint Commit Messages
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: wagoid/commitlint-github-action@v5
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn --frozen-lockfile --network-concurrency 1
+
+      - run: yarn lint:check
+
+  medusa-tests:
+    name: Medusa Test
+    runs-on: ubuntu-latest
+    container: ghcr.io/trailofbits/eth-security-toolbox/ci:nightly-20241223
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn --frozen-lockfile --network-concurrency 1
+
+      - name: Run Medusa
+        run: medusa fuzz --test-limit 200000
+
+  upload-coverage:
+    name: Upload Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly-99d3a4123eff947a0dbbfb7c3a27360db9e3a8c1
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn --frozen-lockfile --network-concurrency 1
+
+      - name: Run coverage
+        shell: bash
+        run: yarn coverage
+
+      - name: Update package lists
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lcov
+
+      - name: Setup LCOV
+        uses: hrishikesh-kadam/setup-lcov@v1
+
+      - name: Fix paths
+        run: |
+          sed -i "s|../../node_modules|$(realpath ../../node_modules)|g" lcov.info
+
+      - name: Filter directories
+        run: lcov --remove lcov.info 'test/*' 'script/*' --output-file lcovNew.info --rc lcov_branch_coverage=1 --rc derive_function_end_line=0 --ignore-errors unused
+
+      - name: Capture coverage output
+        id: new-coverage
+        uses: zgosalvez/github-actions-report-lcov@v4
+        with:
+          coverage-files: packages/contracts/lcovNew.info
+          working-directory: packages/contracts
+          base-path: ${{ github.workspace }}
+
+      - name: Retrieve previous coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage.info
+        continue-on-error: true
+
+      - name: Check if a previous coverage exists
+        run: |
+          if [ ! -f coverage.info ]; then
+            echo "Artifact not found. Initializing at 0"
+            echo "0" >> coverage.info
+          fi
+
+      - name: Compare previous coverage
+        run: |
+          old=$(cat coverage.info)
+          new=$(( ${{ steps.new-coverage.outputs.total-coverage }} + ${{ env.COVERAGE_SENSITIVITY_PERCENT }} ))
+          if [ "$new" -lt "$old" ]; then
+            echo "Coverage decreased from $old to $new"
+            exit 1
+          fi
+          mv lcovNew.info coverage.info
+
+      - name: Upload the new coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage.info
+          path: ./coverage.info

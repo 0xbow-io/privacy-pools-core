@@ -1,0 +1,15 @@
+# General
+yarn-error.log
+node_modules
+.DS_STORE
+.vscode
+.idea
+
+# Config files
+.env
+
+# Avoid ignoring gitkeep
+!/**/.gitkeep
+
+# Cursor rules files
+.cursorrules*

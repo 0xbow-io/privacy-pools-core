@@ -1,0 +1,18 @@
+PrivacyPoolSimple::constructor
+├── Given valid addresses
+│   ├── It sets asset address to native asset
+│   ├── It computes scope from chain id and asset
+│   └── It initializes base state contract
+└── When any address is zero
+    └── It reverts with ZeroAddress
+
+PrivacyPoolSimple::_pull
+├── Given msg.value is equal to _amount
+│   └── It does nothing
+└── When msg.value is not equal to _amount
+    └── It reverts with InsufficientValue
+
+PrivacyPoolSimple::_push
+├── It sends _amount of native asset to _recipient
+└── When the transfer fails
+    └── It reverts with FailedToSendNativeAsset

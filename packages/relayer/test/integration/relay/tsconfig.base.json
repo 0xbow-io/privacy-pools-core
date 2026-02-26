@@ -1,0 +1,26 @@
+/* Based on total-typescript no-dom app config */
+/* https://github.com/total-typescript/tsconfig */
+{
+  "compilerOptions": {
+    /* Base Options: */
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "target": "es2022",
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "moduleDetection": "force",
+    "isolatedModules": true,
+    "verbatimModuleSyntax": false,
+    /* Strictness */
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "useUnknownInCatchVariables": true,
+    "forceConsistentCasingInFileNames": true,
+    "noImplicitOverride": true,
+    /* If transpiling with TypeScript: */
+    "module": "NodeNext",
+    "sourceMap": true,
+    /* If your code doesn't run in the DOM: */
+    "lib": ["es2022"]
+  }
+}

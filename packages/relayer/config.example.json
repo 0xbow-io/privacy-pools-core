@@ -1,0 +1,66 @@
+{
+    "defaults": {
+        "fee_receiver_address": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+        "signer_private_key": "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+        "entrypoint_address": "0xa513e6e4b8f2a923d98304ec87f64353c4d5c853"
+    },
+    "chains": [
+        {
+            "chain_id": "31337",
+            "chain_name": "localhost",
+            "rpc_url": "http://0.0.0.0:8545",
+            "max_gas_price": "2392000000",
+            "native_currency": {
+                "name": "Ether",
+                "symbol": "ETH",
+                "decimals": 18
+            },
+            "supported_assets": [
+                {
+                    "asset_address": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
+                    "asset_name": "Test Token",
+                    "fee_bps": "1000",
+                    "min_withdraw_amount": "100"
+                }
+            ]
+        },
+        {
+            "chain_id": "11155111",
+            "chain_name": "sepolia",
+            "rpc_url": "https://sepolia.infura.io/v3/YOUR_INFURA_KEY",
+            "fee_receiver_address": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+            "signer_private_key": "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+            "entrypoint_address": "0xa513e6e4b8f2a923d98304ec87f64353c4d5c853",
+            "max_gas_price": "2392000000",
+            "native_currency": {
+                "name": "Sepolia Ether",
+                "symbol": "ETH",
+                "decimals": 18
+            },
+            "supported_assets": [
+                {
+                    "asset_address": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
+                    "asset_name": "Sepolia Test Token",
+                    "fee_bps": "500",
+                    "min_withdraw_amount": "1000"
+                },
+                {
+                    "asset_address": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
+                    "asset_name": "Another Test Token",
+                    "fee_bps": "750",
+                    "min_withdraw_amount": "2000"
+                }
+            ]
+        }
+    ],
+    "sqlite_db_path": "/tmp/pp_relayer.sqlite",
+    "cors_allow_all": true,
+    "allowed_domains": [
+        "https://testnet.privacypools.com",
+        "https://privacypools.com",
+        "https://prod-privacy-pool-ui.vercel.app",
+        "https://staging-privacy-pool-ui.vercel.app",
+        "https://dev-privacy-pool-ui.vercel.app",
+        "http://localhost:3000"
+    ]
+}

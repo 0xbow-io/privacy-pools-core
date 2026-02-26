@@ -1,0 +1,13 @@
+services:
+  relayer:
+    network_mode: host
+    user: 1000:1000
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    volumes:
+      - /tmp/pp_relayer.sqlite:/pp_relayer.sqlite
+      - ./config.example.json:/build/config.json
+      - ../circuits/artifacts:/build/node_modules/@0xbow/privacy-pools-core-sdk/dist/node/artifacts
+    ports:
+      - "3000:3000" # HOST:CONTAINER

@@ -1,0 +1,53 @@
+name: Circuits
+
+on:
+  pull_request:
+    paths:
+      - "packages/circuits/**"
+      - ".github/workflows/**"
+  push:
+    branches: [main, dev]
+
+concurrency:
+  group: ${{github.workflow}}-${{github.ref}}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: packages/circuits
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            build-essential \
+            libgmp-dev \
+            libsodium-dev \
+            nasm \
+            nlohmann-json3-dev
+
+      - name: Download Circom Binary v2.2.1
+        run: |
+          wget -qO /home/runner/work/circom https://github.com/iden3/circom/releases/download/v2.2.1/circom-linux-amd64
+          chmod +x /home/runner/work/circom
+          sudo mv /home/runner/work/circom /bin/circom
+
+      - name: Print Circom version
+        run: circom --version
+
+      - name: Install dependencies
+        run: yarn
+
+      - name: Compile circuits
+        run: yarn compile
+
+      - name: Run tests
+        run: yarn test

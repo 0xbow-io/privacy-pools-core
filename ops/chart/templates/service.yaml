@@ -1,0 +1,35 @@
+{{- $chart := include "chart" . }}
+{{- $name := include "name" . -}}
+
+{{- range $service, $val := .Values.services }}
+{{- $serviceName := printf "%s-%s" $name $service -}}
+{{- if and .service (not .disabled) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $serviceName }}
+  namespace: {{ $.Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $serviceName }}
+    app.kubernetes.io/component: {{ $service }}
+    helm.sh/chart: {{ $chart }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+    app.kubernetes.io/version: {{ $.Values.version | quote }}
+    {{- if .labels}}
+    {{- toYaml .labels | nindent 4 }}
+    {{- end }}
+spec:
+  type: {{ .service.type }}
+  ports:
+    - port: {{ .service.port }}
+      targetPort: {{ .service.targetPort }}
+      protocol: {{ .service.protocol }}
+      name: http
+  selector:
+    app.kubernetes.io/name: {{ $serviceName }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+---
+
+{{- end }}
+{{- end }}

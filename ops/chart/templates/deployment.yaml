@@ -1,0 +1,100 @@
+{{- $name := include "name" . -}}
+{{- $chart := include "chart" . -}}
+
+{{- range $service, $val := $.Values.services }}
+{{- if not .disabled }}
+{{- $serviceName := printf "%s-%s" $name $service -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $serviceName }}
+  namespace: {{ $.Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $serviceName }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+    app.kubernetes.io/version: {{ $.Values.version | quote }}
+    app.kubernetes.io/component: {{ $service }}
+    helm.sh/chart: {{ $chart }}
+    {{- if .labels}}
+{{ toYaml .labels | nindent 4 }}
+    {{- end }}
+spec:
+  replicas: {{ default 1 .replicas}}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $serviceName }}
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $serviceName }}
+        app.kubernetes.io/instance: {{ $.Release.Name }}
+        app.kubernetes.io/version: {{ $.Values.version | quote }}
+        app.kubernetes.io/component: {{ $service }}
+        helm.sh/chart: {{ $chart }}
+        {{- if .labels}}
+{{ toYaml .labels | indent 8 }}
+        {{- end }}
+    spec:
+    {{- if .serviceAccount}}
+      serviceAccountName: {{ .serviceAccount }}
+    {{- end }}
+      # securityContext:
+      #   runAsNonRoot: true
+      #   seccompProfile:
+      #     type: RuntimeDefault
+      containers:
+        - name: {{ $service }}
+          image: "{{ .image }}:{{ $.Values.version }}"
+          {{- if .command }}
+          command: [{{ .command }}]
+          {{- if .args }}
+          args: {{- range .args }}
+            - {{.}}
+            {{- end }}
+          {{- end }}
+          {{- end }}
+          # securityContext:
+          #   allowPrivilegeEscalation: false
+          #   runAsUser: 1001
+          #   runAsNonRoot: true
+          #   capabilities:
+          #     drop:
+          #       - ALL
+          env:
+            - name: NAME
+              value: {{ $service }}
+            - name: VERSION
+              value: {{ $.Values.version | quote }}
+            - name: VERBOSITY
+              value: {{ $.Values.verbosity }}
+            - name: PROJECT_ID
+              value: {{ $.Values.projectId }}
+{{- if $.Values.environment }}
+{{ toYaml $.Values.environment | indent 12 }}
+{{- end }}
+{{- if .environment }}
+{{ toYaml .environment | indent 12 }}
+{{- end }}
+
+          resources:
+            limits:
+              {{- toYaml .resources | nindent 14 }}
+            requests:
+              {{- toYaml .resources | nindent 14 }}
+          volumeMounts:
+            {{- range .secretMounts }}
+            - name: "{{ .name }}-volume"
+              mountPath: "{{ .mount }}"
+              readOnly: true
+            {{- end }}
+      volumes:
+      {{- range .secretMounts }}
+        - name: "{{ .name }}-volume"
+          secret:
+            secretName: "{{ .name }}"
+      {{- end }}
+---
+{{ end }}
+{{ end }}

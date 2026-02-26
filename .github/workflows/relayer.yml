@@ -1,0 +1,143 @@
+name: Relayer
+
+on:
+  pull_request:
+    paths:
+      - "packages/relayer/**"
+      - ".github/workflows/relayer.yml"
+  push:
+    branches: [main, dev]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{github.workflow}}-${{github.ref}}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: packages/relayer
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out github repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn --frozen-lockfile --network-concurrency 1
+
+      - name: Run Build
+        run: yarn build
+
+      - name: Check types
+        run: yarn check-types
+
+      - name: Run linting
+        run: yarn lint
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out github repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Run tests with coverage
+        run: yarn test:cov
+  push-staging:
+    if: github.ref == 'refs/heads/dev'
+    name: Push Image to Staging
+    runs-on: ubuntu-latest
+    permissions: 
+      id-token: write
+      contents: read
+    steps:
+      - name: Check out github repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Google Auth
+        id: auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          token_format: 'access_token'
+          workload_identity_provider: '${{ vars.WIF_PROVIDER_ID }}'
+          service_account: '${{ vars.SERVICE_ACCOUNT_EMAIL }}'
+      - name: Docker Auth
+        id: docker-auth
+        uses: 'docker/login-action@v3'
+        with:
+          username: 'oauth2accesstoken'
+          password: '${{ steps.auth.outputs.access_token }}'
+          registry: 'us-central1-docker.pkg.dev'
+      - name: Build, tag and push container
+        id: build-image
+        uses: docker/build-push-action@v5
+        with:
+          context: packages/relayer
+          file: packages/relayer/Dockerfile
+          push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: |
+            us-central1-docker.pkg.dev/${{ vars.GCP_PROJECT }}/privacy-pools-core/staging/relayer:${{ github.sha }}
+            us-central1-docker.pkg.dev/${{ vars.GCP_PROJECT }}/privacy-pools-core/staging/relayer:latest
+  deploy-staging:
+    if: github.ref == 'refs/heads/dev'
+    name: Deploy to Staging 
+    runs-on: ubuntu-latest
+    needs: [push-staging]
+    permissions: 
+      id-token: write
+      contents: read
+    steps:
+      - name: Check out github repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Set up Helm
+        uses: azure/setup-helm@v4.1.0
+        with:
+          version: v3.16.1
+      - name: Google Auth
+        id: auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          token_format: 'access_token'
+          workload_identity_provider: '${{ vars.WIF_PROVIDER_ID }}'
+          service_account: '${{ vars.SERVICE_ACCOUNT_EMAIL }}'
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+        with:
+          version: '>= 494.0.0'
+      - name: 'Install kubectl'
+        run: 'gcloud components install kubectl'
+      - name: 'Get cluster credentials'
+        run: 'gcloud container clusters get-credentials ${{ vars.CLUSTER_NAME }} --region ${{ vars.REGION }}'
+      - name: 'Deploy'
+        working-directory: ./
+        run: 'helm upgrade --install ${{ vars.SERVICE_NAME }}-relayer ./ops/chart --set version=${{ github.sha }} --values ./ops/chart/values.staging.yaml --values ./ops/chart/values.staging.relayer.yaml'
