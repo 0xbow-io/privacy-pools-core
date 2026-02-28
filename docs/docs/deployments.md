@@ -47,6 +47,7 @@ This section contains the addresses of deployed Privacy Pools contracts across v
 | frxUSD | PrivacyPoolComplex | `0xc6c769fac7aabeadd31a03fae5ca0ec5b4c50f84` | `0xcacd6fd266af91b8aed52accc382b4e165586e29` | `23090335` |
 | WOETH | PrivacyPoolComplex | `0x7d2959bcfb936a84531518e8391ddba844e03ebe` | `0xdcee70654261af21c44c093c300ed3bb97b78192` | `23239091` |
 | fxUSD | PrivacyPoolComplex | `0xd14f4b36e1d1d98c218db782c49149876042bc56` | `0x085780639cc2cacd35e474e71f4d000e2405d8f6` | `23988640` |
+| BOLD | PrivacyPoolComplex | `0xb4b5fd38fd4788071d7287e3cb52948e0d10b23e` | `0x6440f144b7e50d6a8439336510312d2f54beb01d` | `24433029` |
 
 ### Deployment Start Block
 
@@ -135,6 +136,8 @@ Use **`32854673n`** as `startBlock` when initializing `DataService` for OP Sepol
 | Asset | Contract Type | Pool Address | Asset Address | Deployment Block |
 |-------|---------------|-------------|---------------|-----------------|
 | ETH | PrivacyPoolSimple | `0x644d5a2554d36e27509254f32ccfebe8cd58861f` | `0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee` | `8461454` |
+| USDT | PrivacyPoolComplex | `0x6709277e170dee3e54101cdb73a450e392adff54` | `0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0` | `8587114` |
+| USDC | PrivacyPoolComplex | `0x0b062fe33c4f1592d8ea63f9a0177fca44374c0f` | `0x1c7d4b196cb0c7b01d743fbc6116a902379c7238` | `8587064` |
 
 ### Deployment Start Block
 
