@@ -158,7 +158,7 @@ export class DataService {
             depositor: depositor.toLowerCase(),
             commitment: commitment as Hash,
             label: label as Hash,
-            value: value || BigInt(0),
+            value: value ?? BigInt(0),
             precommitment: precommitment as Hash,
             blockNumber: BigInt(typedLog.blockNumber),
             transactionHash: typedLog.transactionHash,
@@ -253,7 +253,7 @@ export class DataService {
           } = typedLog.args;
 
           if (
-            !value ||
+            value === null ||
             !spentNullifier ||
             !newCommitment ||
             !typedLog.blockNumber ||
@@ -374,7 +374,7 @@ export class DataService {
             ragequitter: ragequitter.toLowerCase(),
             commitment: commitment as Hash,
             label: label as Hash,
-            value: value || BigInt(0),
+            value: value ?? BigInt(0),
             blockNumber: BigInt(typedLog.blockNumber),
             transactionHash: typedLog.transactionHash,
           };

@@ -6,7 +6,8 @@ export interface PoolAccount {
   label: Hash;
   deposit: AccountCommitment;
   children: AccountCommitment[];
-  ragequit?: RagequitEvent
+  ragequit?: RagequitEvent;
+  isMigrated?: boolean;
 }
 
 export interface AccountCommitment {
@@ -18,6 +19,7 @@ export interface AccountCommitment {
   blockNumber: bigint;
   timestamp?: bigint;
   txHash: Hex;
+  isMigration?: boolean
 }
 
 export interface PrivacyPoolAccount {

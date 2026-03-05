@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { DataService } from '../../src/core/data.service.js';
 import { ChainConfig, DepositEvent, WithdrawalEvent, RagequitEvent } from '../../src/types/events.js';
 import { Hash } from '../../src/types/commitment.js';
@@ -13,20 +13,18 @@ describe.skipIf(!apiKey)('DataService with Sepolia', () => {
   const POOL_ADDRESS = '0xbbe3b00d54f0ee032eff07a47139da8d44095c96';
   const START_BLOCK = 7781496n;
 
-  // Create a PoolInfo object for testing
   const poolInfo: PoolInfo = {
     chainId: SEPOLIA_CHAIN_ID,
     address: POOL_ADDRESS,
     deploymentBlock: START_BLOCK,
-    scope: 1n as Hash // Using a dummy value for scope
+    scope: 1n as Hash,
   };
 
-  // Create an invalid pool for error testing
   const invalidPoolInfo: PoolInfo = {
     chainId: 1234,
     address: '0x0000000000000000000000000000000000000000',
     deploymentBlock: 0n,
-    scope: 1n as Hash // Using a dummy value for scope
+    scope: 1n as Hash,
   };
 
   beforeAll(() => {
@@ -55,7 +53,6 @@ describe.skipIf(!apiKey)('DataService with Sepolia', () => {
     expect(deposits.length).toBeGreaterThan(0);
     expect(deposits[0]).toBeDefined();
 
-    // Verify the structure of a deposit event
     const deposit = deposits[0] as DepositEvent;
     expect(deposit).toEqual(
       expect.objectContaining({
@@ -69,7 +66,6 @@ describe.skipIf(!apiKey)('DataService with Sepolia', () => {
       })
     );
 
-    // Verify Hash type assertions and value ranges
     expect(typeof deposit.commitment).toBe('bigint');
     expect(deposit.commitment).toBeGreaterThan(0n);
     expect(typeof deposit.label).toBe('bigint');
@@ -111,7 +107,6 @@ describe.skipIf(!apiKey)('DataService with Sepolia', () => {
       })
     );
 
-    // Verify Hash type assertions and value ranges
     expect(typeof withdrawal.spentNullifier).toBe('bigint');
     expect(withdrawal.spentNullifier).toBeGreaterThan(0n);
     expect(typeof withdrawal.newCommitment).toBe('bigint');
