@@ -1,30 +1,43 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { DataService } from '../../src/core/data.service.js';
 import { ChainConfig, DepositEvent, WithdrawalEvent, RagequitEvent } from '../../src/types/events.js';
 import { Hash } from '../../src/types/commitment.js';
 import { DataError } from '../../src/errors/data.error.js';
 import { PoolInfo } from '../../src/types/account.js';
 
-describe('DataService with Sepolia', () => {
+// Hoist the mock so it's available inside vi.mock factory
+const { mockGetLogs } = vi.hoisted(() => ({
+  mockGetLogs: vi.fn(),
+}));
+
+vi.mock('viem', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('viem')>();
+  return {
+    ...actual,
+    createPublicClient: vi.fn(() => ({
+      getLogs: mockGetLogs,
+    })),
+  };
+});
+
+describe('DataService', () => {
   let dataService: DataService;
   const SEPOLIA_CHAIN_ID = 11155111;
   const POOL_ADDRESS = '0xbbe3b00d54f0ee032eff07a47139da8d44095c96';
   const START_BLOCK = 7781496n;
 
-  // Create a PoolInfo object for testing
   const poolInfo: PoolInfo = {
     chainId: SEPOLIA_CHAIN_ID,
     address: POOL_ADDRESS,
     deploymentBlock: START_BLOCK,
-    scope: 1n as Hash // Using a dummy value for scope
+    scope: 1n as Hash,
   };
 
-  // Create an invalid pool for error testing
   const invalidPoolInfo: PoolInfo = {
     chainId: 1234,
     address: '0x0000000000000000000000000000000000000000',
     deploymentBlock: 0n,
-    scope: 1n as Hash // Using a dummy value for scope
+    scope: 1n as Hash,
   };
 
   beforeAll(() => {
@@ -38,6 +51,10 @@ describe('DataService with Sepolia', () => {
     dataService = new DataService([config]);
   });
 
+  beforeEach(() => {
+    mockGetLogs.mockReset();
+  });
+
   it('should throw error when chain is not configured', async () => {
     await expect(dataService.getDeposits(invalidPoolInfo)).rejects.toThrow(DataError);
     await expect(dataService.getWithdrawals(invalidPoolInfo)).rejects.toThrow(DataError);
@@ -45,12 +62,36 @@ describe('DataService with Sepolia', () => {
   });
 
   it('should fetch deposit events', async () => {
+    mockGetLogs.mockResolvedValue([
+      {
+        args: {
+          _depositor: '0x1234567890abcdef1234567890abcdef12345678',
+          _commitment: 111222333n,
+          _label: 444555666n,
+          _value: 1000000000000000000n,
+          _merkleRoot: 777888999n,
+        },
+        blockNumber: START_BLOCK + 10n,
+        transactionHash: '0x' + 'ab'.repeat(32),
+      },
+      {
+        args: {
+          _depositor: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+          _commitment: 222333444n,
+          _label: 555666777n,
+          _value: 2000000000000000000n,
+          _merkleRoot: 888999111n,
+        },
+        blockNumber: START_BLOCK + 20n,
+        transactionHash: '0x' + 'cd'.repeat(32),
+      },
+    ]);
+
     const deposits = await dataService.getDeposits(poolInfo);
 
-    expect(deposits.length).toBeGreaterThan(0);
+    expect(deposits.length).toBe(2);
     expect(deposits[0]).toBeDefined();
 
-    // Verify the structure of a deposit event
     const deposit = deposits[0] as DepositEvent;
     expect(deposit).toEqual(
       expect.objectContaining({
@@ -64,7 +105,6 @@ describe('DataService with Sepolia', () => {
       })
     );
 
-    // Verify Hash type assertions and value ranges
     expect(typeof deposit.commitment).toBe('bigint');
     expect(deposit.commitment).toBeGreaterThan(0n);
     expect(typeof deposit.label).toBe('bigint');
@@ -74,27 +114,27 @@ describe('DataService with Sepolia', () => {
     expect(deposit.value).toBeGreaterThan(0n);
     expect(deposit.blockNumber).toBeGreaterThanOrEqual(START_BLOCK);
     expect(deposit.transactionHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
-
-    // Log some useful information
-    console.log(`Found ${deposits.length} deposits`);
-    console.log('Sample deposit:', {
-      blockNumber: deposit.blockNumber.toString(),
-      depositor: deposit.depositor,
-      commitment: deposit.commitment.toString(),
-      label: deposit.label.toString(),
-      value: deposit.value.toString(),
-      precommitment: deposit.precommitment.toString(),
-      transactionHash: deposit.transactionHash,
-    });
   });
 
   it('should fetch withdrawal events', async () => {
+    mockGetLogs.mockResolvedValue([
+      {
+        args: {
+          _processooor: '0x1234567890abcdef1234567890abcdef12345678',
+          _value: 500000000000000000n,
+          _spentNullifier: 111222333n,
+          _newCommitment: 444555666n,
+        },
+        blockNumber: START_BLOCK + 30n,
+        transactionHash: '0x' + 'ef'.repeat(32),
+      },
+    ]);
+
     const withdrawals = await dataService.getWithdrawals(poolInfo);
 
-    expect(withdrawals.length).toBeGreaterThan(0);
+    expect(withdrawals.length).toBe(1);
     expect(withdrawals[0]).toBeDefined();
 
-    // Verify the structure of a withdrawal event
     const withdrawal = withdrawals[0] as WithdrawalEvent;
     expect(withdrawal).toEqual(
       expect.objectContaining({
@@ -106,7 +146,6 @@ describe('DataService with Sepolia', () => {
       })
     );
 
-    // Verify Hash type assertions and value ranges
     expect(typeof withdrawal.spentNullifier).toBe('bigint');
     expect(withdrawal.spentNullifier).toBeGreaterThan(0n);
     expect(typeof withdrawal.newCommitment).toBe('bigint');
@@ -114,72 +153,113 @@ describe('DataService with Sepolia', () => {
     expect(withdrawal.withdrawn).toBeGreaterThan(0n);
     expect(withdrawal.blockNumber).toBeGreaterThanOrEqual(START_BLOCK);
     expect(withdrawal.transactionHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
-
-    // Log some useful information
-    console.log(`Found ${withdrawals.length} withdrawals`);
-    console.log('Sample withdrawal:', {
-      blockNumber: withdrawal.blockNumber.toString(),
-      withdrawn: withdrawal.withdrawn.toString(),
-      spentNullifier: withdrawal.spentNullifier.toString(),
-      newCommitment: withdrawal.newCommitment.toString(),
-      transactionHash: withdrawal.transactionHash,
-    });
   });
 
   it('should fetch ragequit events', async () => {
+    mockGetLogs.mockResolvedValue([
+      {
+        args: {
+          _ragequitter: '0x1234567890abcdef1234567890abcdef12345678',
+          _commitment: 111222333n,
+          _label: 444555666n,
+          _value: 1000000000000000000n,
+        },
+        blockNumber: START_BLOCK + 40n,
+        transactionHash: '0x' + '11'.repeat(32),
+      },
+    ]);
+
     const ragequits = await dataService.getRagequits(poolInfo);
 
-    // Ragequits might not exist, so we don't assert on length
-    if (ragequits.length > 0) {
-      expect(ragequits[0]).toBeDefined();
+    expect(ragequits.length).toBe(1);
+    expect(ragequits[0]).toBeDefined();
 
-      // Verify the structure of a ragequit event
-      const ragequit = ragequits[0] as RagequitEvent;
-      expect(ragequit).toEqual(
-        expect.objectContaining({
-          ragequitter: expect.stringMatching(/^0x[a-fA-F0-9]{40}$/),
-          commitment: expect.any(BigInt),
-          label: expect.any(BigInt),
-          value: expect.any(BigInt),
-          blockNumber: expect.any(BigInt),
-          transactionHash: expect.stringMatching(/^0x[a-fA-F0-9]{64}$/),
-        })
-      );
+    const ragequit = ragequits[0] as RagequitEvent;
+    expect(ragequit).toEqual(
+      expect.objectContaining({
+        ragequitter: expect.stringMatching(/^0x[a-fA-F0-9]{40}$/),
+        commitment: expect.any(BigInt),
+        label: expect.any(BigInt),
+        value: expect.any(BigInt),
+        blockNumber: expect.any(BigInt),
+        transactionHash: expect.stringMatching(/^0x[a-fA-F0-9]{64}$/),
+      })
+    );
 
-      // Verify Hash type assertions and value ranges
-      expect(typeof ragequit.commitment).toBe('bigint');
-      expect(ragequit.commitment).toBeGreaterThan(0n);
-      expect(typeof ragequit.label).toBe('bigint');
-      expect(ragequit.label).toBeGreaterThan(0n);
-      expect(ragequit.value).toBeGreaterThan(0n);
-      expect(ragequit.blockNumber).toBeGreaterThanOrEqual(START_BLOCK);
-      expect(ragequit.transactionHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+    expect(typeof ragequit.commitment).toBe('bigint');
+    expect(ragequit.commitment).toBeGreaterThan(0n);
+    expect(typeof ragequit.label).toBe('bigint');
+    expect(ragequit.label).toBeGreaterThan(0n);
+    expect(ragequit.value).toBeGreaterThan(0n);
+    expect(ragequit.blockNumber).toBeGreaterThanOrEqual(START_BLOCK);
+    expect(ragequit.transactionHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+  });
 
-      // Log some useful information
-      console.log(`Found ${ragequits.length} ragequits`);
-      console.log('Sample ragequit:', {
-        blockNumber: ragequit.blockNumber.toString(),
-        ragequitter: ragequit.ragequitter,
-        commitment: ragequit.commitment.toString(),
-        label: ragequit.label.toString(),
-        value: ragequit.value.toString(),
-        transactionHash: ragequit.transactionHash,
-      });
-    } else {
-      console.log('No ragequit events found');
-    }
+  it('handles empty ragequit response', async () => {
+    mockGetLogs.mockResolvedValue([]);
+
+    const ragequits = await dataService.getRagequits(poolInfo);
+    expect(ragequits.length).toBe(0);
   });
 
   it('should handle fromBlock parameter', async () => {
     const fromBlock = START_BLOCK + 500n;
 
-    // Test with custom fromBlock
-    const withdrawals = await dataService.getWithdrawals(poolInfo, fromBlock);
-    const ragequits = await dataService.getRagequits(poolInfo, fromBlock);
+    mockGetLogs.mockResolvedValue([
+      {
+        args: {
+          _processooor: '0x1234567890abcdef1234567890abcdef12345678',
+          _value: 500000000000000000n,
+          _spentNullifier: 111222333n,
+          _newCommitment: 444555666n,
+        },
+        blockNumber: fromBlock + 10n,
+        transactionHash: '0x' + 'aa'.repeat(32),
+      },
+    ]);
 
-    // Verify that all events are after the fromBlock
-    for (const event of [...withdrawals, ...ragequits]) {
+    const withdrawals = await dataService.getWithdrawals(poolInfo, fromBlock);
+
+    for (const event of withdrawals) {
       expect(event.blockNumber).toBeGreaterThanOrEqual(fromBlock);
     }
   });
-}); 
+
+  it('should throw DataError when getLogs fails for deposits', async () => {
+    mockGetLogs.mockRejectedValue(new Error('RPC timeout'));
+
+    await expect(dataService.getDeposits(poolInfo)).rejects.toThrow(DataError);
+  });
+
+  it('should throw DataError when getLogs fails for withdrawals', async () => {
+    mockGetLogs.mockRejectedValue(new Error('RPC timeout'));
+
+    await expect(dataService.getWithdrawals(poolInfo)).rejects.toThrow(DataError);
+  });
+
+  it('should throw DataError when getLogs fails for ragequits', async () => {
+    mockGetLogs.mockRejectedValue(new Error('RPC timeout'));
+
+    await expect(dataService.getRagequits(poolInfo)).rejects.toThrow(DataError);
+  });
+
+  it('should throw on deposit log with missing args', async () => {
+    mockGetLogs.mockResolvedValue([
+      { args: undefined, blockNumber: START_BLOCK + 1n, transactionHash: '0x' + 'ff'.repeat(32) },
+    ]);
+
+    await expect(dataService.getDeposits(poolInfo)).rejects.toThrow(DataError);
+  });
+
+  it('should throw on withdrawal log with missing required fields', async () => {
+    mockGetLogs.mockResolvedValue([
+      {
+        args: { _value: null, _spentNullifier: null, _newCommitment: null },
+        blockNumber: START_BLOCK + 1n,
+        transactionHash: '0x' + 'ff'.repeat(32),
+      },
+    ]);
+
+    await expect(dataService.getWithdrawals(poolInfo)).rejects.toThrow(DataError);
+  });
+});
