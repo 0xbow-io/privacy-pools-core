@@ -253,7 +253,8 @@ export class DataService {
           } = typedLog.args;
 
           if (
-            !value ||
+            value === undefined ||
+            value === null ||
             !spentNullifier ||
             !newCommitment ||
             !typedLog.blockNumber ||
