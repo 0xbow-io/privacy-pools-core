@@ -64,3 +64,4 @@ jobs:
         run: yarn test:cov
         env:
           RPC_API_KEY: ${{ secrets.RPC_API_KEY }}
+          HYPERSPACE_API_KEY: ${{ secrets.HYPERSPACE_API_KEY }}
