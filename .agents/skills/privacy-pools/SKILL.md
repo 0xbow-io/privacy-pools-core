@@ -34,6 +34,7 @@ If you are running inside the `privacy-pools-core` repository, local source file
 
 - `X-Pool-Scope` must be decimal bigint string.
 - `onchainMtRoot` must equal `Entrypoint.latestRoot()` exactly.
+- If you reconstruct from on-chain events, initialize `DataService` with the deployment `startBlock`; do not scan from `0n`.
 - `withdrawalAmount` must be `> 0` and `<= commitment value`.
 - Minimum deposit must be checked before deposit transaction.
 - Relayer quote TTL is short (~60 seconds), so quote and request must be near-contiguous.

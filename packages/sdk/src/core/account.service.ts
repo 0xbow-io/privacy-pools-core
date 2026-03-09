@@ -2,6 +2,7 @@ import { poseidon } from "maci-crypto/build/ts/hashing.js";
 import { Hash, Secret } from "../types/commitment.js";
 import { Hex, bytesToNumber } from "viem";
 import { mnemonicToAccount } from "viem/accounts";
+import { mapLimit } from "async";
 import { DataService } from "./data.service.js";
 import {
   AccountCommitment,
@@ -25,9 +26,11 @@ import { EventError } from "../errors/events.error.js";
 type AccountServiceConfig =
   | {
     mnemonic: string;
+    poolConcurrency?: number;
   }
   | {
     account: PrivacyPoolAccount;
+    poolConcurrency?: number;
   };
 
 /**
@@ -41,6 +44,7 @@ type AccountServiceConfig =
 export class AccountService {
   account: PrivacyPoolAccount;
   private readonly logger: Logger;
+  private readonly poolConcurrency: number;
 
   /**
    * Creates a new AccountService instance.
@@ -49,6 +53,7 @@ export class AccountService {
    * @param config - Configuration for the account service (either mnemonic or existing account)
    * @param config.mnemonic - Optional mnemonic for deterministic key generation
    * @param config.account - Optional existing account to initialize with
+   * @param config.poolConcurrency - Optional maximum number of pools to fetch events for concurrently (default: 2)
    *
    * @throws {AccountError} If account initialization fails
    */
@@ -57,6 +62,7 @@ export class AccountService {
     config: AccountServiceConfig
   ) {
     this.logger = new Logger({ prefix: "Account" });
+    this.poolConcurrency = config.poolConcurrency ?? 2;
     if ("mnemonic" in config) {
       this.account = this._initializeAccount(config.mnemonic);
     } else {
@@ -570,28 +576,41 @@ export class AccountService {
   public async getEvents(pools: PoolInfo[]): Promise<PoolEventsResult> {
     const events: PoolEventsResult = new Map();
 
-    const poolEventResults = await Promise.allSettled(
-      pools.map(async (pool) => {
-        this.logger.info(`Fetching events for pool`, {
-          poolAddress: pool.address,
-          poolChainId: pool.chainId,
-          poolDeploymentBlock: pool.deploymentBlock,
-        });
+    // Use mapLimit to control concurrency at pool level
+    const poolEventResults = await mapLimit(
+      pools,
+      this.poolConcurrency,
+      async (pool: PoolInfo) => {
+        try {
+          this.logger.info(`Fetching events for pool`, {
+            poolAddress: pool.address,
+            poolChainId: pool.chainId,
+            poolDeploymentBlock: pool.deploymentBlock,
+          });
 
-        const [depositEvents, withdrawalEvents, ragequitEvents] =
-          await Promise.all([
-            this.getDepositEvents(pool),
-            this.getWithdrawalEvents(pool),
-            this.getRagequitEvents(pool),
-          ]);
+          const [depositEvents, withdrawalEvents, ragequitEvents] =
+            await Promise.all([
+              this.getDepositEvents(pool),
+              this.getWithdrawalEvents(pool),
+              this.getRagequitEvents(pool),
+            ]);
 
-        return {
-          scope: pool.scope,
-          depositEvents,
-          withdrawalEvents,
-          ragequitEvents,
-        };
-      })
+          return {
+            status: "fulfilled" as const,
+            value: {
+              scope: pool.scope,
+              depositEvents,
+              withdrawalEvents,
+              ragequitEvents,
+            },
+          };
+        } catch (error) {
+          return {
+            status: "rejected" as const,
+            reason: error as Error,
+          };
+        }
+      }
     );
 
     for (const result of poolEventResults) {
@@ -604,9 +623,12 @@ export class AccountService {
           ragequitEvents,
         });
       } else {
-        events.set(result.reason.details?.scope as Hash, {
+        const errorWithDetails = result.reason as Error & { details?: { scope?: Hash } };
+        const scope = errorWithDetails.details?.scope as Hash;
+
+        events.set(scope, {
           reason: result.reason.message,
-          scope: result.reason.details?.scope as Hash,
+          scope: scope,
         });
       }
     }

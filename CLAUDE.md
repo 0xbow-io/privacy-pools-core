@@ -29,6 +29,7 @@ Route all Privacy Pools tasks through the docs below. Do not treat this file as 
 - Prefer relayed withdrawals via `fastrelay.xyz` for production flows.
 - Treat self-relay as advanced fallback.
 - Always verify ASP root parity before withdrawal proof submission.
+- For `DataService` event scans, always use the deployment `startBlock` from `docs/docs/deployments.md`; do not scan from genesis.
 - Always use decimal `X-Pool-Scope` header values.
 - Never modify files under `audit/`.
 

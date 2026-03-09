@@ -76,3 +76,4 @@ cd docs && yarn build
 - LLM artifacts (`llms.txt`, `llms-full.txt`, markdown exports) are generated at build.
 - Keep `title`, `description`, and `keywords` frontmatter on all docs pages.
 - Agent workflow overview page: `docs/docs/agent-workflows.md`.
+- Use deployment `startBlock` values for `DataService` event scans; the SDK now fetches logs in chunked, rate-limited ranges, but agents should still avoid `0n` scans.

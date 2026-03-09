@@ -74,6 +74,19 @@ const contracts = sdk.createContractInstance(rpcUrl, mainnet, entrypointAddress,
 // This avoids needing ContractInteractionsService for read-only workflows.
 ```
 
+`DataService` now fetches logs in chunked, rate-limited ranges by default. Always initialize it with the deployment `startBlock` for the chain you are scanning. If your RPC provider is strict, you can override per-chain log fetch settings (chunk size, concurrency, delay, retries) with the optional second constructor argument:
+
+```typescript
+const logFetchConfig = new Map([
+  [chainId, { blockChunkSize: 5000, concurrency: 2, chunkDelayMs: 200 }],
+]);
+
+const dataService = new DataService(
+  [{ chainId, rpcUrl, privacyPoolAddress, startBlock }],
+  logFetchConfig
+);
+```
+
 ### Deposit
 
 ```typescript
@@ -251,7 +264,8 @@ if (stateMerkleProof.root !== onChainRoot) {
 
 ```typescript
 // Use the deployment start block for the chain (see Supported Networks table above).
-// Using 0n would scan from genesis and be extremely slow.
+// DataService fetches logs in chunked, rate-limited ranges by default, but using 0n
+// would still scan from genesis and be unnecessarily slow.
 const startBlock = 22153709n; // mainnet — see Supported Networks table for other chains
 const dataService = new DataService([{ chainId, rpcUrl, privacyPoolAddress, startBlock }]);
 const pool: PoolInfo = { chainId, address: privacyPoolAddress, scope, deploymentBlock: startBlock };
@@ -263,6 +277,8 @@ const withdrawals = await dataService.getWithdrawals(pool);
 // getWithdrawals and getRagequits accept an optional fromBlock parameter for incremental fetching:
 //   const newWithdrawals = await dataService.getWithdrawals(pool, lastProcessedBlock + 1n);
 //   const newRagequits = await dataService.getRagequits(pool, lastProcessedBlock + 1n);
+// If your RPC provider is strict, pass a second constructor arg with per-chain log fetch
+// overrides (blockChunkSize, concurrency, chunkDelayMs, retryOnFailure, maxRetries).
 
 // Merge leaves in on-chain insertion order (by block number).
 // Both arrays are already in log order from getLogs. Use a stable merge so that

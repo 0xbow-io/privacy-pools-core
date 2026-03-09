@@ -24,6 +24,7 @@ This guide covers production-critical workflows:
 - `X-Pool-Scope` header must be a decimal bigint string (`scope.toString()`), not hex.
 - Use `onchainMtRoot` from ASP `mt-roots` as proof `aspRoot`.
 - Require exact equality: `BigInt(onchainMtRoot) === Entrypoint.latestRoot()`.
+- If you reconstruct state from events, initialize `DataService` with the deployment `startBlock`; never scan from `0n`.
 - Validate `withdrawalAmount > 0n && withdrawalAmount <= committedValue` before proof generation.
 - Validate `amount >= minimumDepositAmount` before any deposit.
 - `feeCommitment` from relayer quote expires in ~60 seconds; quote -> request must complete inside this window.
@@ -136,6 +137,7 @@ Before any withdrawal attempt:
 
 - verify target commitment exists in current state leaves
 - verify label exists in current ASP leaves
+- if using `DataService` fallback, keep scans bounded to the deployment `startBlock`
 - prefer `stateMerkleProof.root === currentRoot()` before submit for deterministic execution (the protocol accepts recent historical roots, but current-root parity is the safest default)
 - verify ASP root parity (`onchainMtRoot == latestRoot()`)
 

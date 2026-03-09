@@ -5,7 +5,9 @@ import { Hash } from '../../src/types/commitment.js';
 import { DataError } from '../../src/errors/data.error.js';
 import { PoolInfo } from '../../src/types/account.js';
 
-describe('DataService with Sepolia', () => {
+const apiKey = process.env.HYPERSYNC_API_KEY;
+
+describe.skipIf(!apiKey)('DataService with Sepolia', () => {
   let dataService: DataService;
   const SEPOLIA_CHAIN_ID = 11155111;
   // This test intentionally targets a Sepolia pool with rich historical activity so
@@ -35,10 +37,13 @@ describe('DataService with Sepolia', () => {
       chainId: SEPOLIA_CHAIN_ID,
       privacyPoolAddress: POOL_ADDRESS,
       startBlock: START_BLOCK,
-      rpcUrl: 'https://sepolia.rpc.hypersync.xyz',
+      rpcUrl: `https://sepolia.rpc.hypersync.xyz/${apiKey!}`,
     };
 
-    dataService = new DataService([config]);
+    const logFetchConfig = new Map();
+    logFetchConfig.set(SEPOLIA_CHAIN_ID, { concurrency: 10 });
+
+    dataService = new DataService([config], logFetchConfig);
   });
 
   it('should throw error when chain is not configured', async () => {
@@ -89,7 +94,7 @@ describe('DataService with Sepolia', () => {
       precommitment: deposit.precommitment.toString(),
       transactionHash: deposit.transactionHash,
     });
-  });
+  }, 0);
 
   it('should fetch withdrawal events', async () => {
     const withdrawals = await dataService.getWithdrawals(poolInfo);
@@ -127,7 +132,7 @@ describe('DataService with Sepolia', () => {
       newCommitment: withdrawal.newCommitment.toString(),
       transactionHash: withdrawal.transactionHash,
     });
-  });
+  }, 0);
 
   it('should fetch ragequit events', async () => {
     const ragequits = await dataService.getRagequits(poolInfo);
@@ -171,7 +176,7 @@ describe('DataService with Sepolia', () => {
     } else {
       console.log('No ragequit events found');
     }
-  });
+  }, 0);
 
   it('should handle fromBlock parameter', async () => {
     const fromBlock = START_BLOCK + 500n;
@@ -184,5 +189,5 @@ describe('DataService with Sepolia', () => {
     for (const event of [...withdrawals, ...ragequits]) {
       expect(event.blockNumber).toBeGreaterThanOrEqual(fromBlock);
     }
-  });
-}); 
+  }, 0);
+});

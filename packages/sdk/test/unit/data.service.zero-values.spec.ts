@@ -26,11 +26,17 @@ const POOL: PoolInfo = {
 
 describe("DataService zero-value handling", () => {
   let dataService: DataService;
-  let mockClient: { getLogs: ReturnType<typeof vi.fn> };
+  let mockClient: {
+    getLogs: ReturnType<typeof vi.fn>;
+    getBlockNumber: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     dataService = new DataService([CONFIG]);
-    mockClient = { getLogs: vi.fn() };
+    mockClient = {
+      getLogs: vi.fn(),
+      getBlockNumber: vi.fn().mockResolvedValue(12n),
+    };
     (dataService as any).clients.set(CHAIN_ID, mockClient);
   });
 
