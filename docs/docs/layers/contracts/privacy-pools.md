@@ -1,6 +1,16 @@
 ---
 title: Privacy Pools
+description: "Technical reference for PrivacyPool contracts handling deposits, withdrawals, commitments, nullifiers, and proof validation for ETH and ERC20 pools."
+keywords:
+  - privacy pools
+  - privacypool
+  - commitments
+  - nullifiers
+  - withdrawal
+  - deposit
+  - solidity
 ---
+
 
 The PrivacyPool contract is an abstract contract that implements core privacy pools functionality for both native ETH and ERC20 tokens. It:
 
@@ -19,7 +29,7 @@ Inherits key state variables from the State contract:
 
 ```solidity
 string public constant VERSION = '0.1.0';
-uint32 public constant ROOT_HISTORY_SIZE = 30;
+uint32 public constant ROOT_HISTORY_SIZE = 64;
 IEntrypoint public immutable ENTRYPOINT;
 IVerifier public immutable WITHDRAWAL_VERIFIER;
 IVerifier public immutable RAGEQUIT_VERIFIER;
@@ -41,8 +51,7 @@ address public immutable ASSET;
 ```solidity
 struct Withdrawal {
     address processooor;  // Allowed address to process withdrawal
-    uint256 scope;        // Unique pool identifier
-    bytes data;          // Encoded arbitrary data used by Entrypoint
+    bytes data;           // Encoded arbitrary data used by Entrypoint
 }
 ```
 
@@ -60,12 +69,12 @@ function deposit(
 
 The deposit flow:
 
-1. Validates pool is active
-2. Computes unique label from scope and nonce
-3. Records deposit details and ragequit cooldown
-4. Computes and stores commitment hash
-5. Updates merkle tree state
-6. Pulls funds from depositor
+1. Validates pool is active and deposit value is within bounds
+2. Computes unique label from scope and nonce (`keccak256(scope, nonce) % SNARK_SCALAR_FIELD`)
+3. Records depositor address (for ragequit authorization)
+4. Computes commitment hash (`Poseidon(value, label, precommitment)`)
+5. Inserts commitment into the Merkle tree
+6. Pulls funds from the Entrypoint
 
 ### 2. Withdrawal Processing
 
@@ -111,22 +120,24 @@ Allows graceful shutdown:
 
 ### Security Features
 
-1. **Access Control**:
+1. **Access Control**
+   - `onlyEntrypoint` modifier for sensitive operations
+   - `validWithdrawal` modifier for proof validation
 
-- `onlyEntrypoint` modifier for sensitive operations
-- `validWithdrawal` modifier for proof validation
-
-1. **Withdrawal Validation**:
+2. **Withdrawal Validation**
 
 ```solidity
 modifier validWithdrawal(Withdrawal memory _withdrawal, ProofLib.WithdrawProof memory _proof) {
-    // Check caller is allowed processor
-    if (msg.sender != _withdrawal.processooor) revert InvalidProcesooor();
+    // Check caller is the allowed processooor
+    if (msg.sender != _withdrawal.processooor) revert InvalidProcessooor();
 
     // Verify context integrity
-    if (_proof.context() != uint256(keccak256(abi.encode(_withdrawal, SCOPE)))) {
+    if (_proof.context() != uint256(keccak256(abi.encode(_withdrawal, SCOPE))) % SNARK_SCALAR_FIELD) {
         revert ContextMismatch();
     }
+
+    // Check tree depths are within bounds
+    if (_proof.stateTreeDepth() > MAX_TREE_DEPTH || _proof.ASPTreeDepth() > MAX_TREE_DEPTH) revert InvalidTreeDepth();
 
     // Validate roots
     if (!_isKnownRoot(_proof.stateRoot())) revert UnknownStateRoot();
@@ -135,11 +146,10 @@ modifier validWithdrawal(Withdrawal memory _withdrawal, ProofLib.WithdrawProof m
 }
 ```
 
-1. **Proof Verification**:
-
-- Validates zero-knowledge proofs using Groth16 verifiers
-- Verifies nullifier hash uniqueness
-- Checks commitment existence
+3. **Proof Verification**
+   - Validates zero-knowledge proofs using Groth16 verifiers
+   - Verifies nullifier hash uniqueness
+   - Checks commitment existence
 
 ### Asset Handling
 

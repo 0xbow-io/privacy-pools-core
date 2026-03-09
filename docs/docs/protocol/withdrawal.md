@@ -1,19 +1,33 @@
 ---
 title: Withdrawal
+description: "Direct and relayed withdrawal flows, proof generation, nullifier-spend checks, fee handling, and state transition behavior."
+keywords:
+  - privacy pools
+  - withdrawal
+  - relayer
+  - direct withdrawal
+  - nullifier
+  - proof verification
+  - fees
 ---
+
 
 Privacy Pools supports two types of withdrawals:
 
 1. **Direct Withdrawals**: User directly interacts with pool contract
 2. **Relayed Withdrawals**: Withdrawal processed through a relayer for additional privacy
 
-Both methods require zero-knowledge proofs to prove commitment ownership and maintain privacy.
+Both methods require [zero-knowledge proofs](/layers/zk/withdrawal) to prove commitment ownership and maintain privacy.
 
-### Withdrawal Types Comparison
+:::info Integration
+For production workflow guidance, see [Integrations](/protocol/integrations) and [skills.md](https://docs.privacypools.com/skills.md).
+:::
+
+## Withdrawal Types Comparison
 
 | Aspect                   | Direct Withdrawal  | Relayed Withdrawal                      |
 | ------------------------ | ------------------ | --------------------------------------- |
-| Privacy Level            | Basic              | Enhanced (different withdrawal address) |
+| Privacy Level            | Basic (signer pays gas, linking address to on-chain activity) | Enhanced (relayer pays gas, decoupling recipient from tx sender) |
 | Gas Payment              | User pays directly | Relayer pays, takes fee                 |
 | Fee Structure            | No fees            | Configurable relayer fee                |
 | Complexity               | Simpler flow       | Additional fee computation              |
@@ -41,7 +55,7 @@ sequenceDiagram
     User->>Pool: withdraw(withdrawal, proof)
 
     activate Pool
-    Pool->>Pool: Verify processooor is recipient
+    Pool->>Pool: Verify processooor == msg.sender
     Pool->>Entrypoint: Check proof uses latest ASP root
     Pool->>Pool: Verify proof
 
@@ -79,7 +93,7 @@ sequenceDiagram
 
     User->>Relayer: Submit withdrawal + proof
     Relayer->>Relayer: Verify proof locally
-    Relayer->>Entrypoint: relay(withdrawal, proof)
+    Relayer->>Entrypoint: relay(withdrawal, proof, scope)
 
     activate Entrypoint
     Entrypoint->>Pool: withdraw(withdrawal, proof)
@@ -108,14 +122,13 @@ sequenceDiagram
 
 ```solidity
 struct Withdrawal {
-    address processooor;    // Direct: recipient, Relayed: Entrypoint
-    uint256 scope;         // Pool identifier
-    bytes data;           // Direct: empty, Relayed: encoded `FeeData`
+    address processooor;    // Direct: tx signer (msg.sender), Relayed: Entrypoint address
+    bytes data;             // Direct: empty, Relayed: ABI-encoded RelayData
 }
 
-struct FeeData {
-    address recipient;     // Final recipient
-    address feeRecipient;  // Relayer address
+struct RelayData {
+    address recipient;     // Final recipient of withdrawn funds
+    address feeRecipient;  // Relayer address (receives the fee)
     uint256 relayFeeBPS;   // Fee in basis points
 }
 ```
@@ -132,7 +145,7 @@ struct FeeData {
    - User submits proof to pool contract
    - Pool verifies proof and context
    - Updates state (nullifiers, commitments)
-   - Transfers assets to recipient
+   - Transfers assets to signer (processooor)
 
 ### Relayed Withdrawal
 

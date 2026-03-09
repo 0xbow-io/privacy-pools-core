@@ -8,6 +8,9 @@ import {Logger, LogLevel} from "../utils/logger.js";
 import {DataError} from "../errors/data.error.js";
 import {ErrorCode} from "../errors/base.error.js";
 
+const isNil = (value: unknown): value is null | undefined =>
+  value === null || value === undefined;
+
 // Event signatures from the contract
 const DEPOSIT_EVENT = parseAbiItem('event Deposited(address indexed _depositor, uint256 _commitment, uint256 _label, uint256 _value, uint256 _merkleRoot)');
 const WITHDRAWAL_EVENT = parseAbiItem('event Withdrawn(address indexed _processooor, uint256 _value, uint256 _spentNullifier, uint256 _newCommitment)');
@@ -144,10 +147,10 @@ export class DataService {
           } = typedLog.args;
 
           if (
-            !depositor ||
-            !commitment ||
-            !label ||
-            !precommitment ||
+            isNil(depositor) ||
+            isNil(commitment) ||
+            isNil(label) ||
+            isNil(precommitment) ||
             !typedLog.blockNumber ||
             !typedLog.transactionHash
           ) {
@@ -158,7 +161,7 @@ export class DataService {
             depositor: depositor.toLowerCase(),
             commitment: commitment as Hash,
             label: label as Hash,
-            value: value || BigInt(0),
+            value: value ?? BigInt(0),
             precommitment: precommitment as Hash,
             blockNumber: BigInt(typedLog.blockNumber),
             transactionHash: typedLog.transactionHash,
@@ -253,10 +256,9 @@ export class DataService {
           } = typedLog.args;
 
           if (
-            value === undefined ||
-            value === null ||
-            !spentNullifier ||
-            !newCommitment ||
+            isNil(value) ||
+            isNil(spentNullifier) ||
+            isNil(newCommitment) ||
             !typedLog.blockNumber ||
             !typedLog.transactionHash
           ) {
@@ -362,9 +364,9 @@ export class DataService {
           } = typedLog.args;
 
           if (
-            !ragequitter ||
-            !commitment ||
-            !label ||
+            isNil(ragequitter) ||
+            isNil(commitment) ||
+            isNil(label) ||
             !typedLog.blockNumber ||
             !typedLog.transactionHash
           ) {
@@ -375,7 +377,7 @@ export class DataService {
             ragequitter: ragequitter.toLowerCase(),
             commitment: commitment as Hash,
             label: label as Hash,
-            value: value || BigInt(0),
+            value: value ?? BigInt(0),
             blockNumber: BigInt(typedLog.blockNumber),
             transactionHash: typedLog.transactionHash,
           };

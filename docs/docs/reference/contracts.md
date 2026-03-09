@@ -1,5 +1,14 @@
 ---
 title: Contracts Interfaces
+description: "Contract interface reference for Privacy Pools components, including structs, events, and function signatures."
+keywords:
+  - privacy pools
+  - contract interfaces
+  - solidity
+  - abi
+  - entrypoint
+  - privacypool
+  - events
 ---
 
 **`IPrivacyPool`**
@@ -10,8 +19,7 @@ Core interface for privacy pools smart contracts that handle deposits and withdr
 interface IPrivacyPool {
     struct Withdrawal {
         address processooor;    // Allowed address to process withdrawal
-        uint256 scope;         // Unique pool identifier
-        bytes data;           // Encoded arbitrary data for Entrypoint
+        bytes data;             // Encoded arbitrary data for Entrypoint
     }
 
     // Core Functions
@@ -31,6 +39,7 @@ interface IPrivacyPool {
     // View Functions
     function SCOPE() external view returns (uint256);
     function ASSET() external view returns (address);
+    function currentRoot() external view returns (uint256);
 }
 
 ```
@@ -45,9 +54,10 @@ interface IEntrypoint {
         IPrivacyPool pool;
         uint256 minimumDepositAmount;
         uint256 vettingFeeBPS;
+        uint256 maxRelayFeeBPS;
     }
 
-    struct FeeData {
+    struct RelayData {
         address recipient;
         address feeRecipient;
         uint256 relayFeeBPS;
@@ -58,7 +68,8 @@ interface IEntrypoint {
         IERC20 asset,
         IPrivacyPool pool,
         uint256 minimumDepositAmount,
-        uint256 vettingFeeBPS
+        uint256 vettingFeeBPS,
+        uint256 maxRelayFeeBPS
     ) external;
 
     function deposit(uint256 precommitment) external payable returns (uint256);
@@ -71,16 +82,22 @@ interface IEntrypoint {
 
     function relay(
         IPrivacyPool.Withdrawal calldata withdrawal,
-        ProofLib.WithdrawProof calldata proof
+        ProofLib.WithdrawProof calldata proof,
+        uint256 scope
     ) external;
+
+    // ASP Root Management
+    function updateRoot(uint256 root, string memory ipfsCID) external returns (uint256 index);
 
     // View Functions
     function scopeToPool(uint256 scope) external view returns (IPrivacyPool);
     function assetConfig(IERC20 asset) external view returns (
         IPrivacyPool pool,
         uint256 minimumDepositAmount,
-        uint256 vettingFeeBPS
+        uint256 vettingFeeBPS,
+        uint256 maxRelayFeeBPS
     );
+    function latestRoot() external view returns (uint256);
 }
 
 ```

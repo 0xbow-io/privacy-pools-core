@@ -1,6 +1,16 @@
 ---
 title: Withdrawal Circuit
+description: "Withdrawal circuit reference for proving commitment ownership, set inclusion, context binding, and private withdrawal validity."
+keywords:
+  - privacy pools
+  - withdrawal circuit
+  - circom
+  - context
+  - nullifier
+  - asproot
+  - zk proof
 ---
+
 
 The withdrawal circuit (`withdraw.circom`) handles private withdrawals:
 

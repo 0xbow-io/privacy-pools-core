@@ -10,6 +10,9 @@ const apiKey = process.env.HYPERSYNC_API_KEY;
 describe.skipIf(!apiKey)('DataService with Sepolia', () => {
   let dataService: DataService;
   const SEPOLIA_CHAIN_ID = 11155111;
+  // This test intentionally targets a Sepolia pool with rich historical activity so
+  // event-shape assertions remain stable over time. It is not meant to track the
+  // latest canonical deployment listed in docs/deployments.md.
   const POOL_ADDRESS = '0xbbe3b00d54f0ee032eff07a47139da8d44095c96';
   const START_BLOCK = 7781496n;
 
