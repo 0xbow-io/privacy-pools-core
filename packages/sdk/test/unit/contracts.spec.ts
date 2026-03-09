@@ -5,6 +5,7 @@ import { Withdrawal, WithdrawalProof } from "../../src/types/withdrawal.js";
 import { CommitmentProof } from "../../src/types/commitment.js";
 import { ContractError } from "../../src/errors/base.error.js";
 import { Hash } from "../../src/types/commitment.js";
+import { IPrivacyPoolABI } from "../../src/abi/IPrivacyPool.js";
 
 const mockPublicClient = {
   simulateContract: vi.fn(),
@@ -227,6 +228,22 @@ describe("ContractInteractionsService", () => {
 
     await expect(service.getScopeData(BigInt(mockScope))).rejects.toThrow(
       ContractError.scopeNotFound(BigInt(mockScope)),
+    );
+  });
+
+  it("should get state root from the privacy pool currentRoot", async () => {
+    const expectedRoot = BigInt(123456789);
+    mockPublicClient.readContract.mockResolvedValue(expectedRoot);
+
+    const result = await service.getStateRoot(mockPoolAddress);
+
+    expect(result).toBe(expectedRoot);
+    expect(mockPublicClient.readContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        address: mockPoolAddress,
+        abi: IPrivacyPoolABI,
+        functionName: "currentRoot",
+      }),
     );
   });
 });
