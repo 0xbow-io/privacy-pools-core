@@ -51,7 +51,10 @@ describe('DataService', () => {
     };
 
     const logFetchConfig = new Map();
-    logFetchConfig.set(SEPOLIA_CHAIN_ID, { concurrency: 10 });
+    logFetchConfig.set(SEPOLIA_CHAIN_ID, {
+      concurrency: 1,
+      retryOnFailure: false,
+    });
 
     dataService = new DataService([config], logFetchConfig);
   });
@@ -59,7 +62,7 @@ describe('DataService', () => {
   beforeEach(() => {
     mockGetLogs.mockReset();
     mockGetBlockNumber.mockReset();
-    mockGetBlockNumber.mockResolvedValue(START_BLOCK + 100_000n);
+    mockGetBlockNumber.mockResolvedValue(START_BLOCK);
   });
 
   it('should throw error when chain is not configured', async () => {
