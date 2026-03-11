@@ -1047,7 +1047,9 @@ export class AccountService {
         dataService,
         { account: source.service.account }
       );
-      const errors = await account._processEvents(pools);
+      const processedScopes = source.service.account.poolAccounts;
+      const newPools = pools.filter((p) => !processedScopes.has(p.scope));
+      const errors = await account._processEvents(newPools);
       return { account, errors };
     }
 
@@ -1096,9 +1098,17 @@ export class AccountService {
       if ("reason" in result) {
         errors.push(result);
       } else {
-        this._processDepositEvents(scope, result.depositEvents);
-        this._processWithdrawalEvents(scope, result.withdrawalEvents);
-        this._processRagequitEvents(scope, result.ragequitEvents);
+        try {
+          this._processDepositEvents(scope, result.depositEvents);
+          this._processWithdrawalEvents(scope, result.withdrawalEvents);
+          this._processRagequitEvents(scope, result.ragequitEvents);
+        } catch (e) {
+          this.account.poolAccounts.delete(scope);
+          errors.push({
+            reason: e instanceof Error ? e.message : String(e),
+            scope,
+          });
+        }
       }
     }
 

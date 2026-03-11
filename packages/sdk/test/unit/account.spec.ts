@@ -1461,6 +1461,157 @@ describe("AccountService", () => {
       // Verify no new accounts were added for newPool (since no events were returned)
       expect(account.account.poolAccounts.has(newPool.scope)).toBe(false);
     });
+
+    it("does not reprocess pools already present in the source service", async () => {
+      const sourceService = new AccountService(dataService, {
+        mnemonic: TEST_MNEMONIC,
+      });
+
+      const existingScope = BigInt("555555") as Hash;
+      const deposit = {
+        hash: BigInt("666666") as Hash,
+        value: 100n,
+        label: BigInt("777777") as Hash,
+        nullifier: BigInt("888888") as Secret,
+        secret: BigInt("999999") as Secret,
+        blockNumber: 500n,
+        txHash: mockTxHash(10),
+      };
+
+      sourceService.account.poolAccounts.set(existingScope, [
+        {
+          label: deposit.label,
+          deposit,
+          children: [],
+        },
+      ]);
+
+      const existingPool: PoolInfo = {
+        chainId: 1,
+        address: "0x1234567890123456789012345678901234567890" as Address,
+        scope: existingScope,
+        deploymentBlock: 1000n,
+      };
+
+      const getDepositsSpy = vi
+        .spyOn(dataService, "getDeposits")
+        .mockResolvedValue([]);
+      const getWithdrawalsSpy = vi
+        .spyOn(dataService, "getWithdrawals")
+        .mockResolvedValue([]);
+      const getRagequitsSpy = vi
+        .spyOn(dataService, "getRagequits")
+        .mockResolvedValue([]);
+
+      const { account, errors } = await AccountService.initializeWithEvents(
+        dataService,
+        { service: sourceService },
+        [existingPool]
+      );
+
+      expect(errors).toEqual([]);
+      expect(account.account.poolAccounts.get(existingScope)?.length).toBe(1);
+      expect(
+        account.account.poolAccounts.get(existingScope)?.[0]?.deposit.hash
+      ).toBe(deposit.hash);
+
+      expect(getDepositsSpy).not.toHaveBeenCalled();
+      expect(getWithdrawalsSpy).not.toHaveBeenCalled();
+      expect(getRagequitsSpy).not.toHaveBeenCalled();
+    });
+
+    it("reports fetch-level errors without creating partial state", async () => {
+      const sourceService = new AccountService(dataService, {
+        mnemonic: TEST_MNEMONIC,
+      });
+
+      const failingScope = BigInt("999999") as Hash;
+      const failingPool: PoolInfo = {
+        chainId: 1,
+        address: "0x1234567890123456789012345678901234567890" as Address,
+        scope: failingScope,
+        deploymentBlock: 1000n,
+      };
+
+      vi.spyOn(dataService, "getDeposits").mockResolvedValue([]);
+      vi.spyOn(dataService, "getWithdrawals").mockRejectedValue(
+        new Error("RPC timeout")
+      );
+      vi.spyOn(dataService, "getRagequits").mockResolvedValue([]);
+
+      const { account, errors } = await AccountService.initializeWithEvents(
+        dataService,
+        { service: sourceService },
+        [failingPool]
+      );
+
+      expect(errors.length).toBe(1);
+      expect(errors[0]!.scope).toBe(failingScope);
+      expect(account.account.poolAccounts.has(failingScope)).toBe(false);
+    });
+
+    it("cleans partial state when processing throws mid-scope", async () => {
+      const sourceService = new AccountService(dataService, {
+        mnemonic: TEST_MNEMONIC,
+      });
+
+      const failingScope = BigInt("888888") as Hash;
+      const failingPool: PoolInfo = {
+        chainId: 1,
+        address: "0x1234567890123456789012345678901234567890" as Address,
+        scope: failingScope,
+        deploymentBlock: 1000n,
+      };
+
+      vi.spyOn(dataService, "getDeposits").mockResolvedValue([]);
+      vi.spyOn(dataService, "getWithdrawals").mockResolvedValue([]);
+      vi.spyOn(dataService, "getRagequits").mockResolvedValue([]);
+
+      const depositSpy = vi
+        .spyOn(AccountService.prototype as never, "_processDepositEvents")
+        .mockImplementationOnce(function (this: unknown, ...args: unknown[]) {
+          const self = this as AccountService;
+          const scope = args[0] as Hash;
+          self.account.poolAccounts.set(scope, [
+            {
+              label: BigInt("123") as Hash,
+              deposit: {
+                hash: BigInt("456") as Hash,
+                value: 100n,
+                label: BigInt("123") as Hash,
+                nullifier: BigInt("789") as Secret,
+                secret: BigInt("012") as Secret,
+                blockNumber: 1n,
+                txHash: mockTxHash(1),
+              },
+              children: [],
+            },
+          ]);
+        });
+
+      const withdrawalSpy = vi
+        .spyOn(AccountService.prototype as never, "_processWithdrawalEvents")
+        .mockImplementationOnce(() => {
+          throw new Error("Unexpected processing failure");
+        });
+
+      try {
+        const { account, errors } =
+          await AccountService.initializeWithEvents(
+            dataService,
+            { service: sourceService },
+            [failingPool]
+          );
+
+        expect(errors.length).toBe(1);
+        expect(errors[0]!.reason).toBe("Unexpected processing failure");
+        expect(errors[0]!.scope).toBe(failingScope);
+        expect(account.account.poolAccounts.has(failingScope)).toBe(false);
+      } finally {
+        depositSpy.mockRestore();
+        withdrawalSpy.mockRestore();
+      }
+    });
   });
 
   describe("initializeWithEvents — migration", () => {
