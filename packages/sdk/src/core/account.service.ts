@@ -1063,7 +1063,16 @@ export class AccountService {
       uniqueScopes.add(pool.scope);
     }
 
-    // When no mnemonic (existing service), use simple processing
+    // Retry path (non-migration): reuse the existing service's account and
+    // only process pools whose scopes haven't been fully processed yet.
+    // Already-processed scopes are skipped to avoid duplicate deposits and
+    // withdrawal misclassification.
+    //
+    // This path performs simple deposit/withdrawal/ragequit processing only
+    // — no migration discovery. For migration-aware retries, the caller
+    // should re-invoke with { mnemonic } scoped to only the failed pools;
+    // the mnemonic path builds both safe and legacy accounts from scratch
+    // with no shared references.
     if (!('mnemonic' in source)) {
       const account = new AccountService(
         dataService,
@@ -1071,6 +1080,7 @@ export class AccountService {
       );
       const processedScopes = source.service.account.poolAccounts;
       const newPools = pools.filter((p) => !processedScopes.has(p.scope));
+
       const errors = await account._processEvents(newPools);
       return { account, errors };
     }
@@ -1080,38 +1090,31 @@ export class AccountService {
     const legacyPrivacyPoolAccount = AccountService._initializeLegacyAccount(source.mnemonic);
     const legacyAccount = new AccountService(dataService, { account: legacyPrivacyPoolAccount });
 
-    // Fetch events ONCE and share between both accounts
-    const events = await account.getEvents(pools);
-    const errors: PoolEventsError[] = [];
-
-    for (const [scope, result] of events.entries()) {
-      if ("reason" in result) {
-        errors.push(result);
-      } else {
-        // a. Legacy: process deposits + withdrawals
-        legacyAccount._processDepositEvents(scope, result.depositEvents);
-        legacyAccount._processWithdrawalEvents(scope, result.withdrawalEvents);
-
-        // b. Safe: process deposits
-        account._processDepositEvents(scope, result.depositEvents);
-
-        // c. Safe: discover migrated commitments from legacy accounts
-        const legacyAccounts = legacyAccount.account.poolAccounts.get(scope) ?? [];
-        account._discoverMigratedCommitments(scope, legacyAccounts, result.withdrawalEvents);
-
-        // d. Safe: process withdrawals (now includes migrated accounts)
-        account._processWithdrawalEvents(scope, result.withdrawalEvents);
-
-        // e. Both: process ragequits
-        legacyAccount._processRagequitEvents(scope, result.ragequitEvents);
-        account._processRagequitEvents(scope, result.ragequitEvents);
-      }
-    }
-
+    const errors = await account._processEvents(pools, legacyAccount);
     return { account, legacyAccount, errors };
   }
 
-  private async _processEvents(pools: PoolInfo[]): Promise<PoolEventsError[]> {
+  /**
+   * Fetches and processes events for a set of pools.
+   *
+   * When a legacyAccount is provided, the full migration-aware pipeline runs
+   * for each scope:
+   *   1. Legacy account: process deposits and withdrawals (to detect migrations)
+   *   2. Safe account (this): process deposits
+   *   3. Safe account: discover migrated commitments from the legacy accounts
+   *   4. Safe account: process withdrawals (now includes migrated accounts)
+   *   5. Both accounts: process ragequits
+   *
+   * Without a legacyAccount, only steps 2, 4, and 5 run (simple processing).
+   *
+   * Per-scope errors are caught and returned rather than thrown, and any
+   * partial state left by a mid-scope failure is cleaned from both accounts
+   * so that a subsequent retry starts fresh for that scope.
+   */
+  private async _processEvents(
+    pools: PoolInfo[],
+    legacyAccount?: AccountService,
+  ): Promise<PoolEventsError[]> {
     const errors: PoolEventsError[] = [];
 
     const events = await this.getEvents(pools);
@@ -1121,11 +1124,32 @@ export class AccountService {
         errors.push(result);
       } else {
         try {
+          // a. Legacy: process deposits + withdrawals
+          if (legacyAccount) {
+            legacyAccount._processDepositEvents(scope, result.depositEvents);
+            legacyAccount._processWithdrawalEvents(scope, result.withdrawalEvents);
+          }
+
+          // b. Safe: process deposits
           this._processDepositEvents(scope, result.depositEvents);
+
+          // c. Safe: discover migrated commitments from legacy accounts
+          if (legacyAccount) {
+            const legacyAccounts = legacyAccount.account.poolAccounts.get(scope) ?? [];
+            this._discoverMigratedCommitments(scope, legacyAccounts, result.withdrawalEvents);
+          }
+
+          // d. Safe: process withdrawals (now includes migrated accounts)
           this._processWithdrawalEvents(scope, result.withdrawalEvents);
+
+          // e. Both: process ragequits
+          if (legacyAccount) {
+            legacyAccount._processRagequitEvents(scope, result.ragequitEvents);
+          }
           this._processRagequitEvents(scope, result.ragequitEvents);
         } catch (e) {
           this.account.poolAccounts.delete(scope);
+          legacyAccount?.account.poolAccounts.delete(scope);
           errors.push({
             reason: e instanceof Error ? e.message : String(e),
             scope,
