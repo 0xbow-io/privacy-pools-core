@@ -6,8 +6,9 @@ import { DataError } from '../../src/errors/data.error.js';
 import { PoolInfo } from '../../src/types/account.js';
 
 // Hoist the mock so it's available inside vi.mock factory
-const { mockGetLogs } = vi.hoisted(() => ({
+const { mockGetLogs, mockGetBlockNumber } = vi.hoisted(() => ({
   mockGetLogs: vi.fn(),
+  mockGetBlockNumber: vi.fn(),
 }));
 
 vi.mock('viem', async (importOriginal) => {
@@ -16,6 +17,7 @@ vi.mock('viem', async (importOriginal) => {
     ...actual,
     createPublicClient: vi.fn(() => ({
       getLogs: mockGetLogs,
+      getBlockNumber: mockGetBlockNumber,
     })),
   };
 });
@@ -48,11 +50,19 @@ describe('DataService', () => {
       rpcUrl: 'https://sepolia.rpc.hypersync.xyz',
     };
 
-    dataService = new DataService([config]);
+    const logFetchConfig = new Map();
+    logFetchConfig.set(SEPOLIA_CHAIN_ID, {
+      concurrency: 1,
+      retryOnFailure: false,
+    });
+
+    dataService = new DataService([config], logFetchConfig);
   });
 
   beforeEach(() => {
     mockGetLogs.mockReset();
+    mockGetBlockNumber.mockReset();
+    mockGetBlockNumber.mockResolvedValue(START_BLOCK);
   });
 
   it('should throw error when chain is not configured', async () => {

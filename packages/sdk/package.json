@@ -1,6 +1,6 @@
 {
   "name": "@0xbow/privacy-pools-core-sdk",
-  "version": "0.1.1",
+  "version": "1.1.1",
   "description": "Typescript SDK for the Privacy Pool protocol",
   "repository": "https://github.com/0xbow-io/privacy-pools-core",
   "license": "Apache-2.0",
@@ -50,6 +50,8 @@
   "dependencies": {
     "@types/snarkjs": "0.7.9",
     "@zk-kit/lean-imt": "2.2.4",
+    "async": "3.2.6",
+    "dotenv": "17.3.1",
     "maci-crypto": "2.5.0",
     "snarkjs": "0.7.5",
     "typescript": "^5.7.3",
@@ -66,6 +68,7 @@
     "@rollup/plugin-node-resolve": "16.0.0",
     "@rollup/plugin-typescript": "12.1.2",
     "@rollup/plugin-wasm": "6.2.2",
+    "@types/async": "3.2.24",
     "@types/node": "20.3.1",
     "@types/snarkjs": "0.7.9",
     "commitlint": "19.4.1",

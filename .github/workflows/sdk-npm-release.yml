@@ -1,18 +1,15 @@
-name: SDK / Release
+name: SDK NPM Release
 
-on: workflow_dispatch
-
-concurrency:
-  group: ${{github.workflow}}-${{github.ref}}
-  cancel-in-progress: true
-
-defaults:
-  run:
-    working-directory: packages/sdk
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "packages/sdk/**"
+  workflow_dispatch:
 
 jobs:
-  canary-release:
-    name: SDK Release
+  release:
     runs-on: ubuntu-latest
 
     steps:
@@ -31,7 +28,55 @@ jobs:
       - name: Install dependencies
         run: yarn --frozen-lockfile --network-concurrency 1
 
+      - name: Get package version and validate
+        id: version_check
+        run: |
+          # Get version from package.json
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          echo "PACKAGE_VERSION=$PACKAGE_VERSION" >> $GITHUB_ENV
+          echo "package_version=$PACKAGE_VERSION" >> $GITHUB_OUTPUT
+          
+          # Get published version from npm (handle case where package doesn't exist yet)
+          set +e
+          NPM_VERSION=$(npm view @0xbow/privacy-pools-core-sdk version 2>/dev/null)
+          NPM_EXIT_CODE=$?
+          set -e
+          
+          if [ $NPM_EXIT_CODE -eq 0 ]; then
+            echo "NPM_VERSION=$NPM_VERSION" >> $GITHUB_ENV
+            echo "npm_version=$NPM_VERSION" >> $GITHUB_OUTPUT
+            
+            # Compare versions
+            if [ "$PACKAGE_VERSION" = "$NPM_VERSION" ]; then
+              echo "📋 Package version ($PACKAGE_VERSION) matches published version ($NPM_VERSION)"
+              echo "This suggests no release is needed - skipping publish step"
+              echo "SHOULD_PUBLISH=false" >> $GITHUB_ENV
+            elif npx semver $PACKAGE_VERSION -r ">$NPM_VERSION" >/dev/null 2>&1; then
+              echo "✅ Version validation passed: $PACKAGE_VERSION > $NPM_VERSION"
+              echo "SHOULD_PUBLISH=true" >> $GITHUB_ENV
+            else
+              echo "❌ Error: Package version ($PACKAGE_VERSION) is not greater than published version ($NPM_VERSION)"
+              echo "If you intended to release, please bump the version in packages/sdk/package.json"
+              echo "If this is just a code change without release, this is expected behavior"
+              echo "SHOULD_PUBLISH=false" >> $GITHUB_ENV
+              exit 1
+            fi
+          else
+            echo "📦 First time publishing package version: $PACKAGE_VERSION"
+            echo "NPM_VERSION=none" >> $GITHUB_ENV
+            echo "npm_version=none" >> $GITHUB_OUTPUT
+            echo "SHOULD_PUBLISH=true" >> $GITHUB_ENV
+          fi
+          
+          # Validate semantic versioning format
+          if ! npx semver $PACKAGE_VERSION >/dev/null 2>&1; then
+            echo "❌ Error: Package version ($PACKAGE_VERSION) is not a valid semantic version"
+            exit 1
+          fi
+        working-directory: packages/sdk
+
       - name: Build SDK
+        if: env.SHOULD_PUBLISH == 'true'
         run: |
           yarn clean
           yarn build
@@ -39,16 +84,36 @@ jobs:
           bash ./scripts/copy_circuits.sh
         working-directory: packages/sdk
 
-      - name: Get current version and set new version
-        run: |
-          CURRENT_VERSION=$(npm view @0xbow/privacy-pools-core-sdk | grep latest | cut -d' ' -f2)
-          IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
-          PATCH_VERSION=$((VERSION_PARTS[2] + 1))
-          NEW_VERSION="${VERSION_PARTS[0]}.${VERSION_PARTS[1]}.$PATCH_VERSION"
-          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-          yarn version --new-version $NEW_VERSION --no-git-tag-version
+      - name: Run tests
+        if: env.SHOULD_PUBLISH == 'true'
+        run: yarn test
+        working-directory: packages/sdk
 
-      - name: Publish canary
+      - name: Publish to npm
+        if: env.SHOULD_PUBLISH == 'true'
         run: npm publish --access public --tag latest
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        working-directory: packages/sdk
+
+      - name: Release Summary
+        if: env.SHOULD_PUBLISH == 'true'
+        run: |
+          echo "Successfully published @0xbow/privacy-pools-core-sdk@${{ env.PACKAGE_VERSION }}"
+          echo "Package URL: https://www.npmjs.com/package/@0xbow/privacy-pools-core-sdk/v/${{ env.PACKAGE_VERSION }}"
+          if [ "${{ env.NPM_VERSION }}" != "none" ]; then
+            echo "Version bump: ${{ env.NPM_VERSION }} → ${{ env.PACKAGE_VERSION }}"
+          else
+            echo "First release of version ${{ env.PACKAGE_VERSION }}"
+          fi
+
+      - name: No Release Summary
+        if: env.SHOULD_PUBLISH == 'false'
+        run: |
+          echo "No release performed"
+          echo "Current package.json version: ${{ env.PACKAGE_VERSION }}"
+          if [ "${{ env.NPM_VERSION }}" != "none" ]; then
+            echo "Published npm version: ${{ env.NPM_VERSION }}"
+            echo "To release a new version, bump the version in packages/sdk/package.json"
+          fi
+          echo "Workflow completed successfully without publishing"
