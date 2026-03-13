@@ -757,14 +757,15 @@ export class AccountService {
    */
   private _processDepositEvents(
     scope: Hash,
-    depositEvents: Map<Hash, DepositEvent>
+    depositEvents: Map<Hash, DepositEvent>,
+    startIndex: bigint = 0n,
   ): void {
     const MAX_CONSECUTIVE_MISSES = 10; // Large enough to avoid tx failures
 
     const foundIndices = new Set<bigint>();
     let consecutiveMisses = 0;
 
-    for (let index = BigInt(0); ; index++) {
+    for (let index = startIndex; ; index++) {
       // Generate nullifier, secret, and precommitment for this index
       const { nullifier, secret, precommitment } = this.createDepositSecrets(
         scope,
@@ -1100,12 +1101,18 @@ export class AccountService {
    * When a legacyAccount is provided, the full migration-aware pipeline runs
    * for each scope:
    *   1. Legacy account: process deposits and withdrawals (to detect migrations)
-   *   2. Safe account (this): process deposits
-   *   3. Safe account: discover migrated commitments from the legacy accounts
+   *   2. Safe account: discover migrated commitments from the legacy accounts
+   *   3. Safe account (this): process deposits (starting after migrated accounts)
    *   4. Safe account: process withdrawals (now includes migrated accounts)
    *   5. Both accounts: process ragequits
    *
-   * Without a legacyAccount, only steps 2, 4, and 5 run (simple processing).
+   * Migration discovery (step 2) must run before safe deposit scanning (step 3)
+   * so that the migrated account count can be used as the starting index.
+   * Post-migration deposits use poolAccounts.length as their index, which
+   * sits right after the migrated slots; scanning from 0 would hit
+   * MAX_CONSECUTIVE_MISSES on the legacy-key indices and never reach them.
+   *
+   * Without a legacyAccount, only steps 3, 4, and 5 run (simple processing).
    *
    * Per-scope errors are caught and returned rather than thrown, and any
    * partial state left by a mid-scope failure is cleaned from both accounts
@@ -1130,14 +1137,20 @@ export class AccountService {
             legacyAccount._processWithdrawalEvents(scope, result.withdrawalEvents);
           }
 
-          // b. Safe: process deposits
-          this._processDepositEvents(scope, result.depositEvents);
-
-          // c. Safe: discover migrated commitments from legacy accounts
+          // b. Safe: discover migrated commitments from legacy accounts.
+          //    Must run before safe deposit scanning so that the migrated
+          //    account count can serve as the starting index for step (c),
+          //    avoiding a gap of consecutive misses over legacy-key indices.
           if (legacyAccount) {
             const legacyAccounts = legacyAccount.account.poolAccounts.get(scope) ?? [];
             this._discoverMigratedCommitments(scope, legacyAccounts, result.withdrawalEvents);
           }
+
+          // c. Safe: process deposits, starting after any migrated accounts.
+          //    New deposits created after migration use poolAccounts.length as
+          //    their index, so they sit right after the migrated slots.
+          const depositStartIndex = BigInt(this.account.poolAccounts.get(scope)?.length ?? 0);
+          this._processDepositEvents(scope, result.depositEvents, depositStartIndex);
 
           // d. Safe: process withdrawals (now includes migrated accounts)
           this._processWithdrawalEvents(scope, result.withdrawalEvents);
