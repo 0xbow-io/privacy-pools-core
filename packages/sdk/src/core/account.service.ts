@@ -1,7 +1,8 @@
 import { poseidon } from "maci-crypto/build/ts/hashing.js";
 import { Hash, Secret } from "../types/commitment.js";
-import { Hex, bytesToBigInt, bytesToNumber } from "viem";
+import { Hex, bytesToNumber } from "viem";
 import { mnemonicToAccount } from "viem/accounts";
+import { generateMasterKeys } from "../crypto.js";
 import { mapLimit } from "async";
 import { DataService } from "./data.service.js";
 import {
@@ -131,16 +132,7 @@ export class AccountService {
     try {
       this.logger.debug("Initializing account with mnemonic");
 
-      const masterNullifierSeed = bytesToBigInt(
-        mnemonicToAccount(mnemonic, { accountIndex: 0 }).getHdKey().privateKey!
-      );
-
-      const masterSecretSeed = bytesToBigInt(
-        mnemonicToAccount(mnemonic, { accountIndex: 1 }).getHdKey().privateKey!
-      );
-
-      const masterNullifier = poseidon([masterNullifierSeed]) as Secret;
-      const masterSecret = poseidon([masterSecretSeed]) as Secret;
+      const { masterNullifier, masterSecret } = generateMasterKeys(mnemonic);
 
       return {
         masterKeys: [masterNullifier, masterSecret],
