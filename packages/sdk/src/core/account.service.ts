@@ -967,11 +967,11 @@ export class AccountService {
 
       const label = legacyAccount.label;
 
-      // The migration child's value is the remaining value carried forward
+      // The migration child's value is the remaining value carried forward.
+      // Zero-value migrations (full withdrawal + key rotation) are valid and
+      // must still be registered so that poolAccounts.length reflects the
+      // correct slot count for deposit index alignment in step C.
       const remainingValue = migrationChild.value;
-
-      // Skip if remaining value is 0n (nothing to discover)
-      if (remainingValue === 0n) continue;
 
       // Generate safe nullifier/secret at withdrawal index 0
       const nullifier = this._genWithdrawalNullifier(label, 0n);
