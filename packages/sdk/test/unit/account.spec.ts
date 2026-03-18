@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { AccountService } from "../../src/core/account.service.js";
 import { DataService } from "../../src/core/data.service.js";
 import { Hash, Secret } from "../../src/types/commitment.js";
-import { RagequitEvent } from "../../src/types/events.js";
+import { RagequitEvent, WithdrawalEvent } from "../../src/types/events.js";
 import {
   AccountCommitment,
   PoolAccount,
@@ -10,8 +10,8 @@ import {
   PrivacyPoolAccount,
 } from "../../src/types/account.js";
 import { poseidon } from "maci-crypto/build/ts/hashing.js";
-import { Address, Hex } from "viem";
-import { english, generateMnemonic } from "viem/accounts";
+import { Address, Hex, bytesToNumber, bytesToBigInt } from "viem";
+import { english, generateMnemonic, mnemonicToAccount } from "viem/accounts";
 import { AccountError } from "../../src/errors/account.error.js";
 import { generateMasterKeys } from "../../src/crypto.js";
 
@@ -33,6 +33,118 @@ describe("AccountService", () => {
     // Pad the index to create a valid 32-byte hash
     const paddedIndex = index.toString(16).padStart(64, "0");
     return `0x${paddedIndex}` as Hex;
+  }
+
+  /**
+   * Builds all cryptographic values needed for a migration test scenario.
+   * Derives both legacy (bytesToNumber) and safe (bytesToBigInt) keys from
+   * the same mnemonic, then computes deposit and withdrawal hashes.
+   */
+  function buildMigrationScenario(params: {
+    mnemonic: string;
+    scope: Hash;
+    depositValue: bigint;
+    withdrawnAmount: bigint;
+  }) {
+    const { mnemonic, scope, depositValue, withdrawnAmount } = params;
+    const depositLabel = BigInt("777888999") as Hash;
+    const remainingValue = depositValue - withdrawnAmount;
+
+    // Legacy keys (bytesToNumber — old behaviour)
+    const legacyMasterNullifier = poseidon([
+      BigInt(
+        bytesToNumber(
+          mnemonicToAccount(mnemonic, { accountIndex: 0 }).getHdKey()
+            .privateKey!
+        )
+      ),
+    ]) as Secret;
+    const legacyMasterSecret = poseidon([
+      BigInt(
+        bytesToNumber(
+          mnemonicToAccount(mnemonic, { accountIndex: 1 }).getHdKey()
+            .privateKey!
+        )
+      ),
+    ]) as Secret;
+
+    // Safe keys (bytesToBigInt — new behaviour)
+    const safeMasterNullifier = poseidon([
+      bytesToBigInt(
+        mnemonicToAccount(mnemonic, { accountIndex: 0 }).getHdKey().privateKey!
+      ),
+    ]) as Secret;
+    const safeMasterSecret = poseidon([
+      bytesToBigInt(
+        mnemonicToAccount(mnemonic, { accountIndex: 1 }).getHdKey().privateKey!
+      ),
+    ]) as Secret;
+
+    // Legacy deposit secrets (index 0)
+    const legacyDepositNullifier = poseidon([
+      legacyMasterNullifier,
+      scope,
+      0n,
+    ]) as Secret;
+    const legacyDepositSecret = poseidon([
+      legacyMasterSecret,
+      scope,
+      0n,
+    ]) as Secret;
+    const legacyPrecommitment = poseidon([
+      legacyDepositNullifier,
+      legacyDepositSecret,
+    ]) as Hash;
+
+    // Legacy deposit hash
+    const legacyDepositHash = poseidon([
+      depositValue,
+      depositLabel,
+      legacyPrecommitment,
+    ]) as Hash;
+
+    // Legacy spent nullifier hash (hash of the deposit nullifier)
+    const legacySpentNullifierHash = poseidon([
+      legacyDepositNullifier,
+    ]) as Hash;
+
+    // Safe withdrawal secrets at index 0 (used during migration)
+    const safeWNullifier = poseidon([
+      safeMasterNullifier,
+      depositLabel,
+      0n,
+    ]) as Secret;
+    const safeWSecret = poseidon([
+      safeMasterSecret,
+      depositLabel,
+      0n,
+    ]) as Secret;
+    const safeWPrecommitment = poseidon([safeWNullifier, safeWSecret]) as Hash;
+
+    // Safe newCommitment (what appears on-chain after migration)
+    const safeNewCommitment = poseidon([
+      remainingValue,
+      depositLabel,
+      safeWPrecommitment,
+    ]) as Hash;
+
+    return {
+      legacyMasterNullifier,
+      legacyMasterSecret,
+      legacyDepositNullifier,
+      legacyDepositSecret,
+      legacyPrecommitment,
+      legacyDepositHash,
+      legacySpentNullifierHash,
+      safeMasterNullifier,
+      safeMasterSecret,
+      safeWNullifier,
+      safeWSecret,
+      safeWPrecommitment,
+      safeNewCommitment,
+      depositLabel,
+      remainingValue,
+    };
   }
 
   beforeEach(() => {
@@ -503,6 +615,114 @@ describe("AccountService", () => {
     });
   });
 
+  describe("addMigrationCommitment", () => {
+    let parentCommitment: AccountCommitment;
+
+    beforeEach(() => {
+      const label = BigInt("987654321") as Hash;
+      parentCommitment = {
+        hash: BigInt("111222333") as Hash,
+        value: 100n,
+        label,
+        nullifier: BigInt("444555666") as Secret,
+        secret: BigInt("777888999") as Secret,
+        blockNumber: 1000n,
+        txHash: mockTxHash(1),
+      };
+
+      accountService.account.poolAccounts.set(TEST_POOL.scope, [
+        {
+          label,
+          deposit: parentCommitment,
+          children: [],
+        },
+      ]);
+    });
+
+    it("adds migration commitment with isMigration flag", () => {
+      const value = 90n;
+      const nullifier = BigInt("123123123") as Secret;
+      const secret = BigInt("456456456") as Secret;
+      const blockNumber = 1100n;
+      const txHash = mockTxHash(2);
+
+      const newCommitment = accountService.addMigrationCommitment(
+        parentCommitment,
+        value,
+        nullifier,
+        secret,
+        blockNumber,
+        txHash
+      );
+
+      expect(newCommitment).toBeDefined();
+      expect(newCommitment.isMigration).toBe(true);
+
+      // Verify hash
+      const precommitment = poseidon([nullifier, secret]);
+      const expectedHash = poseidon([
+        value,
+        parentCommitment.label,
+        precommitment,
+      ]);
+      expect(newCommitment.hash).toBe(expectedHash);
+
+      // Verify account is marked as migrated
+      const account = accountService.account.poolAccounts
+        .get(TEST_POOL.scope)!
+        .at(0)!;
+      expect(account.isMigrated).toBe(true);
+      expect(account.children.length).toBe(1);
+    });
+
+    it("finds parent in children", () => {
+      // First add a normal withdrawal child
+      const intermediateCommitment = accountService.addWithdrawalCommitment(
+        parentCommitment,
+        90n,
+        BigInt("123123123") as Secret,
+        BigInt("456456456") as Secret,
+        1100n,
+        mockTxHash(2)
+      );
+
+      // Now add a migration from the child
+      const migrationCommitment = accountService.addMigrationCommitment(
+        intermediateCommitment,
+        80n,
+        BigInt("789789789") as Secret,
+        BigInt("321321321") as Secret,
+        1200n,
+        mockTxHash(3)
+      );
+
+      expect(migrationCommitment.isMigration).toBe(true);
+      const account = accountService.account.poolAccounts
+        .get(TEST_POOL.scope)!
+        .at(0)!;
+      expect(account.children.length).toBe(2);
+      expect(account.isMigrated).toBe(true);
+    });
+
+    it("throws when parent not found", () => {
+      const unknownCommitment: AccountCommitment = {
+        ...parentCommitment,
+        hash: BigInt("999999999") as Hash,
+      };
+
+      expect(() =>
+        accountService.addMigrationCommitment(
+          unknownCommitment,
+          90n,
+          BigInt("123123123") as Secret,
+          BigInt("456456456") as Secret,
+          1100n,
+          mockTxHash(2)
+        )
+      ).toThrow(AccountError);
+    });
+  });
+
   describe("getSpendableCommitments", () => {
     beforeEach(() => {
       // Scope 1: Account with non-zero value, not ragequit
@@ -660,6 +880,36 @@ describe("AccountService", () => {
 
       const spendableCommitments = accountService.getSpendableCommitments();
       expect(spendableCommitments.size).toBe(0);
+    });
+
+    it("excludes accounts with isMigrated flag", () => {
+      const migratedScope = BigInt("4444") as Hash;
+      const migratedCommitment: AccountCommitment = {
+        hash: BigInt("40001") as Hash,
+        value: 100n,
+        label: BigInt("4001") as Hash,
+        nullifier: BigInt("40002") as Secret,
+        secret: BigInt("40003") as Secret,
+        blockNumber: 1000n,
+        txHash: mockTxHash(10),
+      };
+
+      accountService.account.poolAccounts.set(migratedScope, [
+        {
+          label: migratedCommitment.label,
+          deposit: migratedCommitment,
+          children: [],
+          isMigrated: true,
+        },
+      ]);
+
+      const spendableCommitments = accountService.getSpendableCommitments();
+
+      // Migrated scope should not be in the result
+      expect(spendableCommitments.has(migratedScope)).toBe(false);
+      // Original non-migrated scopes should still be present
+      expect(spendableCommitments.has(BigInt("1111"))).toBe(true);
+      expect(spendableCommitments.has(BigInt("3333"))).toBe(true);
     });
   });
 
@@ -1005,10 +1255,22 @@ describe("AccountService", () => {
       // Calculate the expected spent nullifier hash for the withdrawal event
       const spentNullifierHash = poseidon([nullifier]) as Hash;
 
+      // Compute the correct newCommitment hash so it matches the locally-computed
+      // value and does NOT trigger migration detection.
+      const [mNullifier, mSecret] = tempService.account.masterKeys;
+      const wNullifier = poseidon([mNullifier, depositEvent1.label, 0n]) as Secret;
+      const wSecret = poseidon([mSecret, depositEvent1.label, 0n]) as Secret;
+      const wPrecommitment = poseidon([wNullifier, wSecret]) as Hash;
+      const correctNewCommitment = poseidon([
+        90n,
+        depositEvent1.label,
+        wPrecommitment,
+      ]) as Hash;
+
       const withdrawalEvent1 = {
         withdrawn: 10n,
         spentNullifier: spentNullifierHash, // Use the HASHED nullifier
-        newCommitment: BigInt("5555555") as Hash,
+        newCommitment: correctNewCommitment,
         blockNumber: 1100n,
         transactionHash: mockTxHash(2),
       };
@@ -1055,6 +1317,7 @@ describe("AccountService", () => {
       ); // Check remaining value
       expect(childCommitment?.blockNumber).toBe(withdrawalEvent1.blockNumber);
       expect(childCommitment?.txHash).toBe(withdrawalEvent1.transactionHash);
+      expect(childCommitment?.isMigration).toBeFalsy();
     });
 
     it("handles errors from individual pools and continues processing", async () => {
@@ -1197,6 +1460,645 @@ describe("AccountService", () => {
 
       // Verify no new accounts were added for newPool (since no events were returned)
       expect(account.account.poolAccounts.has(newPool.scope)).toBe(false);
+    });
+
+    it("does not reprocess pools already present in the source service", async () => {
+      const sourceService = new AccountService(dataService, {
+        mnemonic: TEST_MNEMONIC,
+      });
+
+      const existingScope = BigInt("555555") as Hash;
+      const deposit = {
+        hash: BigInt("666666") as Hash,
+        value: 100n,
+        label: BigInt("777777") as Hash,
+        nullifier: BigInt("888888") as Secret,
+        secret: BigInt("999999") as Secret,
+        blockNumber: 500n,
+        txHash: mockTxHash(10),
+      };
+
+      sourceService.account.poolAccounts.set(existingScope, [
+        {
+          label: deposit.label,
+          deposit,
+          children: [],
+        },
+      ]);
+
+      const existingPool: PoolInfo = {
+        chainId: 1,
+        address: "0x1234567890123456789012345678901234567890" as Address,
+        scope: existingScope,
+        deploymentBlock: 1000n,
+      };
+
+      const getDepositsSpy = vi
+        .spyOn(dataService, "getDeposits")
+        .mockResolvedValue([]);
+      const getWithdrawalsSpy = vi
+        .spyOn(dataService, "getWithdrawals")
+        .mockResolvedValue([]);
+      const getRagequitsSpy = vi
+        .spyOn(dataService, "getRagequits")
+        .mockResolvedValue([]);
+
+      const { account, errors } = await AccountService.initializeWithEvents(
+        dataService,
+        { service: sourceService },
+        [existingPool]
+      );
+
+      expect(errors).toEqual([]);
+      expect(account.account.poolAccounts.get(existingScope)?.length).toBe(1);
+      expect(
+        account.account.poolAccounts.get(existingScope)?.[0]?.deposit.hash
+      ).toBe(deposit.hash);
+
+      expect(getDepositsSpy).not.toHaveBeenCalled();
+      expect(getWithdrawalsSpy).not.toHaveBeenCalled();
+      expect(getRagequitsSpy).not.toHaveBeenCalled();
+    });
+
+    it("reports fetch-level errors without creating partial state", async () => {
+      const sourceService = new AccountService(dataService, {
+        mnemonic: TEST_MNEMONIC,
+      });
+
+      const failingScope = BigInt("999999") as Hash;
+      const failingPool: PoolInfo = {
+        chainId: 1,
+        address: "0x1234567890123456789012345678901234567890" as Address,
+        scope: failingScope,
+        deploymentBlock: 1000n,
+      };
+
+      vi.spyOn(dataService, "getDeposits").mockResolvedValue([]);
+      vi.spyOn(dataService, "getWithdrawals").mockRejectedValue(
+        new Error("RPC timeout")
+      );
+      vi.spyOn(dataService, "getRagequits").mockResolvedValue([]);
+
+      const { account, errors } = await AccountService.initializeWithEvents(
+        dataService,
+        { service: sourceService },
+        [failingPool]
+      );
+
+      expect(errors.length).toBe(1);
+      expect(errors[0]!.scope).toBe(failingScope);
+      expect(account.account.poolAccounts.has(failingScope)).toBe(false);
+    });
+
+    it("cleans partial state when processing throws mid-scope", async () => {
+      const sourceService = new AccountService(dataService, {
+        mnemonic: TEST_MNEMONIC,
+      });
+
+      const failingScope = BigInt("888888") as Hash;
+      const failingPool: PoolInfo = {
+        chainId: 1,
+        address: "0x1234567890123456789012345678901234567890" as Address,
+        scope: failingScope,
+        deploymentBlock: 1000n,
+      };
+
+      vi.spyOn(dataService, "getDeposits").mockResolvedValue([]);
+      vi.spyOn(dataService, "getWithdrawals").mockResolvedValue([]);
+      vi.spyOn(dataService, "getRagequits").mockResolvedValue([]);
+
+      const depositSpy = vi
+        .spyOn(AccountService.prototype as never, "_processDepositEvents")
+        .mockImplementationOnce(function (this: unknown, ...args: unknown[]) {
+          const self = this as AccountService;
+          const scope = args[0] as Hash;
+          self.account.poolAccounts.set(scope, [
+            {
+              label: BigInt("123") as Hash,
+              deposit: {
+                hash: BigInt("456") as Hash,
+                value: 100n,
+                label: BigInt("123") as Hash,
+                nullifier: BigInt("789") as Secret,
+                secret: BigInt("012") as Secret,
+                blockNumber: 1n,
+                txHash: mockTxHash(1),
+              },
+              children: [],
+            },
+          ]);
+        });
+
+      const withdrawalSpy = vi
+        .spyOn(AccountService.prototype as never, "_processWithdrawalEvents")
+        .mockImplementationOnce(() => {
+          throw new Error("Unexpected processing failure");
+        });
+
+      try {
+        const { account, errors } =
+          await AccountService.initializeWithEvents(
+            dataService,
+            { service: sourceService },
+            [failingPool]
+          );
+
+        expect(errors.length).toBe(1);
+        expect(errors[0]!.reason).toBe("Unexpected processing failure");
+        expect(errors[0]!.scope).toBe(failingScope);
+        expect(account.account.poolAccounts.has(failingScope)).toBe(false);
+      } finally {
+        depositSpy.mockRestore();
+        withdrawalSpy.mockRestore();
+      }
+    });
+  });
+
+  describe("initializeWithEvents — migration", () => {
+    it("returns legacyAccount when mnemonic source", async () => {
+      vi.spyOn(dataService, "getDeposits").mockResolvedValue([]);
+      vi.spyOn(dataService, "getWithdrawals").mockResolvedValue([]);
+      vi.spyOn(dataService, "getRagequits").mockResolvedValue([]);
+
+      const { account, legacyAccount } =
+        await AccountService.initializeWithEvents(
+          dataService,
+          { mnemonic: TEST_MNEMONIC },
+          [TEST_POOL]
+        );
+
+      expect(legacyAccount).toBeDefined();
+      expect(legacyAccount).toBeInstanceOf(AccountService);
+
+      // Verify different master keys
+      const [safeMN] = account.account.masterKeys;
+      const [legacyMN] = legacyAccount!.account.masterKeys;
+      expect(safeMN).not.toBe(legacyMN);
+    });
+
+    it("does not return legacyAccount with service source", async () => {
+      const sourceService = new AccountService(dataService, {
+        mnemonic: TEST_MNEMONIC,
+      });
+
+      vi.spyOn(dataService, "getDeposits").mockResolvedValue([]);
+      vi.spyOn(dataService, "getWithdrawals").mockResolvedValue([]);
+      vi.spyOn(dataService, "getRagequits").mockResolvedValue([]);
+
+      const { legacyAccount } = await AccountService.initializeWithEvents(
+        dataService,
+        { service: sourceService },
+        [TEST_POOL]
+      );
+
+      expect(legacyAccount).toBeUndefined();
+    });
+
+    it("detects migration via hash mismatch on legacy account", async () => {
+      const scenario = buildMigrationScenario({
+        mnemonic: TEST_MNEMONIC,
+        scope: TEST_POOL.scope,
+        depositValue: 100n,
+        withdrawnAmount: 0n,
+      });
+
+      const depositEvent = {
+        depositor: "0x123",
+        commitment: scenario.legacyDepositHash,
+        label: scenario.depositLabel,
+        value: 100n,
+        precommitment: scenario.legacyPrecommitment,
+        blockNumber: 1000n,
+        transactionHash: mockTxHash(1),
+      };
+
+      const withdrawalEvent: WithdrawalEvent = {
+        withdrawn: 0n,
+        spentNullifier: scenario.legacySpentNullifierHash,
+        newCommitment: scenario.safeNewCommitment,
+        blockNumber: 1100n,
+        transactionHash: mockTxHash(2),
+      };
+
+      vi.spyOn(dataService, "getDeposits").mockResolvedValue([depositEvent]);
+      vi.spyOn(dataService, "getWithdrawals").mockResolvedValue([
+        withdrawalEvent,
+      ]);
+      vi.spyOn(dataService, "getRagequits").mockResolvedValue([]);
+
+      const { legacyAccount } = await AccountService.initializeWithEvents(
+        dataService,
+        { mnemonic: TEST_MNEMONIC },
+        [TEST_POOL]
+      );
+
+      const legacyAccounts =
+        legacyAccount!.account.poolAccounts.get(TEST_POOL.scope);
+      expect(legacyAccounts).toBeDefined();
+      expect(legacyAccounts!.length).toBe(1);
+
+      const legacyPoolAccount = legacyAccounts![0]!;
+      expect(legacyPoolAccount.isMigrated).toBe(true);
+      expect(legacyPoolAccount.children.length).toBe(1);
+      expect(legacyPoolAccount.children[0]!.isMigration).toBe(true);
+      expect(legacyPoolAccount.children[0]!.value).toBe(
+        scenario.remainingValue
+      );
+    });
+
+    it("discovers migrated commitment as safe pool account", async () => {
+      const scenario = buildMigrationScenario({
+        mnemonic: TEST_MNEMONIC,
+        scope: TEST_POOL.scope,
+        depositValue: 100n,
+        withdrawnAmount: 0n,
+      });
+
+      const depositEvent = {
+        depositor: "0x123",
+        commitment: scenario.legacyDepositHash,
+        label: scenario.depositLabel,
+        value: 100n,
+        precommitment: scenario.legacyPrecommitment,
+        blockNumber: 1000n,
+        transactionHash: mockTxHash(1),
+      };
+
+      const withdrawalEvent: WithdrawalEvent = {
+        withdrawn: 0n,
+        spentNullifier: scenario.legacySpentNullifierHash,
+        newCommitment: scenario.safeNewCommitment,
+        blockNumber: 1100n,
+        transactionHash: mockTxHash(2),
+      };
+
+      vi.spyOn(dataService, "getDeposits").mockResolvedValue([depositEvent]);
+      vi.spyOn(dataService, "getWithdrawals").mockResolvedValue([
+        withdrawalEvent,
+      ]);
+      vi.spyOn(dataService, "getRagequits").mockResolvedValue([]);
+
+      const { account } = await AccountService.initializeWithEvents(
+        dataService,
+        { mnemonic: TEST_MNEMONIC },
+        [TEST_POOL]
+      );
+
+      const safeAccounts = account.account.poolAccounts.get(TEST_POOL.scope);
+      expect(safeAccounts).toBeDefined();
+      expect(safeAccounts!.length).toBe(1);
+
+      const safePoolAccount = safeAccounts![0]!;
+      expect(safePoolAccount.deposit.value).toBe(scenario.remainingValue);
+      expect(safePoolAccount.deposit.nullifier).toBe(scenario.safeWNullifier);
+      expect(safePoolAccount.deposit.secret).toBe(scenario.safeWSecret);
+    });
+
+    it("handles partial withdrawal before migration", async () => {
+      const scenario = buildMigrationScenario({
+        mnemonic: TEST_MNEMONIC,
+        scope: TEST_POOL.scope,
+        depositValue: 100n,
+        withdrawnAmount: 30n,
+      });
+
+      // Normal withdrawal (legacy keys at index 0)
+      const legacyWNullifier_0 = poseidon([
+        scenario.legacyMasterNullifier,
+        scenario.depositLabel,
+        0n,
+      ]) as Secret;
+      const legacyWSecret_0 = poseidon([
+        scenario.legacyMasterSecret,
+        scenario.depositLabel,
+        0n,
+      ]) as Secret;
+      const legacyWPrecommitment_0 = poseidon([
+        legacyWNullifier_0,
+        legacyWSecret_0,
+      ]) as Hash;
+      const normalNewCommitment = poseidon([
+        70n,
+        scenario.depositLabel,
+        legacyWPrecommitment_0,
+      ]) as Hash;
+
+      // Migration spent nullifier (spending the normal withdrawal child)
+      const migrationSpentNullifier = poseidon([legacyWNullifier_0]) as Hash;
+
+      const depositEvent = {
+        depositor: "0x123",
+        commitment: scenario.legacyDepositHash,
+        label: scenario.depositLabel,
+        value: 100n,
+        precommitment: scenario.legacyPrecommitment,
+        blockNumber: 1000n,
+        transactionHash: mockTxHash(1),
+      };
+
+      // Event 1: normal withdrawal (30n)
+      const normalWithdrawal: WithdrawalEvent = {
+        withdrawn: 30n,
+        spentNullifier: scenario.legacySpentNullifierHash,
+        newCommitment: normalNewCommitment,
+        blockNumber: 1100n,
+        transactionHash: mockTxHash(2),
+      };
+
+      // Event 2: migration (0n withdrawn, safe keys)
+      const migrationWithdrawal: WithdrawalEvent = {
+        withdrawn: 0n,
+        spentNullifier: migrationSpentNullifier,
+        newCommitment: scenario.safeNewCommitment,
+        blockNumber: 1200n,
+        transactionHash: mockTxHash(3),
+      };
+
+      vi.spyOn(dataService, "getDeposits").mockResolvedValue([depositEvent]);
+      vi.spyOn(dataService, "getWithdrawals").mockResolvedValue([
+        normalWithdrawal,
+        migrationWithdrawal,
+      ]);
+      vi.spyOn(dataService, "getRagequits").mockResolvedValue([]);
+
+      const { account, legacyAccount } =
+        await AccountService.initializeWithEvents(
+          dataService,
+          { mnemonic: TEST_MNEMONIC },
+          [TEST_POOL]
+        );
+
+      // Legacy: deposit + 2 children (normal 70n, migration 70n)
+      const legacyAccounts =
+        legacyAccount!.account.poolAccounts.get(TEST_POOL.scope)!;
+      expect(legacyAccounts.length).toBe(1);
+
+      const legacyPoolAccount = legacyAccounts[0]!;
+      expect(legacyPoolAccount.children.length).toBe(2);
+      expect(legacyPoolAccount.children[0]!.value).toBe(70n);
+      expect(legacyPoolAccount.children[0]!.isMigration).toBeFalsy();
+      expect(legacyPoolAccount.children[1]!.value).toBe(70n);
+      expect(legacyPoolAccount.children[1]!.isMigration).toBe(true);
+
+      // Safe: new account with value 70n
+      const safeAccounts =
+        account.account.poolAccounts.get(TEST_POOL.scope)!;
+      expect(safeAccounts.length).toBe(1);
+      expect(safeAccounts[0]!.deposit.value).toBe(70n);
+    });
+
+    it("safe account processes further withdrawals after migration", async () => {
+      const scenario = buildMigrationScenario({
+        mnemonic: TEST_MNEMONIC,
+        scope: TEST_POOL.scope,
+        depositValue: 100n,
+        withdrawnAmount: 0n,
+      });
+
+      // Further withdrawal: safe keys at index 1
+      const safeSpentNullifier = poseidon([scenario.safeWNullifier]) as Hash;
+      const safeWNullifier_1 = poseidon([
+        scenario.safeMasterNullifier,
+        scenario.depositLabel,
+        1n,
+      ]) as Secret;
+      const safeWSecret_1 = poseidon([
+        scenario.safeMasterSecret,
+        scenario.depositLabel,
+        1n,
+      ]) as Secret;
+      const safeWPrecommitment_1 = poseidon([
+        safeWNullifier_1,
+        safeWSecret_1,
+      ]) as Hash;
+      const furtherNewCommitment = poseidon([
+        75n,
+        scenario.depositLabel,
+        safeWPrecommitment_1,
+      ]) as Hash;
+
+      const depositEvent = {
+        depositor: "0x123",
+        commitment: scenario.legacyDepositHash,
+        label: scenario.depositLabel,
+        value: 100n,
+        precommitment: scenario.legacyPrecommitment,
+        blockNumber: 1000n,
+        transactionHash: mockTxHash(1),
+      };
+
+      const migrationWithdrawal: WithdrawalEvent = {
+        withdrawn: 0n,
+        spentNullifier: scenario.legacySpentNullifierHash,
+        newCommitment: scenario.safeNewCommitment,
+        blockNumber: 1100n,
+        transactionHash: mockTxHash(2),
+      };
+
+      const furtherWithdrawal: WithdrawalEvent = {
+        withdrawn: 25n,
+        spentNullifier: safeSpentNullifier,
+        newCommitment: furtherNewCommitment,
+        blockNumber: 1200n,
+        transactionHash: mockTxHash(3),
+      };
+
+      vi.spyOn(dataService, "getDeposits").mockResolvedValue([depositEvent]);
+      vi.spyOn(dataService, "getWithdrawals").mockResolvedValue([
+        migrationWithdrawal,
+        furtherWithdrawal,
+      ]);
+      vi.spyOn(dataService, "getRagequits").mockResolvedValue([]);
+
+      const { account } = await AccountService.initializeWithEvents(
+        dataService,
+        { mnemonic: TEST_MNEMONIC },
+        [TEST_POOL]
+      );
+
+      const safeAccounts =
+        account.account.poolAccounts.get(TEST_POOL.scope)!;
+      expect(safeAccounts.length).toBe(1);
+      expect(safeAccounts[0]!.children.length).toBe(2);
+      expect(safeAccounts[0]!.children[1]!.value).toBe(75n);
+    });
+
+    it("ragequit on migrated account", async () => {
+      const scenario = buildMigrationScenario({
+        mnemonic: TEST_MNEMONIC,
+        scope: TEST_POOL.scope,
+        depositValue: 100n,
+        withdrawnAmount: 0n,
+      });
+
+      const depositEvent = {
+        depositor: "0x123",
+        commitment: scenario.legacyDepositHash,
+        label: scenario.depositLabel,
+        value: 100n,
+        precommitment: scenario.legacyPrecommitment,
+        blockNumber: 1000n,
+        transactionHash: mockTxHash(1),
+      };
+
+      const migrationWithdrawal: WithdrawalEvent = {
+        withdrawn: 0n,
+        spentNullifier: scenario.legacySpentNullifierHash,
+        newCommitment: scenario.safeNewCommitment,
+        blockNumber: 1100n,
+        transactionHash: mockTxHash(2),
+      };
+
+      const ragequitEvent: RagequitEvent = {
+        ragequitter: "0x123",
+        commitment: scenario.legacyDepositHash,
+        label: scenario.depositLabel,
+        value: 100n,
+        blockNumber: 1200n,
+        transactionHash: mockTxHash(3),
+      };
+
+      vi.spyOn(dataService, "getDeposits").mockResolvedValue([depositEvent]);
+      vi.spyOn(dataService, "getWithdrawals").mockResolvedValue([
+        migrationWithdrawal,
+      ]);
+      vi.spyOn(dataService, "getRagequits").mockResolvedValue([ragequitEvent]);
+
+      const { account, legacyAccount } =
+        await AccountService.initializeWithEvents(
+          dataService,
+          { mnemonic: TEST_MNEMONIC },
+          [TEST_POOL]
+        );
+
+      // Legacy should have ragequit
+      const legacyAccounts =
+        legacyAccount!.account.poolAccounts.get(TEST_POOL.scope)!;
+      expect(legacyAccounts[0]!.ragequit).toBeDefined();
+
+      // Safe should also have ragequit (same label)
+      const safeAccounts =
+        account.account.poolAccounts.get(TEST_POOL.scope)!;
+      expect(safeAccounts[0]!.ragequit).toBeDefined();
+
+      // Neither should be spendable
+      const legacySpendable = legacyAccount!.getSpendableCommitments();
+      const safeSpendable = account.getSpendableCommitments();
+      expect(legacySpendable.has(TEST_POOL.scope)).toBe(false);
+      expect(safeSpendable.has(TEST_POOL.scope)).toBe(false);
+    });
+
+    it("discovers post-migration safe-key deposits after migrated accounts", async () => {
+      const scenario = buildMigrationScenario({
+        mnemonic: TEST_MNEMONIC,
+        scope: TEST_POOL.scope,
+        depositValue: 100n,
+        withdrawnAmount: 0n,
+      });
+
+      // Legacy deposit event (index 0, legacy keys)
+      const legacyDepositEvent = {
+        depositor: "0x123",
+        commitment: scenario.legacyDepositHash,
+        label: scenario.depositLabel,
+        value: 100n,
+        precommitment: scenario.legacyPrecommitment,
+        blockNumber: 1000n,
+        transactionHash: mockTxHash(1),
+      };
+
+      // Migration withdrawal event (0-value withdrawal, legacy -> safe)
+      const migrationWithdrawal: WithdrawalEvent = {
+        withdrawn: 0n,
+        spentNullifier: scenario.legacySpentNullifierHash,
+        newCommitment: scenario.safeNewCommitment,
+        blockNumber: 1100n,
+        transactionHash: mockTxHash(2),
+      };
+
+      // New safe-key deposit at index 1 (the index right after the migrated account).
+      // After migration discovery, poolAccounts.length = 1, so the next
+      // createDepositSecrets call uses index 1 with safe keys.
+      const safeDepositNullifier = poseidon([
+        scenario.safeMasterNullifier,
+        TEST_POOL.scope,
+        1n,
+      ]) as Secret;
+      const safeDepositSecret = poseidon([
+        scenario.safeMasterSecret,
+        TEST_POOL.scope,
+        1n,
+      ]) as Secret;
+      const safePrecommitment = poseidon([
+        safeDepositNullifier,
+        safeDepositSecret,
+      ]) as Hash;
+      const safeDepositLabel = BigInt("111222333") as Hash;
+      const safeDepositHash = poseidon([
+        50n,
+        safeDepositLabel,
+        safePrecommitment,
+      ]) as Hash;
+
+      const safeDepositEvent = {
+        depositor: "0x456",
+        commitment: safeDepositHash,
+        label: safeDepositLabel,
+        value: 50n,
+        precommitment: safePrecommitment,
+        blockNumber: 1200n,
+        transactionHash: mockTxHash(3),
+      };
+
+      vi.spyOn(dataService, "getDeposits").mockResolvedValue([
+        legacyDepositEvent,
+        safeDepositEvent,
+      ]);
+      vi.spyOn(dataService, "getWithdrawals").mockResolvedValue([
+        migrationWithdrawal,
+      ]);
+      vi.spyOn(dataService, "getRagequits").mockResolvedValue([]);
+
+      const { account } = await AccountService.initializeWithEvents(
+        dataService,
+        { mnemonic: TEST_MNEMONIC },
+        [TEST_POOL]
+      );
+
+      const safeAccounts = account.account.poolAccounts.get(TEST_POOL.scope)!;
+
+      // Should have 2 accounts: 1 from migration discovery + 1 from safe deposit scan
+      expect(safeAccounts.length).toBe(2);
+
+      // First account: migrated commitment (value 100n from migration)
+      expect(safeAccounts[0]!.deposit.value).toBe(100n);
+      expect(safeAccounts[0]!.deposit.nullifier).toBe(scenario.safeWNullifier);
+      expect(safeAccounts[0]!.deposit.secret).toBe(scenario.safeWSecret);
+
+      // Second account: new safe-key deposit (value 50n at index 1)
+      expect(safeAccounts[1]!.deposit.value).toBe(50n);
+      expect(safeAccounts[1]!.deposit.nullifier).toBe(safeDepositNullifier);
+      expect(safeAccounts[1]!.deposit.secret).toBe(safeDepositSecret);
+      expect(safeAccounts[1]!.deposit.label).toBe(safeDepositLabel);
+    });
+
+    it("sanity: legacy and safe keys differ", async () => {
+      vi.spyOn(dataService, "getDeposits").mockResolvedValue([]);
+      vi.spyOn(dataService, "getWithdrawals").mockResolvedValue([]);
+      vi.spyOn(dataService, "getRagequits").mockResolvedValue([]);
+
+      const { account, legacyAccount } =
+        await AccountService.initializeWithEvents(
+          dataService,
+          { mnemonic: TEST_MNEMONIC },
+          [TEST_POOL]
+        );
+
+      const [safeMN, safeMS] = account.account.masterKeys;
+      const [legacyMN, legacyMS] = legacyAccount!.account.masterKeys;
+
+      expect(legacyMN).not.toBe(safeMN);
+      expect(legacyMS).not.toBe(safeMS);
     });
   });
 });

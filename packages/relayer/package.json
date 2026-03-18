@@ -1,6 +1,6 @@
 {
   "name": "@privacy-pool-core/relayer",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "private": true,
   "description": "A simple note relayer",
   "license": "Apache-2.0",
