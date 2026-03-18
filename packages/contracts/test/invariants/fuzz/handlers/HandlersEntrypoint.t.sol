@@ -12,7 +12,7 @@ contract HandlersEntrypoint is Setup {
     uint256 _poolBalanceBefore = token.balanceOf(address(tokenPool));
     uint256 _entrypointBalanceBefore = token.balanceOf(address(entrypoint));
 
-    require(entrypoint.usedPrecommitments(_precommitment) == false);
+    vm.assume(entrypoint.usedPrecommitments(_precommitment) == false);
 
     token.transfer(address(currentActor()), _amount);
     (bool success, bytes memory result) = currentActor().call(

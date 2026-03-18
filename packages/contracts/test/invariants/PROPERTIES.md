@@ -4,6 +4,7 @@
 These properties are focused mostly on the protocol accounting, as the constraints around
 commitment and all inputs are handled by the circuits.
 
+
 ## General
 
 We include non-reversion invariants for deposit/withdraw/ragequit
@@ -40,9 +41,8 @@ The `ACC` invariants are based on the following accounting:
 ### Accounting operations & writings
 
 We take some writing shortcuts (sorry accountant friends), as some intermediate writings would not be reflected in our tests anyway and for clarity purposes:
-
 - deposit:
--- decrease: sender balance
+-- decrease: sender balance 
 -- increase: token balance (+ ghost: total token in), net deposit non-withdrawn, vetting fee non withdrawn (vetting)
 
 - withdraw:
@@ -52,12 +52,3 @@ We take some writing shortcuts (sorry accountant friends), as some intermediate 
 - vetting fee withdrawal:
 -- decrease: fee non withdrawn, token balance
 -- increase: entry point balance (+ ghost: total fee out)
-
-### Batch Withdrawals
-
-Additional functionality have been added to the protocol to allow batch withdrawals, in terms of invariant, the original ones should still hold.
-Some new ones are introduced:
-
-- batch relayer balance should never be positive
-- processing fee should be paid as the fee taken on the sum of individual withdrawals, `sum(withdrawal amount)*relayer fee / 10_000`
-- same for the recipient balance, it should be the sum of individual withdrawals recipient balance (minus fees), `sum(withdrawal amount) - sum(withdrawal amount)*relayer fee / 10_000`

@@ -32,9 +32,9 @@ contract IntegrationNative is IntegrationBase {
         newNullifier: 'nullifier_2',
         newSecret: 'secret_2',
         recipient: _BOB,
-        commitment: _commitment
-      }),
-      NONE
+        commitment: _commitment,
+        revertReason: NONE
+      })
     );
   }
 
@@ -58,9 +58,9 @@ contract IntegrationNative is IntegrationBase {
         newNullifier: 'nullifier_2',
         newSecret: 'secret_2',
         recipient: _BOB,
-        commitment: _commitment
-      }),
-      NONE
+        commitment: _commitment,
+        revertReason: NONE
+      })
     );
   }
 
@@ -84,9 +84,9 @@ contract IntegrationNative is IntegrationBase {
         newNullifier: 'nullifier_2',
         newSecret: 'secret_2',
         recipient: _BOB,
-        commitment: _commitment
-      }),
-      NONE
+        commitment: _commitment,
+        revertReason: NONE
+      })
     );
   }
 
@@ -110,9 +110,9 @@ contract IntegrationNative is IntegrationBase {
         newNullifier: 'nullifier_2',
         newSecret: 'secret_2',
         recipient: _BOB,
-        commitment: _commitment
-      }),
-      NONE
+        commitment: _commitment,
+        revertReason: NONE
+      })
     );
 
     // Withdraw 20 ETH to Bob
@@ -122,9 +122,9 @@ contract IntegrationNative is IntegrationBase {
         newNullifier: 'nullifier_3',
         newSecret: 'secret_3',
         recipient: _BOB,
-        commitment: _commitment
-      }),
-      NONE
+        commitment: _commitment,
+        revertReason: NONE
+      })
     );
 
     // Withdraw 20 ETH to Bob
@@ -134,9 +134,9 @@ contract IntegrationNative is IntegrationBase {
         newNullifier: 'nullifier_4',
         newSecret: 'secret_4',
         recipient: _BOB,
-        commitment: _commitment
-      }),
-      NONE
+        commitment: _commitment,
+        revertReason: NONE
+      })
     );
 
     // Withdraw 20 ETH to Bob
@@ -146,9 +146,9 @@ contract IntegrationNative is IntegrationBase {
         newNullifier: 'nullifier_5',
         newSecret: 'secret_5',
         recipient: _BOB,
-        commitment: _commitment
-      }),
-      NONE
+        commitment: _commitment,
+        revertReason: NONE
+      })
     );
 
     // Withdraw remaining balance to Bob
@@ -158,9 +158,9 @@ contract IntegrationNative is IntegrationBase {
         newNullifier: 'nullifier_6',
         newSecret: 'secret_6',
         recipient: _BOB,
-        commitment: _commitment
-      }),
-      NONE
+        commitment: _commitment,
+        revertReason: NONE
+      })
     );
   }
 
@@ -184,9 +184,9 @@ contract IntegrationNative is IntegrationBase {
         newNullifier: 'nullifier_2',
         newSecret: 'secret_2',
         recipient: _BOB,
-        commitment: _commitment
-      }),
-      NONE
+        commitment: _commitment,
+        revertReason: NONE
+      })
     );
   }
 
@@ -210,9 +210,9 @@ contract IntegrationNative is IntegrationBase {
         newNullifier: 'nullifier_2',
         newSecret: 'secret_2',
         recipient: _BOB,
-        commitment: _commitment
-      }),
-      NONE
+        commitment: _commitment,
+        revertReason: NONE
+      })
     );
 
     // Withdraw 20 ETH to Bob
@@ -222,9 +222,9 @@ contract IntegrationNative is IntegrationBase {
         newNullifier: 'nullifier_3',
         newSecret: 'secret_3',
         recipient: _BOB,
-        commitment: _commitment
-      }),
-      NONE
+        commitment: _commitment,
+        revertReason: NONE
+      })
     );
 
     // Withdraw 20 ETH to Bob
@@ -234,9 +234,9 @@ contract IntegrationNative is IntegrationBase {
         newNullifier: 'nullifier_4',
         newSecret: 'secret_4',
         recipient: _BOB,
-        commitment: _commitment
-      }),
-      NONE
+        commitment: _commitment,
+        revertReason: NONE
+      })
     );
 
     // Withdraw 20 ETH to Bob
@@ -246,9 +246,9 @@ contract IntegrationNative is IntegrationBase {
         newNullifier: 'nullifier_5',
         newSecret: 'secret_5',
         recipient: _BOB,
-        commitment: _commitment
-      }),
-      NONE
+        commitment: _commitment,
+        revertReason: NONE
+      })
     );
 
     // Withdraw remaining balance to Bob
@@ -258,9 +258,9 @@ contract IntegrationNative is IntegrationBase {
         newNullifier: 'nullifier_6',
         newSecret: 'secret_6',
         recipient: _BOB,
-        commitment: _commitment
-      }),
-      NONE
+        commitment: _commitment,
+        revertReason: NONE
+      })
     );
   }
 
@@ -286,9 +286,9 @@ contract IntegrationNative is IntegrationBase {
         newNullifier: 'nullifier_2',
         newSecret: 'secret_2',
         recipient: _BOB,
-        commitment: _commitment
-      }),
-      IPrivacyPool.IncorrectASPRoot.selector
+        commitment: _commitment,
+        revertReason: IPrivacyPool.IncorrectASPRoot.selector
+      })
     );
 
     // Ragequit full amount
@@ -315,9 +315,9 @@ contract IntegrationNative is IntegrationBase {
         newNullifier: 'nullifier_2',
         newSecret: 'secret_2',
         recipient: _BOB,
-        commitment: _commitment
-      }),
-      NONE
+        commitment: _commitment,
+        revertReason: NONE
+      })
     );
 
     // Remove label from ASP
@@ -333,9 +333,9 @@ contract IntegrationNative is IntegrationBase {
         newNullifier: 'nullifier_3',
         newSecret: 'secret_3',
         recipient: _BOB,
-        commitment: _commitment
-      }),
-      IPrivacyPool.IncorrectASPRoot.selector
+        commitment: _commitment,
+        revertReason: IPrivacyPool.IncorrectASPRoot.selector
+      })
     );
 
     // Ragequit
@@ -362,9 +362,9 @@ contract IntegrationNative is IntegrationBase {
         newNullifier: 'nullifier_2',
         newSecret: 'secret_2',
         recipient: _BOB,
-        commitment: _commitment
-      }),
-      NONE
+        commitment: _commitment,
+        revertReason: NONE
+      })
     );
 
     // Fail to spend same commitment that was just spent
@@ -374,9 +374,9 @@ contract IntegrationNative is IntegrationBase {
         newNullifier: 'nullifier_3',
         newSecret: 'secret_3',
         recipient: _BOB,
-        commitment: _commitment
-      }),
-      IState.NullifierAlreadySpent.selector
+        commitment: _commitment,
+        revertReason: IState.NullifierAlreadySpent.selector
+      })
     );
   }
 
@@ -403,9 +403,9 @@ contract IntegrationNative is IntegrationBase {
         newNullifier: 'nullifier_2',
         newSecret: 'secret_2',
         recipient: _BOB,
-        commitment: _commitment
-      }),
-      IState.NullifierAlreadySpent.selector
+        commitment: _commitment,
+        revertReason: IState.NullifierAlreadySpent.selector
+      })
     );
   }
 }

@@ -7,8 +7,6 @@ import {IPrivacyPool} from 'contracts/PrivacyPool.sol';
 import {PrivacyPoolComplex} from 'contracts/implementations/PrivacyPoolComplex.sol';
 import {PrivacyPoolSimple} from 'contracts/implementations/PrivacyPoolSimple.sol';
 
-import {BatchRelayer} from 'contracts/BatchRelayer.sol';
-
 import {ProofLib} from 'contracts/lib/ProofLib.sol';
 import {InternalLeanIMT, LeanIMTData} from 'lean-imt/InternalLeanIMT.sol';
 
@@ -30,8 +28,6 @@ contract Setup is HandlerActors, GhostStorage, FuzzUtils {
   Entrypoint entrypoint;
   IPrivacyPool nativePool;
   IPrivacyPool tokenPool;
-
-  BatchRelayer batchRelayer;
 
   uint256 MIN_DEPOSIT = 1 ether;
 
@@ -64,8 +60,6 @@ contract Setup is HandlerActors, GhostStorage, FuzzUtils {
 
     vm.prank(POSTMAN);
     entrypoint.updateRoot(1, 'ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid_ipfs_cid');
-
-    batchRelayer = new BatchRelayer(MAX_RELAY_FEE);
 
     createNewActors(5);
 

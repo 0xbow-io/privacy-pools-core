@@ -3,12 +3,11 @@ pragma solidity ^0.8.0;
 
 import {Actors} from '../helpers/Actors.sol';
 import {PropertiesAccounting} from './PropertiesAccounting.t.sol';
-import {PropertiesBatchWithdraw} from './PropertiesBatchWithdraw.t.sol';
 import {PropertiesPool} from './PropertiesPool.t.sol';
 import {PropertiesPoseidon} from './PropertiesPoseidon.t.sol';
 import {ProofLib} from 'contracts/PrivacyPool.sol';
 
-contract PropertiesParent is PropertiesAccounting, PropertiesPool, PropertiesPoseidon, PropertiesBatchWithdraw {
+contract PropertiesParent is PropertiesAccounting, PropertiesPool, PropertiesPoseidon {
   function property_protocolWindDown() public {
     // Force only valid proofs
     if (!mockVerifier.validProof()) this.handler_mockVerifier_switchProofValidity();

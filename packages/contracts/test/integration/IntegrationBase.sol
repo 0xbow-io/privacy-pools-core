@@ -28,10 +28,6 @@ import {PoseidonT4} from 'poseidon/PoseidonT4.sol';
 import {ICreateX} from 'interfaces/external/ICreateX.sol';
 import {Constants} from 'test/helper/Constants.sol';
 
-import {BatchRelayer} from 'contracts/BatchRelayer.sol';
-import {IBatchRelayer} from 'interfaces/IBatchRelayer.sol';
-import {DeployBatchRelayer} from 'script/BatchRelayer.s.sol';
-
 contract IntegrationBase is IntegrationUtils {
   using InternalLeanIMT for LeanIMTData;
 
@@ -45,7 +41,6 @@ contract IntegrationBase is IntegrationUtils {
   Entrypoint internal _entrypoint;
   PrivacyPoolSimple internal _ethPool;
   PrivacyPoolComplex internal _daiPool;
-  BatchRelayer internal _batchRelayer;
 
   // Groth16 Verifiers
   CommitmentVerifier internal _commitmentVerifier;
@@ -86,6 +81,7 @@ contract IntegrationBase is IntegrationUtils {
                               SETUP
   //////////////////////////////////////////////////////////////*/
 
+  //asd
   function setUp() public virtual {
     vm.createSelectFork(vm.rpcUrl('mainnet'));
 
@@ -151,38 +147,6 @@ contract IntegrationBase is IntegrationUtils {
     _entrypoint.registerPool(_DAI, IPrivacyPool(address(_daiPool)), _MIN_DEPOSIT, _VETTING_FEE_BPS, _MAX_RELAY_FEE_BPS);
 
     vm.stopPrank();
-
-    // Deploy Batch Relayer
-    _batchRelayer = BatchRelayer(payable(address((new DeployBatchRelayer()).run())));
-  }
-
-  function _computeNewCommitmentAndProof(
-    uint256 _context,
-    WithdrawalParams memory _params
-  ) internal returns (Commitment memory _commitment, ProofLib.WithdrawProof memory _proof) {
-    // Compute new commitment properties
-    _commitment.value = _params.commitment.value - _params.withdrawnAmount;
-    _commitment.label = _params.commitment.label;
-    _commitment.nullifier = _genSecretBySeed(_params.newNullifier);
-    _commitment.secret = _genSecretBySeed(_params.newSecret);
-    _commitment.precommitment = _hashPrecommitment(_commitment.nullifier, _commitment.secret);
-    _commitment.hash = _hashCommitment(_commitment.value, _commitment.label, _commitment.precommitment);
-    _commitment.asset = _params.commitment.asset;
-
-    // Generate withdrawal proof
-    _proof = _generateWithdrawalProof(
-      WithdrawalProofParams({
-        existingCommitment: _params.commitment.hash,
-        withdrawnValue: _params.withdrawnAmount,
-        context: _context,
-        label: _params.commitment.label,
-        existingValue: _params.commitment.value,
-        existingNullifier: _params.commitment.nullifier,
-        existingSecret: _params.commitment.secret,
-        newNullifier: _commitment.nullifier,
-        newSecret: _commitment.secret
-      })
-    );
   }
 
   /*///////////////////////////////////////////////////////////////
@@ -265,10 +229,7 @@ contract IntegrationBase is IntegrationUtils {
                       WITHDRAWAL METHODS
   //////////////////////////////////////////////////////////////*/
 
-  function _selfWithdraw(
-    WithdrawalParams memory _params,
-    bytes4 _revertReason
-  ) internal returns (Commitment memory _commitment) {
+  function _selfWithdraw(WithdrawalParams memory _params) internal returns (Commitment memory _commitment) {
     // Define pool to deposit to
     IPrivacyPool _pool = _params.commitment.asset == IERC20(Constants.NATIVE_ASSET)
       ? IPrivacyPool(address(_ethPool))
@@ -278,13 +239,10 @@ contract IntegrationBase is IntegrationUtils {
     IPrivacyPool.Withdrawal memory _withdrawal = IPrivacyPool.Withdrawal({processooor: _params.recipient, data: ''});
 
     // Withdraw
-    _commitment = _withdraw(_params.recipient, _pool, _withdrawal, _params, true, _revertReason);
+    _commitment = _withdraw(_params.recipient, _pool, _withdrawal, _params, true);
   }
 
-  function _withdrawThroughRelayer(
-    WithdrawalParams memory _params,
-    bytes4 _revertReason
-  ) internal returns (Commitment memory _commitment) {
+  function _withdrawThroughRelayer(WithdrawalParams memory _params) internal returns (Commitment memory _commitment) {
     // Define pool to deposit to
     IPrivacyPool _pool = _params.commitment.asset == IERC20(Constants.NATIVE_ASSET)
       ? IPrivacyPool(address(_ethPool))
@@ -297,84 +255,7 @@ contract IntegrationBase is IntegrationUtils {
     });
 
     // Withdraw
-    _commitment = _withdraw(_RELAYER, _pool, _withdrawal, _params, false, _revertReason);
-  }
-
-  function _withdrawThroughBatchRelayer(
-    WithdrawalParams[] memory _params,
-    IBatchRelayer.BatchRelayData memory _data,
-    bytes4 _revertReason
-  ) internal returns (Commitment[] memory _commitments) {
-    _withdrawThroughBatchRelayer(address(_batchRelayer), _params, _data, _revertReason);
-  }
-
-  function _withdrawThroughBatchRelayer(
-    address _processooor,
-    WithdrawalParams[] memory _params,
-    IBatchRelayer.BatchRelayData memory _data,
-    bytes4 _revertReason
-  ) internal returns (Commitment[] memory _commitments) {
-    // Define pool to deposit to
-    IPrivacyPool _pool = _params[0].commitment.asset == IERC20(Constants.NATIVE_ASSET)
-      ? IPrivacyPool(address(_ethPool))
-      : IPrivacyPool(address(_daiPool));
-
-    // Build `Withdrawal` object for relayed withdrawal
-    IPrivacyPool.Withdrawal memory _withdrawal =
-      IPrivacyPool.Withdrawal({processooor: _processooor, data: abi.encode(_data)});
-
-    // Get asset and recipient from first withdrawal
-    IERC20 _asset = _params[0].commitment.asset;
-    address _recipient = _params[0].recipient;
-
-    // Fetch balances before withdrawal
-    uint256 _recipientInitialBalance = _balance(_recipient, _asset);
-    uint256 _entrypointInitialBalance = _balance(address(_entrypoint), _asset);
-    uint256 _poolInitialBalance = _balance(address(_pool), _asset);
-
-    // Compute context hash
-    uint256 _context = uint256(keccak256(abi.encode(_withdrawal, _pool.SCOPE()))) % SNARK_SCALAR_FIELD;
-
-    _commitments = new Commitment[](_params.length);
-
-    ProofLib.WithdrawProof[] memory _proofs = new ProofLib.WithdrawProof[](_params.length);
-
-    for (uint256 i = 0; i < _params.length; i++) {
-      (_commitments[i], _proofs[i]) = _computeNewCommitmentAndProof(_context, _params[i]);
-    }
-
-    vm.prank(_RELAYER);
-    if (_revertReason != NONE) vm.expectRevert(_revertReason);
-    _batchRelayer.batchRelay(_pool, _withdrawal, _proofs);
-
-    if (_revertReason == NONE) {
-      uint256 _withdrawnAmount;
-
-      for (uint256 i = 0; i < _params.length; i++) {
-        // Check nullifier hash has been spent
-        assertTrue(_pool.nullifierHashes(_proofs[i].pubSignals[1]), 'Existing nullifier hash must be spent');
-
-        // Insert new commitment in mirrored state tree
-        _insertIntoShadowMerkleTree(_commitments[i].hash);
-
-        _withdrawnAmount += _params[i].withdrawnAmount;
-      }
-
-      // Discount fees
-      uint256 _withdrawnAmountAfterFees =
-        _deductFee(_withdrawnAmount, (abi.decode(_withdrawal.data, (IBatchRelayer.BatchRelayData))).relayFeeBPS);
-
-      // Check balance changes
-      if (_data.feeRecipient == _data.recipient) {
-        assertEq(_balance(_recipient, _asset), _recipientInitialBalance + _withdrawnAmount, 'User balance mismatch');
-      } else {
-        assertEq(
-          _balance(_recipient, _asset), _recipientInitialBalance + _withdrawnAmountAfterFees, 'User balance mismatch'
-        );
-      }
-      assertEq(_balance(address(_entrypoint), _asset), _entrypointInitialBalance, "Entrypoint balance shouldn't change");
-      assertEq(_balance(address(_pool), _asset), _poolInitialBalance - _withdrawnAmount, 'Pool balance mismatch');
-    }
+    _commitment = _withdraw(_RELAYER, _pool, _withdrawal, _params, false);
   }
 
   function _withdraw(
@@ -382,8 +263,7 @@ contract IntegrationBase is IntegrationUtils {
     IPrivacyPool _pool,
     IPrivacyPool.Withdrawal memory _withdrawal,
     WithdrawalParams memory _params,
-    bool _direct,
-    bytes4 _revertReason
+    bool _direct
   ) internal returns (Commitment memory _commitment) {
     // Fetch balances before withdrawal
     uint256 _recipientInitialBalance = _balance(_params.recipient, _params.commitment.asset);
@@ -394,21 +274,41 @@ contract IntegrationBase is IntegrationUtils {
     uint256 _context = uint256(keccak256(abi.encode(_withdrawal, _pool.SCOPE()))) % SNARK_SCALAR_FIELD;
 
     // Compute new commitment properties
-    ProofLib.WithdrawProof memory _proof;
-    (_commitment, _proof) = _computeNewCommitmentAndProof(_context, _params);
+    _commitment.value = _params.commitment.value - _params.withdrawnAmount;
+    _commitment.label = _params.commitment.label;
+    _commitment.nullifier = _genSecretBySeed(_params.newNullifier);
+    _commitment.secret = _genSecretBySeed(_params.newSecret);
+    _commitment.precommitment = _hashPrecommitment(_commitment.nullifier, _commitment.secret);
+    _commitment.hash = _hashCommitment(_commitment.value, _commitment.label, _commitment.precommitment);
+    _commitment.asset = _params.commitment.asset;
+
+    // Generate withdrawal proof
+    ProofLib.WithdrawProof memory _proof = _generateWithdrawalProof(
+      WithdrawalProofParams({
+        existingCommitment: _params.commitment.hash,
+        withdrawnValue: _params.withdrawnAmount,
+        context: _context,
+        label: _params.commitment.label,
+        existingValue: _params.commitment.value,
+        existingNullifier: _params.commitment.nullifier,
+        existingSecret: _params.commitment.secret,
+        newNullifier: _commitment.nullifier,
+        newSecret: _commitment.secret
+      })
+    );
 
     uint256 _scope = _pool.SCOPE();
 
     // Process withdrawal
     vm.prank(_caller);
-    if (_revertReason != NONE) vm.expectRevert(_revertReason);
+    if (_params.revertReason != NONE) vm.expectRevert(_params.revertReason);
     if (_direct) {
       _pool.withdraw(_withdrawal, _proof);
     } else {
       _entrypoint.relay(_withdrawal, _proof, _scope);
     }
 
-    if (_revertReason == NONE) {
+    if (_params.revertReason == NONE) {
       // Check nullifier hash has been spent
       assertTrue(_pool.nullifierHashes(_proof.pubSignals[1]), 'Existing nullifier hash must be spent');
 
