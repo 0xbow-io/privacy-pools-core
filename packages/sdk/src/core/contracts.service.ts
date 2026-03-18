@@ -250,17 +250,17 @@ export class ContractInteractionsService implements ContractInteractions {
   }
 
   /**
-   * Retrieves the latest state root of the privacy pool from the entrypoint contract.
+   * Retrieves the current state root of the privacy pool.
    *
    * @param privacyPoolAddress - The address of the privacy pool contract.
-   * @returns The latest state root as a bigint.
+   * @returns The current state root as a bigint.
    */
   async getStateRoot(privacyPoolAddress: Address): Promise<bigint> {
     const stateRoot = await this.publicClient.readContract({
       address: privacyPoolAddress,
-      abi: IEntrypointABI as Abi,
+      abi: IPrivacyPoolABI as Abi,
       account: this.account,
-      functionName: "latestRoot",
+      functionName: "currentRoot",
     });
 
     return BigInt(stateRoot as string);
