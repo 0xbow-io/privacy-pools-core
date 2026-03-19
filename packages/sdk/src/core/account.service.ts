@@ -2,6 +2,7 @@ import { poseidon } from "maci-crypto/build/ts/hashing.js";
 import { Hash, Secret } from "../types/commitment.js";
 import { Hex, bytesToNumber } from "viem";
 import { mnemonicToAccount } from "viem/accounts";
+import { generateMasterKeys } from "../crypto.js";
 import { mapLimit } from "async";
 import { DataService } from "./data.service.js";
 import {
@@ -71,6 +72,48 @@ export class AccountService {
   }
 
   /**
+   * Initializes a new account from a mnemonic phrase for the legacy account.
+   *
+   * @param mnemonic - The mnemonic phrase to derive keys from
+   * @returns A new PrivacyPoolAccount with derived master keys
+   *
+   * @remarks
+   * This method derives two master keys from the mnemonic:
+   * 1. A master nullifier key from account index 0
+   * 2. A master secret key from account index 1
+   * These keys are used to deterministically generate nullifiers and secrets for deposits and withdrawals.
+   *
+   * @throws {AccountError} If account initialization fails
+   * @private
+   */
+  protected static _initializeLegacyAccount(mnemonic: string): PrivacyPoolAccount {
+    try {
+
+      const masterNullifierSeed = bytesToNumber(
+        mnemonicToAccount(mnemonic, { accountIndex: 0 }).getHdKey().privateKey!
+      );
+
+      const masterSecretSeed = bytesToNumber(
+        mnemonicToAccount(mnemonic, { accountIndex: 1 }).getHdKey().privateKey!
+      );
+
+      const masterNullifier = poseidon([BigInt(masterNullifierSeed)]) as Secret;
+      const masterSecret = poseidon([BigInt(masterSecretSeed)]) as Secret;
+
+      return {
+        masterKeys: [masterNullifier, masterSecret],
+        poolAccounts: new Map(),
+        creationTimestamp: 0n,
+        lastUpdateTimestamp: 0n,
+      };
+    } catch (error) {
+      throw AccountError.accountInitializationFailed(
+        error instanceof Error ? error.message : "Unknown error"
+      );
+    }
+  }
+
+  /**
    * Initializes a new account from a mnemonic phrase.
    *
    * @param mnemonic - The mnemonic phrase to derive keys from
@@ -89,16 +132,7 @@ export class AccountService {
     try {
       this.logger.debug("Initializing account with mnemonic");
 
-      const masterNullifierSeed = bytesToNumber(
-        mnemonicToAccount(mnemonic, { accountIndex: 0 }).getHdKey().privateKey!
-      );
-
-      const masterSecretSeed = bytesToNumber(
-        mnemonicToAccount(mnemonic, { accountIndex: 1 }).getHdKey().privateKey!
-      );
-
-      const masterNullifier = poseidon([BigInt(masterNullifierSeed)]) as Secret;
-      const masterSecret = poseidon([BigInt(masterSecretSeed)]) as Secret;
+      const { masterNullifier, masterSecret } = generateMasterKeys(mnemonic);
 
       return {
         masterKeys: [masterNullifier, masterSecret],
@@ -212,7 +246,7 @@ export class AccountService {
 
       for (const account of accounts) {
         // Skip accounts that have been ragequit
-        if (account.ragequit) {
+        if (account.ragequit || account.isMigrated) {
           continue;
         }
 
@@ -418,6 +452,75 @@ export class AccountService {
     };
 
     foundAccount.children.push(newCommitment);
+
+    this.logger.info(
+      `Added new commitment with value ${value} to account with label ${parentCommitment.label}`
+    );
+
+    return newCommitment;
+  }
+
+  /**
+   * Adds a new commitment to the account after migrate
+   *
+   * @param parentCommitment - The commitment that was spent
+   * @param value - The remaining value after spending
+   * @param nullifier - The nullifier used for migrate
+   * @param secret - The secret used for migrate
+   * @param blockNumber - The block number of the withdrawal
+   * @param txHash - The transaction hash of the withdrawal
+   * @returns The new commitment
+   *
+   * @remarks
+   * This method finds the account containing the parent commitment, creates a new
+   * commitment with the provided parameters, and adds it to the account's children.
+   * The new commitment inherits the label from the parent commitment.
+   *
+   * @throws {AccountError} If no account is found for the commitment
+   */
+  public addMigrationCommitment(
+    parentCommitment: AccountCommitment,
+    value: bigint,
+    nullifier: Secret,
+    secret: Secret,
+    blockNumber: bigint,
+    txHash: Hex
+  ): AccountCommitment {
+    let foundAccount: PoolAccount | undefined;
+    let foundScope: bigint | undefined;
+
+    for (const [scope, accounts] of this.account.poolAccounts.entries()) {
+      foundAccount = accounts.find((account) => {
+        if (account.deposit.hash === parentCommitment.hash) return true;
+        return account.children.some(
+          (child) => child.hash === parentCommitment.hash
+        );
+      });
+
+      if (foundAccount) {
+        foundScope = scope;
+        break;
+      }
+    }
+
+    if (!foundAccount || !foundScope) {
+      throw AccountError.commitmentNotFound(parentCommitment.hash);
+    }
+
+    const precommitment = this._hashPrecommitment(nullifier, secret);
+    const newCommitment: AccountCommitment = {
+      hash: this._hashCommitment(value, parentCommitment.label, precommitment),
+      value,
+      label: parentCommitment.label,
+      nullifier,
+      secret,
+      blockNumber,
+      txHash,
+      isMigration: true
+    };
+
+    foundAccount.children.push(newCommitment);
+    foundAccount.isMigrated = true;
 
     this.logger.info(
       `Added new commitment with value ${value} to account with label ${parentCommitment.label}`
@@ -646,14 +749,15 @@ export class AccountService {
    */
   private _processDepositEvents(
     scope: Hash,
-    depositEvents: Map<Hash, DepositEvent>
+    depositEvents: Map<Hash, DepositEvent>,
+    startIndex: bigint = 0n,
   ): void {
     const MAX_CONSECUTIVE_MISSES = 10; // Large enough to avoid tx failures
 
     const foundIndices = new Set<bigint>();
     let consecutiveMisses = 0;
 
-    for (let index = BigInt(0); ; index++) {
+    for (let index = startIndex; ; index++) {
       // Generate nullifier, secret, and precommitment for this index
       const { nullifier, secret, precommitment } = this.createDepositSecrets(
         scope,
@@ -727,9 +831,9 @@ export class AccountService {
     // Process each account in parallel for better performance
     for (const account of accounts) {
       let currentCommitment = account.deposit;
-      let index = BigInt(0);
+      let index = BigInt(account.children.length);
 
-      // Continue processing withdrawals until no more are found secuentially
+      // Continue processing withdrawals until no more are found sequentially
       while (true) {
         // Generate nullifier for this withdrawal
         const nullifierHash = poseidon([currentCommitment.nullifier]) as Hash;
@@ -740,22 +844,48 @@ export class AccountService {
           break;
         }
 
+        const remainingValue = currentCommitment.value - withdrawal.withdrawn;
+
         // Generate secret for this withdrawal
         const nullifier = this._genWithdrawalNullifier(account.label, index);
         const secret = this._genWithdrawalSecret(account.label, index);
+        const precommitment = this._hashPrecommitment(nullifier, secret);
+        const accountCommitment = this._hashCommitment(remainingValue, currentCommitment.label, precommitment)
+        
+        
+        // If the locally-computed hash doesn't match the on-chain commitment,
+        // the withdrawal was performed with different keys (e.g. migration from
+        // legacy to safe keys). Mark the child as unspendable from this account.
+        if (accountCommitment !== withdrawal.newCommitment) {
+          this.logger.info(
+            `Withdrawal commitment hash mismatch — marking as unspendable (migrated with different keys)`,
+            { label: currentCommitment.label, expected: withdrawal.newCommitment, computed: accountCommitment }
+          );
+          
+          // Add the withdrawal commitment to the account
+          const migrationCommitment = this.addMigrationCommitment(
+            currentCommitment,
+            remainingValue,
+            nullifier,
+            secret,
+            withdrawal.blockNumber,
+            withdrawal.transactionHash
+          );    
 
-        // Add the withdrawal commitment to the account
-        const newCommitment = this.addWithdrawalCommitment(
-          currentCommitment,
-          currentCommitment.value - withdrawal.withdrawn,
-          nullifier,
-          secret,
-          withdrawal.blockNumber,
-          withdrawal.transactionHash
-        );
+          currentCommitment = migrationCommitment;
+        } else {
+          // Add the withdrawal commitment to the account
+          const withdrawalCommitment = this.addWithdrawalCommitment(
+            currentCommitment,
+            remainingValue,
+            nullifier,
+            secret,
+            withdrawal.blockNumber,
+            withdrawal.transactionHash
+          );
 
-        // Update current commitment to the newly created one
-        currentCommitment = newCommitment;
+          currentCommitment = withdrawalCommitment;
+        }
 
         // Increment index for next potential withdrawal
         index++;
@@ -800,6 +930,88 @@ export class AccountService {
   }
 
   /**
+   * Discovers commitments that were migrated from legacy accounts via 0-value withdrawal.
+   *
+   * @param scope - The scope of the pool
+   * @param legacyAccounts - The legacy pool accounts for this scope
+   * @param withdrawalEvents - The map of withdrawal events (keyed by spentNullifier)
+   *
+   * @remarks
+   * When a legacy account performs a 0-value withdrawal to rotate keys (migration),
+   * the resulting on-chain commitment is created with safe keys. This method finds
+   * those commitments by:
+   * 1. Identifying legacy accounts with the `isMigrated` flag (set by `addMigrationCommitment`)
+   * 2. Computing the expected commitment hash using safe keys at withdrawal index 0
+   * 3. Verifying the hash exists in on-chain withdrawal events
+   * 4. Adding verified commitments as new safe pool accounts
+   *
+   * @private
+   */
+  private _discoverMigratedCommitments(
+    scope: Hash,
+    legacyAccounts: PoolAccount[],
+    withdrawalEvents: Map<Hash, WithdrawalEvent>
+  ): void {
+    // Build reverse lookup: newCommitment hash → WithdrawalEvent
+    const newCommitmentMap = new Map<Hash, WithdrawalEvent>();
+    for (const event of withdrawalEvents.values()) {
+      newCommitmentMap.set(event.newCommitment, event);
+    }
+
+    for (const legacyAccount of legacyAccounts) {
+      // Skip if not flagged as migrated (set by addMigrationCommitment)
+      if (!legacyAccount.isMigrated) continue;
+
+      const migrationChild = legacyAccount.children.find(c => c.isMigration);
+      if (!migrationChild) continue;
+
+      const label = legacyAccount.label;
+
+      // The migration child's value is the remaining value carried forward.
+      // Zero-value migrations (full withdrawal + key rotation) are valid and
+      // must still be registered so that poolAccounts.length reflects the
+      // correct slot count for deposit index alignment in step C.
+      const remainingValue = migrationChild.value;
+
+      // Generate safe nullifier/secret at withdrawal index 0
+      const nullifier = this._genWithdrawalNullifier(label, 0n);
+      const secret = this._genWithdrawalSecret(label, 0n);
+
+      // Compute expected commitment hash
+      const precommitment = this._hashPrecommitment(nullifier, secret);
+      const expectedHash = this._hashCommitment(remainingValue, label, precommitment);
+
+      // Verify hash exists in withdrawal events' newCommitment
+      const withdrawalEvent = newCommitmentMap.get(expectedHash);
+      if (!withdrawalEvent) continue;
+
+      // Verified — add as a new safe pool account
+      const newAccount = this.addPoolAccount(
+        scope,
+        remainingValue,
+        nullifier,
+        secret,
+        label,
+        withdrawalEvent.blockNumber,
+        withdrawalEvent.transactionHash,
+      );
+
+      this.addWithdrawalCommitment(
+        newAccount.deposit,
+        remainingValue,
+        nullifier,
+        secret,
+        withdrawalEvent.blockNumber,
+        withdrawalEvent.transactionHash,
+      )
+
+      this.logger.info(
+        `Discovered migrated commitment for label ${label} with value ${remainingValue}`,
+      );
+    }
+  }
+
+  /**
    * Initializes an AccountService instance with events for a given set of pools
    *
    * @param dataService - The data service to use for fetching events
@@ -830,7 +1042,7 @@ export class AccountService {
         service: AccountService;
       },
     pools: PoolInfo[]
-  ): Promise<{ account: AccountService; errors: PoolEventsError[] }> {
+  ): Promise<{ account: AccountService; legacyAccount?: AccountService; errors: PoolEventsError[] }> {
     // Log the start of the history retrieval process
     const logger = new Logger({ prefix: "Account" });
     logger.info(`Fetching events for pools`, { poolLength: pools.length });
@@ -844,32 +1056,114 @@ export class AccountService {
       uniqueScopes.add(pool.scope);
     }
 
-    const errors: PoolEventsError[] = [];
-    const account = new AccountService(
-      dataService,
-      "mnemonic" in source
-        ? { mnemonic: source.mnemonic }
-        : { account: source.service.account }
-    );
+    // Retry path (non-migration): reuse the existing service's account and
+    // only process pools whose scopes haven't been fully processed yet.
+    // Already-processed scopes are skipped to avoid duplicate deposits and
+    // withdrawal misclassification.
+    //
+    // This path performs simple deposit/withdrawal/ragequit processing only
+    // — no migration discovery. For migration-aware retries, the caller
+    // should re-invoke with { mnemonic } scoped to only the failed pools;
+    // the mnemonic path builds both safe and legacy accounts from scratch
+    // with no shared references.
+    if (!('mnemonic' in source)) {
+      const account = new AccountService(
+        dataService,
+        { account: source.service.account }
+      );
+      const processedScopes = source.service.account.poolAccounts;
+      const newPools = pools.filter((p) => !processedScopes.has(p.scope));
 
-    const events = await account.getEvents(pools);
+      const errors = await account._processEvents(newPools);
+      return { account, errors };
+    }
+
+    // Mnemonic path: phased processing with migration discovery
+    const account = new AccountService(dataService, { mnemonic: source.mnemonic });
+    const legacyPrivacyPoolAccount = AccountService._initializeLegacyAccount(source.mnemonic);
+    const legacyAccount = new AccountService(dataService, { account: legacyPrivacyPoolAccount });
+
+    const errors = await account._processEvents(pools, legacyAccount);
+    return { account, legacyAccount, errors };
+  }
+
+  /**
+   * Fetches and processes events for a set of pools.
+   *
+   * When a legacyAccount is provided, the full migration-aware pipeline runs
+   * for each scope:
+   *   1. Legacy account: process deposits and withdrawals (to detect migrations)
+   *   2. Safe account: discover migrated commitments from the legacy accounts
+   *   3. Safe account (this): process deposits (starting after migrated accounts)
+   *   4. Safe account: process withdrawals (now includes migrated accounts)
+   *   5. Both accounts: process ragequits
+   *
+   * Migration discovery (step 2) must run before safe deposit scanning (step 3)
+   * so that the migrated account count can be used as the starting index.
+   * Post-migration deposits use poolAccounts.length as their index, which
+   * sits right after the migrated slots; scanning from 0 would hit
+   * MAX_CONSECUTIVE_MISSES on the legacy-key indices and never reach them.
+   *
+   * Without a legacyAccount, only steps 3, 4, and 5 run (simple processing).
+   *
+   * Per-scope errors are caught and returned rather than thrown, and any
+   * partial state left by a mid-scope failure is cleaned from both accounts
+   * so that a subsequent retry starts fresh for that scope.
+   */
+  private async _processEvents(
+    pools: PoolInfo[],
+    legacyAccount?: AccountService,
+  ): Promise<PoolEventsError[]> {
+    const errors: PoolEventsError[] = [];
+
+    const events = await this.getEvents(pools);
 
     for (const [scope, result] of events.entries()) {
       if ("reason" in result) {
         errors.push(result);
       } else {
-        // Process deposit events an create pool accounts
-        account._processDepositEvents(scope, result.depositEvents);
+        try {
+          // a. Legacy: process deposits + withdrawals
+          if (legacyAccount) {
+            legacyAccount._processDepositEvents(scope, result.depositEvents);
+            legacyAccount._processWithdrawalEvents(scope, result.withdrawalEvents);
+          }
 
-        // Process withdrawal events and add commitments to pool accounts
-        account._processWithdrawalEvents(scope, result.withdrawalEvents);
+          // b. Safe: discover migrated commitments from legacy accounts.
+          //    Must run before safe deposit scanning so that the migrated
+          //    account count can serve as the starting index for step (c),
+          //    avoiding a gap of consecutive misses over legacy-key indices.
+          if (legacyAccount) {
+            const legacyAccounts = legacyAccount.account.poolAccounts.get(scope) ?? [];
+            this._discoverMigratedCommitments(scope, legacyAccounts, result.withdrawalEvents);
+          }
 
-        // Process ragequit events and add ragequit to pool accounts
-        account._processRagequitEvents(scope, result.ragequitEvents);
+          // c. Safe: process deposits, starting after any migrated accounts.
+          //    New deposits created after migration use poolAccounts.length as
+          //    their index, so they sit right after the migrated slots.
+          const depositStartIndex = BigInt(this.account.poolAccounts.get(scope)?.length ?? 0);
+          this._processDepositEvents(scope, result.depositEvents, depositStartIndex);
+
+          // d. Safe: process withdrawals (now includes migrated accounts)
+          this._processWithdrawalEvents(scope, result.withdrawalEvents);
+
+          // e. Both: process ragequits
+          if (legacyAccount) {
+            legacyAccount._processRagequitEvents(scope, result.ragequitEvents);
+          }
+          this._processRagequitEvents(scope, result.ragequitEvents);
+        } catch (e) {
+          this.account.poolAccounts.delete(scope);
+          legacyAccount?.account.poolAccounts.delete(scope);
+          errors.push({
+            reason: e instanceof Error ? e.message : String(e),
+            scope,
+          });
+        }
       }
     }
 
-    return { account, errors };
+    return errors;
   }
 
   /**

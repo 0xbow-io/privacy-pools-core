@@ -1,0 +1,79 @@
+name: SDK / Snapshot Release
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{github.workflow}}-${{github.ref}}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: packages/sdk
+
+jobs:
+  snapshot-release:
+    name: Publish Snapshot
+    runs-on: ubuntu-latest
+    if: github.ref_name != 'main'
+
+    steps:
+      - name: Check out github repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: "yarn"
+          registry-url: "https://registry.npmjs.org/"
+
+      - name: Install dependencies
+        run: yarn --frozen-lockfile --network-concurrency 1
+
+      - name: Generate snapshot version
+        run: |
+          BASE_VERSION=$(node -p "require('./package.json').version")
+          SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
+
+          EXISTING=$(npm view @0xbow/privacy-pools-core-sdk versions --json 2>/dev/null || echo "[]")
+          INDEX=0
+          while echo "$EXISTING" | grep -q "\"${BASE_VERSION}-snapshot.${INDEX}.${SHORT_SHA}\""; do
+            INDEX=$((INDEX + 1))
+          done
+
+          SNAPSHOT_VERSION="${BASE_VERSION}-snapshot.${INDEX}.${SHORT_SHA}"
+
+          echo "BASE_VERSION=$BASE_VERSION" >> $GITHUB_ENV
+          echo "SNAPSHOT_VERSION=$SNAPSHOT_VERSION" >> $GITHUB_ENV
+
+          npm version "$SNAPSHOT_VERSION" --no-git-tag-version
+          echo "📸 Snapshot version: $SNAPSHOT_VERSION (base: $BASE_VERSION)"
+
+      - name: Build SDK
+        run: |
+          yarn clean
+          yarn build
+          chmod +x ./scripts/copy_circuits.sh
+          bash ./scripts/copy_circuits.sh
+
+      - name: Run tests
+        run: yarn test
+
+      - name: Publish snapshot to npm
+        run: npm publish --access public --tag snapshot
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Release Summary
+        run: |
+          echo "📸 Published snapshot: @0xbow/privacy-pools-core-sdk@${{ env.SNAPSHOT_VERSION }}"
+          echo "Base version: ${{ env.BASE_VERSION }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo ""
+          echo "Install with:"
+          echo "  npm install @0xbow/privacy-pools-core-sdk@snapshot"
+          echo "  npm install @0xbow/privacy-pools-core-sdk@${{ env.SNAPSHOT_VERSION }}"
