@@ -11,6 +11,7 @@
     "build:optimized": "FOUNDRY_PROFILE=optimized forge build",
     "coverage": "forge coverage --report summary --report lcov --match-path 'test/unit/*'",
     "deploy:complexpool:mainnet": "bash -c 'source .env && forge script script/DeployComplexPool.s.sol:DeployComplexPool --verify --account DEPLOYER --rpc-url $ETHEREUM_MAINNET_RPC --sender $DEPLOYER_ADDRESS --slow -vv $0'",
+    "deploy:multicall": "ACCOUNT=MULTICALL_DEPLOYER bash script/deploy-multicall3.sh",
     "deploy:complexpool:sepolia": "bash -c 'source .env && forge script script/DeployComplexPool.s.sol:DeployComplexPool --verify --account DEPLOYER --rpc-url $ETHEREUM_SEPOLIA_RPC --sender $DEPLOYER_ADDRESS --slow -vv $0'",
     "deploy:protocol:chiado": "bash -c 'source .env && forge script script/Deploy.s.sol:GnosisChiado --verify --account DEPLOYER --rpc-url $GNOSIS_CHIADO_RPC --sender $DEPLOYER_ADDRESS --slow -vv $0'",
     "deploy:protocol:gnosis": "bash -c 'source .env && forge script script/Deploy.s.sol:Gnosis --verify --account DEPLOYER --rpc-url $GNOSIS_RPC --sender $DEPLOYER_ADDRESS --slow -vv $0'",

@@ -1,1 +1,2 @@
 src/contracts/verifiers/*
+src/contracts/lib/Multicall3.sol

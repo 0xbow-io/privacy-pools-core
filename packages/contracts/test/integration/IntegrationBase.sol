@@ -39,7 +39,7 @@ contract IntegrationBase is IntegrationUtils {
                       STATE VARIABLES 
   //////////////////////////////////////////////////////////////*/
 
-  uint256 internal constant _FORK_BLOCK = 18_920_905;
+  uint256 internal constant _FORK_BLOCK = 24_691_000;
 
   // Core protocol contracts
   Entrypoint internal _entrypoint;
