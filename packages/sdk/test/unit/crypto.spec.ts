@@ -46,6 +46,22 @@ describe("Crypto Utilities", () => {
       expect(commitment.preimage.label).toBe(label);
     });
 
+    it("sets nullifierHash to Poseidon([nullifier]) (matches docs, circuit, and on-chain spent marker)", () => {
+      const value = BigInt(1000);
+      const label = BigInt(42);
+      const nullifier = BigInt(123) as Secret;
+      const secret = BigInt(456) as Secret;
+
+      const commitment = getCommitment(value, label, nullifier, secret);
+
+      // docs/reference/sdk.md documents `nullifierHash` as "Hash of nullifier";
+      // circuits/commitment.circom computes `nullifierHash = Poseidon(1)(nullifier)`;
+      // the pool tracks spent notes by `nullifierHashes[poseidon([nullifier])]`.
+      expect(commitment.nullifierHash).toEqual(poseidon([nullifier]));
+      // It must NOT be the precommitment hash poseidon([nullifier, secret]).
+      expect(commitment.nullifierHash).not.toEqual(poseidon([nullifier, secret]));
+    });
+
     it("throws error for zero nullifier", () => {
       expect(() =>
         getCommitment(
