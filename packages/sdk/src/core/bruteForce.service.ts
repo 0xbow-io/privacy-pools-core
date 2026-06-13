@@ -80,7 +80,7 @@ export class BruteForceRecoveryService {
           const preimage: CommitmentPreimage = { value, label, precommitment: basePrecommitment };
           const commitment: Commitment = {
             hash: computedHash,
-            nullifierHash: basePrecommitment.hash,
+            nullifierHash: poseidon([basePrecommitment.nullifier]) as Hash,
             preimage,
           };
 

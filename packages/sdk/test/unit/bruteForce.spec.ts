@@ -33,6 +33,10 @@ describe("BruteForceRecoveryService - Brute Force Recovery", () => {
         expect(result.success).toBe(true);
         expect(result.data).toHaveLength(1);
         expect(result.data?.[0]?.commitment.hash).toBe(expectedHash);
+        // nullifierHash must be Poseidon([nullifier]) (matches docs, circuit, and
+        // the pool's on-chain spent marker), not the precommitment hash.
+        expect(result.data?.[0]?.commitment.nullifierHash).toEqual(poseidon([precommitment.nullifier]));
+        expect(result.data?.[0]?.commitment.nullifierHash).not.toEqual(precommitment.hash);
     });
 
     it("should return NOT_FOUND when no matching commitment is found", async () => {

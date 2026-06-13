@@ -136,7 +136,7 @@ export function getCommitment(
 
   return {
     hash,
-    nullifierHash: precommitment.hash,
+    nullifierHash: poseidon([nullifier]) as Hash,
     preimage: {
       value,
       label,
