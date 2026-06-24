@@ -98,6 +98,29 @@ const { account, errors } = await AccountService.initializeWithEvents(
 );
 ```
 
+#### Empty Nodes
+
+`account.getSpendableCommitments()` returns the latest decrypted commitment of each account. By default (`includeEmptyNodes: true`) the result includes **empty (zero-value), migrated, and ragequit** nodes alongside spendable ones, so callers can see the full decrypted state.
+
+To restore the spendable-only behavior — returning only commitments with a non-zero value whose account has not been ragequit or migrated — set `includeEmptyNodes: false`:
+
+```typescript
+const { account } = await AccountService.initializeWithEvents(
+  dataService,
+  { mnemonic },
+  pools,
+  { includeEmptyNodes: false },
+);
+```
+
+The same option can be passed when constructing an `AccountService` directly:
+
+```typescript
+const account = new AccountService(dataService, { mnemonic, includeEmptyNodes: false });
+```
+
+> Note: when `includeEmptyNodes` is `true`, `getSpendableCommitments()` may return commitments that are not actually spendable (zero-value, migrated, or ragequit). Filter on `value` / account flags before attempting to spend.
+
 ### Contract Interactions
 
 ```typescript

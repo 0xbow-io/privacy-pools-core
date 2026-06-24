@@ -804,86 +804,9 @@ describe("AccountService", () => {
           children: [childCommitment],
         },
       ]);
-    });
 
-    it("returns only non-zero, non-ragequit commitments", () => {
-      const spendableCommitments = accountService.getSpendableCommitments();
-
-      // Should include scope1 and scope3, but not scope2 (ragequit)
-      expect(spendableCommitments.size).toBe(2);
-      expect(spendableCommitments.has(BigInt("1111"))).toBe(true);
-      expect(spendableCommitments.has(BigInt("3333"))).toBe(true);
-      expect(spendableCommitments.has(BigInt("2222"))).toBe(false);
-    });
-
-    it("returns the latest commitment in the chain", () => {
-      const spendableCommitments = accountService.getSpendableCommitments();
-
-      // For scope3, should return the child commitment (latest) not the deposit
-      const scope3Commitments = spendableCommitments.get(BigInt("3333"))!;
-      expect(scope3Commitments.length).toBe(1);
-      expect(scope3Commitments.at(0)!.value).toBe(50n);
-      expect(scope3Commitments.at(0)!.hash).toBe(BigInt("30004"));
-    });
-
-    it("returns empty map when no spendable commitments exist", () => {
-      // Clear all accounts and add only zero-value and ragequit accounts
-      accountService.account.poolAccounts.clear();
-
-      // Add zero-value account
-      const zeroValueCommitment: AccountCommitment = {
-        hash: BigInt("50001") as Hash,
-        value: 0n,
-        label: BigInt("5001") as Hash,
-        nullifier: BigInt("50002") as Secret,
-        secret: BigInt("50003") as Secret,
-        blockNumber: 1000n,
-        txHash: mockTxHash(7),
-      };
-
-      accountService.account.poolAccounts.set(BigInt("5555") as Hash, [
-        {
-          label: zeroValueCommitment.label,
-          deposit: zeroValueCommitment,
-          children: [],
-        },
-      ]);
-
-      // Add ragequit account
-      const ragequitCommitment: AccountCommitment = {
-        hash: BigInt("60001") as Hash,
-        value: 100n,
-        label: BigInt("6001") as Hash,
-        nullifier: BigInt("60002") as Secret,
-        secret: BigInt("60003") as Secret,
-        blockNumber: 1000n,
-        txHash: mockTxHash(8),
-      };
-
-      const ragequitEvent: RagequitEvent = {
-        ragequitter: "0x123456789abcdef",
-        commitment: ragequitCommitment.hash,
-        label: ragequitCommitment.label,
-        value: 100n,
-        blockNumber: 1100n,
-        transactionHash: mockTxHash(9),
-      };
-
-      accountService.account.poolAccounts.set(BigInt("6666") as Hash, [
-        {
-          label: ragequitCommitment.label,
-          deposit: ragequitCommitment,
-          children: [],
-          ragequit: ragequitEvent,
-        },
-      ]);
-
-      const spendableCommitments = accountService.getSpendableCommitments();
-      expect(spendableCommitments.size).toBe(0);
-    });
-
-    it("excludes accounts with isMigrated flag", () => {
-      const migratedScope = BigInt("4444") as Hash;
+      // Scope 4: Migrated account (non-zero value, flagged isMigrated)
+      const scope4 = BigInt("4444") as Hash;
       const migratedCommitment: AccountCommitment = {
         hash: BigInt("40001") as Hash,
         value: 100n,
@@ -894,7 +817,7 @@ describe("AccountService", () => {
         txHash: mockTxHash(10),
       };
 
-      accountService.account.poolAccounts.set(migratedScope, [
+      accountService.account.poolAccounts.set(scope4, [
         {
           label: migratedCommitment.label,
           deposit: migratedCommitment,
@@ -903,13 +826,138 @@ describe("AccountService", () => {
         },
       ]);
 
-      const spendableCommitments = accountService.getSpendableCommitments();
+      // Scope 5: Empty (zero-value) account
+      const scope5 = BigInt("5555") as Hash;
+      const zeroValueCommitment: AccountCommitment = {
+        hash: BigInt("50001") as Hash,
+        value: 0n,
+        label: BigInt("5001") as Hash,
+        nullifier: BigInt("50002") as Secret,
+        secret: BigInt("50003") as Secret,
+        blockNumber: 1000n,
+        txHash: mockTxHash(7),
+      };
 
-      // Migrated scope should not be in the result
-      expect(spendableCommitments.has(migratedScope)).toBe(false);
-      // Original non-migrated scopes should still be present
-      expect(spendableCommitments.has(BigInt("1111"))).toBe(true);
-      expect(spendableCommitments.has(BigInt("3333"))).toBe(true);
+      accountService.account.poolAccounts.set(scope5, [
+        {
+          label: zeroValueCommitment.label,
+          deposit: zeroValueCommitment,
+          children: [],
+        },
+      ]);
+    });
+
+    describe("with includeEmptyNodes enabled (default)", () => {
+      it("includes empty, migrated, and ragequit nodes alongside spendable ones", () => {
+        const commitments = accountService.getSpendableCommitments();
+
+        // All five scopes are decrypted, including ragequit/migrated/zero-value
+        expect(commitments.size).toBe(5);
+        expect(commitments.has(BigInt("1111"))).toBe(true); // spendable
+        expect(commitments.has(BigInt("3333"))).toBe(true); // spendable (with child)
+        expect(commitments.has(BigInt("2222"))).toBe(true); // ragequit
+        expect(commitments.has(BigInt("4444"))).toBe(true); // migrated
+        expect(commitments.has(BigInt("5555"))).toBe(true); // zero-value
+      });
+
+      it("returns the latest commitment in the chain", () => {
+        const commitments = accountService.getSpendableCommitments();
+
+        // For scope3, should return the child commitment (latest) not the deposit
+        const scope3Commitments = commitments.get(BigInt("3333"))!;
+        expect(scope3Commitments.length).toBe(1);
+        expect(scope3Commitments.at(0)!.value).toBe(50n);
+        expect(scope3Commitments.at(0)!.hash).toBe(BigInt("30004"));
+      });
+    });
+
+    describe("with includeEmptyNodes disabled", () => {
+      let spendableOnly: AccountService;
+
+      beforeEach(() => {
+        // Reuse the same reconstructed account data, but opt out of empty nodes
+        spendableOnly = new AccountService(dataService, {
+          account: accountService.account,
+          includeEmptyNodes: false,
+        });
+      });
+
+      it("returns only non-zero, non-ragequit, non-migrated commitments", () => {
+        const spendableCommitments = spendableOnly.getSpendableCommitments();
+
+        // Should include scope1 and scope3 only
+        expect(spendableCommitments.size).toBe(2);
+        expect(spendableCommitments.has(BigInt("1111"))).toBe(true);
+        expect(spendableCommitments.has(BigInt("3333"))).toBe(true);
+        expect(spendableCommitments.has(BigInt("2222"))).toBe(false); // ragequit
+        expect(spendableCommitments.has(BigInt("4444"))).toBe(false); // migrated
+        expect(spendableCommitments.has(BigInt("5555"))).toBe(false); // zero-value
+      });
+
+      it("returns the latest commitment in the chain", () => {
+        const spendableCommitments = spendableOnly.getSpendableCommitments();
+
+        const scope3Commitments = spendableCommitments.get(BigInt("3333"))!;
+        expect(scope3Commitments.length).toBe(1);
+        expect(scope3Commitments.at(0)!.value).toBe(50n);
+        expect(scope3Commitments.at(0)!.hash).toBe(BigInt("30004"));
+      });
+
+      it("returns empty map when only empty and ragequit accounts exist", () => {
+        // Clear all accounts and add only zero-value and ragequit accounts
+        accountService.account.poolAccounts.clear();
+
+        // Add zero-value account
+        const zeroValueCommitment: AccountCommitment = {
+          hash: BigInt("50001") as Hash,
+          value: 0n,
+          label: BigInt("5001") as Hash,
+          nullifier: BigInt("50002") as Secret,
+          secret: BigInt("50003") as Secret,
+          blockNumber: 1000n,
+          txHash: mockTxHash(7),
+        };
+
+        accountService.account.poolAccounts.set(BigInt("5555") as Hash, [
+          {
+            label: zeroValueCommitment.label,
+            deposit: zeroValueCommitment,
+            children: [],
+          },
+        ]);
+
+        // Add ragequit account
+        const ragequitCommitment: AccountCommitment = {
+          hash: BigInt("60001") as Hash,
+          value: 100n,
+          label: BigInt("6001") as Hash,
+          nullifier: BigInt("60002") as Secret,
+          secret: BigInt("60003") as Secret,
+          blockNumber: 1000n,
+          txHash: mockTxHash(8),
+        };
+
+        const ragequitEvent: RagequitEvent = {
+          ragequitter: "0x123456789abcdef",
+          commitment: ragequitCommitment.hash,
+          label: ragequitCommitment.label,
+          value: 100n,
+          blockNumber: 1100n,
+          transactionHash: mockTxHash(9),
+        };
+
+        accountService.account.poolAccounts.set(BigInt("6666") as Hash, [
+          {
+            label: ragequitCommitment.label,
+            deposit: ragequitCommitment,
+            children: [],
+            ragequit: ragequitEvent,
+          },
+        ]);
+
+        const spendableCommitments = spendableOnly.getSpendableCommitments();
+        expect(spendableCommitments.size).toBe(0);
+      });
     });
   });
 
@@ -1968,7 +2016,8 @@ describe("AccountService", () => {
         await AccountService.initializeWithEvents(
           dataService,
           { mnemonic: TEST_MNEMONIC },
-          [TEST_POOL]
+          [TEST_POOL],
+          { includeEmptyNodes: false }
         );
 
       // Legacy should have ragequit
