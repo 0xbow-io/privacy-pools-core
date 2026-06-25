@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import {Setup, vm} from '../Setup.t.sol';
-import {Constants, IPrivacyPool, IPrivacyPool, ProofLib} from 'contracts/PrivacyPool.sol';
+import {Constants, IPrivacyPool, ProofLib} from 'contracts/PrivacyPool.sol';
 import {IEntrypoint} from 'interfaces/IEntrypoint.sol';
 
 contract HandlersEntrypoint is Setup {

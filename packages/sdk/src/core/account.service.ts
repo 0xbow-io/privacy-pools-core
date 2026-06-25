@@ -24,15 +24,28 @@ import { AccountError } from "../errors/account.error.js";
 import { ErrorCode } from "../errors/base.error.js";
 import { EventError } from "../errors/events.error.js";
 
+/**
+ * Optional behavioral configuration shared across the AccountService
+ * construction paths (direct constructor and `initializeWithEvents`).
+ */
+type AccountServiceOptions = {
+  /** Maximum number of pools to fetch events for concurrently (default: 2). */
+  poolConcurrency?: number;
+  /**
+   * Whether reconstructed empty nodes are included in the user's decrypted
+   * nodes returned by {@link AccountService.getSpendableCommitments}.
+   *
+   * When `true` (the default), every account's latest commitment is returned,
+   * including empty (zero-value), migrated, and ragequit commitments. Set to
+   * `false` to restore the spendable-only behavior, where those nodes are
+   * filtered out.
+   */
+  includeEmptyNodes?: boolean;
+};
+
 type AccountServiceConfig =
-  | {
-    mnemonic: string;
-    poolConcurrency?: number;
-  }
-  | {
-    account: PrivacyPoolAccount;
-    poolConcurrency?: number;
-  };
+  | ({ mnemonic: string } & AccountServiceOptions)
+  | ({ account: PrivacyPoolAccount } & AccountServiceOptions);
 
 /**
  * Service responsible for managing privacy pool accounts and their associated commitments.
@@ -46,6 +59,7 @@ export class AccountService {
   account: PrivacyPoolAccount;
   private readonly logger: Logger;
   private readonly poolConcurrency: number;
+  private readonly includeEmptyNodes: boolean;
 
   /**
    * Creates a new AccountService instance.
@@ -55,6 +69,7 @@ export class AccountService {
    * @param config.mnemonic - Optional mnemonic for deterministic key generation
    * @param config.account - Optional existing account to initialize with
    * @param config.poolConcurrency - Optional maximum number of pools to fetch events for concurrently (default: 2)
+   * @param config.includeEmptyNodes - Optional flag controlling whether empty (zero-value), migrated, and ragequit nodes are included in `getSpendableCommitments` (default: true)
    *
    * @throws {AccountError} If account initialization fails
    */
@@ -64,6 +79,7 @@ export class AccountService {
   ) {
     this.logger = new Logger({ prefix: "Account" });
     this.poolConcurrency = config.poolConcurrency ?? 2;
+    this.includeEmptyNodes = config.includeEmptyNodes ?? true;
     if ("mnemonic" in config) {
       this.account = this._initializeAccount(config.mnemonic);
     } else {
@@ -229,24 +245,29 @@ export class AccountService {
   }
 
   /**
-   * Gets all spendable commitments across all pools.
+   * Gets the latest decrypted commitment of each account across all pools.
    *
-   * @returns A map of scope to array of spendable commitments
+   * @returns A map of scope to array of commitments
    *
    * @remarks
-   * A commitment is considered spendable if:
-   * 1. It has a non-zero value
-   * 2. The account it belongs to has not been ragequit
+   * The result depends on the `includeEmptyNodes` option (default `true`):
+   *
+   * - When `includeEmptyNodes` is `true`, every account's latest commitment is
+   *   returned, including empty (zero-value), migrated, and ragequit nodes.
+   * - When `includeEmptyNodes` is `false`, only spendable commitments are
+   *   returned. A commitment is spendable if it has a non-zero value and its
+   *   account has not been ragequit or migrated.
    */
   public getSpendableCommitments(): Map<bigint, AccountCommitment[]> {
     const result = new Map<bigint, AccountCommitment[]>();
 
     for (const [scope, accounts] of this.account.poolAccounts.entries()) {
-      const nonZeroCommitments: AccountCommitment[] = [];
+      const commitments: AccountCommitment[] = [];
 
       for (const account of accounts) {
-        // Skip accounts that have been ragequit
-        if (account.ragequit || account.isMigrated) {
+        // When empty-node decryption is disabled, skip accounts that have been
+        // ragequit or migrated — their value is no longer spendable from here.
+        if (!this.includeEmptyNodes && (account.ragequit || account.isMigrated)) {
           continue;
         }
 
@@ -255,13 +276,14 @@ export class AccountService {
             ? account.children[account.children.length - 1]
             : account.deposit;
 
-        if (lastCommitment!.value !== BigInt(0)) {
-          nonZeroCommitments.push(lastCommitment!);
+        // When empty-node decryption is disabled, drop zero-value commitments.
+        if (this.includeEmptyNodes || lastCommitment!.value !== BigInt(0)) {
+          commitments.push(lastCommitment!);
         }
       }
 
-      if (nonZeroCommitments.length > 0) {
-        result.set(scope, nonZeroCommitments);
+      if (commitments.length > 0) {
+        result.set(scope, commitments);
       }
     }
     return result;
@@ -1017,6 +1039,7 @@ export class AccountService {
    * @param dataService - The data service to use for fetching events
    * @param source - The source to use for initializing the account. Either a mnemonic or an existing account service instance
    * @param pools - The pools to fetch events for
+   * @param options - Optional behavioral configuration applied to the constructed account(s), e.g. `includeEmptyNodes` and `poolConcurrency`
    *
    * @remarks
    * This method performs the following steps for each pool:
@@ -1041,7 +1064,8 @@ export class AccountService {
       | {
         service: AccountService;
       },
-    pools: PoolInfo[]
+    pools: PoolInfo[],
+    options?: AccountServiceOptions
   ): Promise<{ account: AccountService; legacyAccount?: AccountService; errors: PoolEventsError[] }> {
     // Log the start of the history retrieval process
     const logger = new Logger({ prefix: "Account" });
@@ -1069,7 +1093,7 @@ export class AccountService {
     if (!('mnemonic' in source)) {
       const account = new AccountService(
         dataService,
-        { account: source.service.account }
+        { account: source.service.account, ...options }
       );
       const processedScopes = source.service.account.poolAccounts;
       const newPools = pools.filter((p) => !processedScopes.has(p.scope));
@@ -1079,9 +1103,9 @@ export class AccountService {
     }
 
     // Mnemonic path: phased processing with migration discovery
-    const account = new AccountService(dataService, { mnemonic: source.mnemonic });
+    const account = new AccountService(dataService, { mnemonic: source.mnemonic, ...options });
     const legacyPrivacyPoolAccount = AccountService._initializeLegacyAccount(source.mnemonic);
-    const legacyAccount = new AccountService(dataService, { account: legacyPrivacyPoolAccount });
+    const legacyAccount = new AccountService(dataService, { account: legacyPrivacyPoolAccount, ...options });
 
     const errors = await account._processEvents(pools, legacyAccount);
     return { account, legacyAccount, errors };

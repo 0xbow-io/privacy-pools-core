@@ -19,7 +19,7 @@ export interface AccountCommitment {
   blockNumber: bigint;
   timestamp?: bigint;
   txHash: Hex;
-  isMigration?: boolean
+  isMigration?: boolean;
 }
 
 export interface PrivacyPoolAccount {
