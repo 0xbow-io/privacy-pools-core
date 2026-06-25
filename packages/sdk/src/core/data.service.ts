@@ -158,7 +158,7 @@ export class DataService {
             depositor: depositor.toLowerCase(),
             commitment: commitment as Hash,
             label: label as Hash,
-            value: value || BigInt(0),
+            value: value ?? BigInt(0),
             precommitment: precommitment as Hash,
             blockNumber: BigInt(typedLog.blockNumber),
             transactionHash: typedLog.transactionHash,
@@ -252,14 +252,7 @@ export class DataService {
             _newCommitment: newCommitment,
           } = typedLog.args;
 
-          if (
-            value === undefined ||
-            value === null ||
-            !spentNullifier ||
-            !newCommitment ||
-            !typedLog.blockNumber ||
-            !typedLog.transactionHash
-          ) {
+          if (value == null || !spentNullifier || !newCommitment || !typedLog.blockNumber || !typedLog.transactionHash) {
             throw DataError.invalidLog("withdrawal", "missing required fields");
           }
 
@@ -375,7 +368,7 @@ export class DataService {
             ragequitter: ragequitter.toLowerCase(),
             commitment: commitment as Hash,
             label: label as Hash,
-            value: value || BigInt(0),
+            value: value ?? BigInt(0),
             blockNumber: BigInt(typedLog.blockNumber),
             transactionHash: typedLog.transactionHash,
           };

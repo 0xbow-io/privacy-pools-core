@@ -10,6 +10,7 @@ import {
   VersionString,
 } from "./circuits.interface.js";
 import { importFetchVersionedArtifact } from "./fetchArtifacts.js";
+import { verifyArtifactIntegrity } from "./artifactHashes.js";
 
 interface CircuitOptions {
   baseUrl?: string;
@@ -141,6 +142,13 @@ export class Circuits implements CircuitsInterface {
       this._fetchVersionedArtifact(["artifacts", assetName.vkey].join("/")),
       this._fetchVersionedArtifact(["artifacts", assetName.zkey].join("/")),
     ]);
+
+    await Promise.all([
+      verifyArtifactIntegrity(circuitName, "wasm", wasm),
+      verifyArtifactIntegrity(circuitName, "vkey", vkey),
+      verifyArtifactIntegrity(circuitName, "zkey", zkey),
+    ]);
+
     return { wasm, vkey, zkey };
   }
 

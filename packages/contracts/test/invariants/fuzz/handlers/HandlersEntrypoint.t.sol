@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import {Setup, vm} from '../Setup.t.sol';
-import {Constants, IPrivacyPool, IPrivacyPool, ProofLib} from 'contracts/PrivacyPool.sol';
+import {Constants, IPrivacyPool, ProofLib} from 'contracts/PrivacyPool.sol';
 import {IEntrypoint} from 'interfaces/IEntrypoint.sol';
 
 contract HandlersEntrypoint is Setup {
@@ -12,7 +12,7 @@ contract HandlersEntrypoint is Setup {
     uint256 _poolBalanceBefore = token.balanceOf(address(tokenPool));
     uint256 _entrypointBalanceBefore = token.balanceOf(address(entrypoint));
 
-    vm.assume(entrypoint.usedPrecommitments(_precommitment) == false);
+    require(entrypoint.usedPrecommitments(_precommitment) == false);
 
     token.transfer(address(currentActor()), _amount);
     (bool success, bytes memory result) = currentActor().call(

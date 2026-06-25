@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-06-24
+
+### Added
+
+- Added `includeEmptyNodes` option to `AccountService` (constructor and `initializeWithEvents`). When `true` (the new default), `getSpendableCommitments` returns empty (zero-value), migrated, and ragequit nodes alongside spendable ones. Set to `false` to restore the previous spendable-only behavior.
+
+## [1.2.0] - 2026-03-18
+
+### Fixed
+
+- Replaced `bytesToNumber` with `bytesToBigInt` for proper large-number handling
+- Added circuits artifact integrity verification
+
 ## [1.1.1] - 2026-03-08
 
 ### Fixed
