@@ -399,6 +399,38 @@ export class ContractInteractionsService implements ContractInteractions {
     }
   }
 
+  /**
+   * Simulates a relay transaction to estimate gas and check if execution would succeed.
+   *
+   * @param withdrawal - The Withdrawal struct (processor + data).
+   * @param withdrawalProof - The zk proof and public signals.
+   * @param scope - The withdrawal scope.
+   * @returns { success, gasEstimate?, error? }
+   */
+  async simulateRelay(
+    withdrawal: Withdrawal,
+    withdrawalProof: WithdrawalProof,
+    scope: Hash,
+  ): Promise<{ success: boolean; gasEstimate?: bigint; error?: string }> {
+    try {
+      const formattedProof = this.formatProof(withdrawalProof);
+  
+      const gasEstimate = await this.publicClient.estimateContractGas({
+        address: this.entrypointAddress,
+        abi: [...(IEntrypointABI as Abi), ...(IPrivacyPoolABI as Abi)],
+        functionName: "relay",
+        args: [withdrawal, formattedProof, scope],
+        account: this.account,
+      });
+  
+      return { success: true, gasEstimate };
+    } catch (error: any) {
+      const errorMsg =
+        error?.shortMessage || error?.message || "Simulation failed";
+      return { success: false, error: errorMsg };
+    }
+  }
+
   private formatProof(proof: CommitmentProof | WithdrawalProof) {
     return {
       pA: [
