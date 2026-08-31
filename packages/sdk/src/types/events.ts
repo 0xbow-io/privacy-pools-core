@@ -12,6 +12,12 @@ export interface DepositEvent {
   precommitment: Hash;
   blockNumber: bigint;
   transactionHash: Hex;
+  /**
+   * Position of the log within its block. Used to order two deposits that share
+   * a precommitment deterministically, which `(blockNumber, transactionHash)`
+   * alone cannot do when both were emitted by one transaction.
+   */
+  logIndex?: number;
 }
 
 /**
@@ -92,14 +98,17 @@ export interface PoolEvents {
 
 export interface PoolEventsSuccess {
   /**
-   * Deposit events grouped by precommitment, oldest block first.
+   * Deposit events keyed by precommitment.
    *
-   * Grouped rather than keyed one-to-one because two deposits can legitimately
-   * share a precommitment when the same deposit index was handed out twice
-   * (possible on SDK versions that inferred the index from incomplete state).
-   * Collapsing the group would silently drop every deposit but one.
+   * Exactly one event per precommitment. Two deposits can share a
+   * precommitment only when the same deposit index was used twice, and because
+   * the deposit nullifier is derived from (masterKeys, scope, depositIndex)
+   * they also share a nullifier hash — so the pool accepts a withdrawal for
+   * only one of them (`State.sol` reverts `NullifierAlreadySpent` for the
+   * second). Reconstructing both as spendable accounts would misreport the
+   * balance, so the earliest deposit is kept and collisions are logged.
    */
-  depositEvents: Map<Hash, DepositEvent[]>;
+  depositEvents: Map<Hash, DepositEvent>;
   withdrawalEvents: Map<Hash, WithdrawalEvent>;
   ragequitEvents: Map<Hash, RagequitEvent>;
 }
@@ -111,4 +120,4 @@ export interface PoolEventsError {
 
 export type PoolEventsResult = Map<Hash, PoolEventsSuccess | PoolEventsError>;
 
-export type ProcessedDepositEventsResult = Map<Hash, DepositEvent[]>;
+export type ProcessedDepositEventsResult = Map<Hash, DepositEvent>;

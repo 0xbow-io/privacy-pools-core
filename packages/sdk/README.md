@@ -91,12 +91,45 @@ The `AccountService` reconstructs on-chain account state from a mnemonic by scan
 ```typescript
 import { AccountService, DataService } from '@0xbow/privacy-pools-core-sdk';
 
-const { account, errors } = await AccountService.initializeWithEvents(
+const { account, legacyAccount, errors } = await AccountService.initializeWithEvents(
   dataService,
   { mnemonic },
   pools,
 );
 ```
+
+#### Incomplete Scopes
+
+A non-empty `errors` array means one or more pools failed to load. Reconstructed
+state for those scopes is **absent, not empty** — the account may hold notes that
+are not visible, so treating the scope as having no accounts will understate the
+next deposit index and produce a deposit that later reconstructions cannot find.
+
+Check status before acting on a scope:
+
+```typescript
+account.getScopeStatus(scope); // 'complete' | 'incomplete' | 'not-loaded'
+account.isScopeComplete(scope); // true only for 'complete'
+account.getIncompleteScopes(); // scopes whose last load failed
+```
+
+Block deposits and withdrawals for any scope that is not `complete`.
+`createDepositSecrets(scope)` without an explicit index throws for such a scope
+rather than guessing; pass an explicit index only in recovery flows. Status is
+stored on the account, so it survives persisting and restoring it.
+
+To retry the failed pools, pass **both** services returned by the original call:
+
+```typescript
+const retry = await AccountService.initializeWithEvents(
+  dataService,
+  { service: account, legacyService: legacyAccount },
+  pools,
+);
+```
+
+Omitting `legacyService` reconstructs the retried scopes without migration
+discovery, which silently omits migration-derived accounts.
 
 #### Empty Nodes
 

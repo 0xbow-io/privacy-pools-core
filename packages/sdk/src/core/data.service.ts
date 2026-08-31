@@ -136,6 +136,7 @@ export class DataService {
             };
             blockNumber?: bigint;
             transactionHash?: Hex;
+            logIndex?: number;
           };
 
           if (!typedLog.args) {
@@ -169,6 +170,7 @@ export class DataService {
             precommitment: precommitment as Hash,
             blockNumber: BigInt(typedLog.blockNumber),
             transactionHash: typedLog.transactionHash,
+            logIndex: typedLog.logIndex,
           };
         } catch (error) {
           if (error instanceof DataError) throw error;

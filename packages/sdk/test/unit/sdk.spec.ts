@@ -346,7 +346,7 @@ describe("AccountService", () => {
   describe("_processDepositEvents", () => {
     it("should process consecutive deposits starting from index 0", () => {
       const scope = TEST_POOL.scope;
-      const depositEvents = new Map<Hash, DepositEvent[]>();
+      const depositEvents = new Map<Hash, DepositEvent>();
 
       // Create 3 consecutive deposits at indices 0, 1, 2
       for (let i = 0; i < 3; i++) {
@@ -358,10 +358,10 @@ describe("AccountService", () => {
           BigInt(2000 + i),
           mockTxHash(i)
         );
-        depositEvents.set(precommitment, [event]);
+        depositEvents.set(precommitment, event);
       }
 
-      (accountService as unknown as { _processDepositEvents: (scope: Hash, events: Map<Hash, DepositEvent[]>) => void })._processDepositEvents(scope, depositEvents);
+      (accountService as unknown as { _processDepositEvents: (scope: Hash, events: Map<Hash, DepositEvent>) => void })._processDepositEvents(scope, depositEvents);
 
       // Verify all 3 accounts were created
       const accounts = accountService.account.poolAccounts.get(scope);
@@ -380,7 +380,7 @@ describe("AccountService", () => {
 
     it("should handle gaps in deposit indices with consecutive misses limit", () => {
       const scope = TEST_POOL.scope;
-      const depositEvents = new Map<Hash, DepositEvent[]>();
+      const depositEvents = new Map<Hash, DepositEvent>();
 
       // Create deposits at indices 0, 1, 5, 6 (gap at 2, 3, 4)
       const indices = [0, 1, 5, 6];
@@ -393,10 +393,10 @@ describe("AccountService", () => {
           BigInt(2000 + i),
           mockTxHash(i)
         );
-        depositEvents.set(precommitment, [event]);
+        depositEvents.set(precommitment, event);
       }
 
-      (accountService as unknown as { _processDepositEvents: (scope: Hash, events: Map<Hash, DepositEvent[]>) => void })._processDepositEvents(scope, depositEvents);
+      (accountService as unknown as { _processDepositEvents: (scope: Hash, events: Map<Hash, DepositEvent>) => void })._processDepositEvents(scope, depositEvents);
 
       const accounts = accountService.account.poolAccounts.get(scope);
       expect(accounts).toBeDefined();
@@ -409,7 +409,7 @@ describe("AccountService", () => {
 
     it("should stop after 10 consecutive misses", () => {
       const scope = TEST_POOL.scope;
-      const depositEvents = new Map<Hash, DepositEvent[]>();
+      const depositEvents = new Map<Hash, DepositEvent>();
 
       // Create deposits at indices 0, 1, then a large gap, then 15
       const indices = [0, 1, 15];
@@ -422,10 +422,10 @@ describe("AccountService", () => {
           BigInt(2000 + i),
           mockTxHash(i)
         );
-        depositEvents.set(precommitment, [event]);
+        depositEvents.set(precommitment, event);
       }
 
-      (accountService as unknown as { _processDepositEvents: (scope: Hash, events: Map<Hash, DepositEvent[]>) => void })._processDepositEvents(scope, depositEvents);
+      (accountService as unknown as { _processDepositEvents: (scope: Hash, events: Map<Hash, DepositEvent>) => void })._processDepositEvents(scope, depositEvents);
 
       // Should only find deposits at indices 0, 1 and stop due to consecutive misses
       const accounts = accountService.account.poolAccounts.get(scope);
@@ -438,7 +438,7 @@ describe("AccountService", () => {
 
     it("should reset consecutive misses counter when a deposit is found", () => {
       const scope = TEST_POOL.scope;
-      const depositEvents = new Map<Hash, DepositEvent[]>();
+      const depositEvents = new Map<Hash, DepositEvent>();
 
       const indices = [0, 5, 10, 20];
       for (const i of indices) {
@@ -450,10 +450,10 @@ describe("AccountService", () => {
           BigInt(2000 + i),
           mockTxHash(i)
         );
-        depositEvents.set(precommitment, [event]);
+        depositEvents.set(precommitment, event);
       }
 
-      (accountService as unknown as { _processDepositEvents: (scope: Hash, events: Map<Hash, DepositEvent[]>) => void })._processDepositEvents(scope, depositEvents);
+      (accountService as unknown as { _processDepositEvents: (scope: Hash, events: Map<Hash, DepositEvent>) => void })._processDepositEvents(scope, depositEvents);
 
       // All deposits should be found because gaps are within the consecutive misses limit
       const accounts = accountService.account.poolAccounts.get(scope);
@@ -466,9 +466,9 @@ describe("AccountService", () => {
 
     it("should handle empty deposit events", () => {
       const scope = TEST_POOL.scope;
-      const depositEvents = new Map<Hash, DepositEvent[]>();
+      const depositEvents = new Map<Hash, DepositEvent>();
 
-      (accountService as unknown as { _processDepositEvents: (scope: Hash, events: Map<Hash, DepositEvent[]>) => void })._processDepositEvents(scope, depositEvents);
+      (accountService as unknown as { _processDepositEvents: (scope: Hash, events: Map<Hash, DepositEvent>) => void })._processDepositEvents(scope, depositEvents);
 
       // No accounts should be created
       const accounts = accountService.account.poolAccounts.get(scope);
@@ -477,7 +477,7 @@ describe("AccountService", () => {
 
     it("should handle deposits with large gaps that exceed consecutive misses limit", () => {
       const scope = TEST_POOL.scope;
-      const depositEvents = new Map<Hash, DepositEvent[]>();
+      const depositEvents = new Map<Hash, DepositEvent>();
 
       const indices = [0, 1, 2, 20];
       for (const i of indices) {
@@ -489,10 +489,10 @@ describe("AccountService", () => {
           BigInt(2000 + i),
           mockTxHash(i)
         );
-        depositEvents.set(precommitment, [event]);
+        depositEvents.set(precommitment, event);
       }
 
-      (accountService as unknown as { _processDepositEvents: (scope: Hash, events: Map<Hash, DepositEvent[]>) => void })._processDepositEvents(scope, depositEvents);
+      (accountService as unknown as { _processDepositEvents: (scope: Hash, events: Map<Hash, DepositEvent>) => void })._processDepositEvents(scope, depositEvents);
 
       const accounts = accountService.account.poolAccounts.get(scope);
       expect(accounts).toBeDefined();
@@ -504,7 +504,7 @@ describe("AccountService", () => {
 
     it("should track found indices correctly", () => {
       const scope = TEST_POOL.scope;
-      const depositEvents = new Map<Hash, DepositEvent[]>();
+      const depositEvents = new Map<Hash, DepositEvent>();
 
       // Create non-consecutive deposits
       const indices = [0, 2, 4, 6];
@@ -517,10 +517,10 @@ describe("AccountService", () => {
           BigInt(2000 + i),
           mockTxHash(i)
         );
-        depositEvents.set(precommitment, [event]);
+        depositEvents.set(precommitment, event);
       }
 
-      (accountService as unknown as { _processDepositEvents: (scope: Hash, events: Map<Hash, DepositEvent[]>) => void })._processDepositEvents(scope, depositEvents);
+      (accountService as unknown as { _processDepositEvents: (scope: Hash, events: Map<Hash, DepositEvent>) => void })._processDepositEvents(scope, depositEvents);
 
       // All should be found since gaps are small
       const accounts = accountService.account.poolAccounts.get(scope);
@@ -534,7 +534,7 @@ describe("AccountService", () => {
 
     it("should handle transaction failure scenarios with gaps", () => {
       const scope = TEST_POOL.scope;
-      const depositEvents = new Map<Hash, DepositEvent[]>();
+      const depositEvents = new Map<Hash, DepositEvent>();
 
       const indices = [0, 1, 4, 5];
       for (const i of indices) {
@@ -546,10 +546,10 @@ describe("AccountService", () => {
           BigInt(2000 + i),
           mockTxHash(i)
         );
-        depositEvents.set(precommitment, [event]);
+        depositEvents.set(precommitment, event);
       }
 
-      (accountService as unknown as { _processDepositEvents: (scope: Hash, events: Map<Hash, DepositEvent[]>) => void })._processDepositEvents(scope, depositEvents);
+      (accountService as unknown as { _processDepositEvents: (scope: Hash, events: Map<Hash, DepositEvent>) => void })._processDepositEvents(scope, depositEvents);
 
       // All deposits should be found (gap of 2 is within limit)
       const accounts = accountService.account.poolAccounts.get(scope);
@@ -562,7 +562,7 @@ describe("AccountService", () => {
 
     it("should generate correct nullifier and secret for each deposit", () => {
       const scope = TEST_POOL.scope;
-      const depositEvents = new Map<Hash, DepositEvent[]>();
+      const depositEvents = new Map<Hash, DepositEvent>();
 
       // Create 2 deposits
       const indices = [0, 1];
@@ -579,10 +579,10 @@ describe("AccountService", () => {
           BigInt(2000 + i),
           mockTxHash(i)
         );
-        depositEvents.set(precommitment, [event]);
+        depositEvents.set(precommitment, event);
       }
 
-      (accountService as unknown as { _processDepositEvents: (scope: Hash, events: Map<Hash, DepositEvent[]>) => void })._processDepositEvents(scope, depositEvents);
+      (accountService as unknown as { _processDepositEvents: (scope: Hash, events: Map<Hash, DepositEvent>) => void })._processDepositEvents(scope, depositEvents);
 
       const accounts = accountService.account.poolAccounts.get(scope);
       expect(accounts).toBeDefined();

@@ -262,50 +262,213 @@ describe("AccountService — deposit index vs. migration accounts", () => {
   });
 
   describe("repeated deposit index", () => {
-    it("reconstructs every deposit sharing a precommitment", async () => {
-      // Two deposits written at index 0 by an older client: same precommitment,
-      // different labels and values. Both are spendable on-chain.
-      const pre0 = poseidon([
-        poseidon([safeMN, SCOPE, 0n]),
-        poseidon([safeMS, SCOPE, 0n]),
+    // Two deposits at the same index share a precommitment AND a nullifier
+    // hash, so the pool only ever allows one of them to be withdrawn
+    // (State.sol reverts NullifierAlreadySpent for the second). Reconstruction
+    // must therefore surface exactly one spendable account, not both.
+    const pre0 = poseidon([
+      poseidon([safeMN, SCOPE, 0n]),
+      poseidon([safeMS, SCOPE, 0n]),
+    ]) as Hash;
+    const collide = (label: bigint, value: bigint, block: bigint, t: number, logIndex?: number): DepositEvent => ({
+      depositor: "0xbbb",
+      commitment: poseidon([value, label as Hash, pre0]) as Hash,
+      label: label as Hash, value, precommitment: pre0,
+      blockNumber: block, transactionHash: tx(t), logIndex,
+    });
+
+    it("keeps only the earliest deposit and never reports a negative balance", async () => {
+      const older = collide(111n, 700n, 1200n, 1);
+      const newer = collide(222n, 100n, 1800n, 2);
+
+      // One withdrawal spending all 700. Its spentNullifier is derived from the
+      // shared deposit nullifier, so it matches both deposits' accounts if both
+      // were reconstructed — which previously produced a -600 commitment.
+      const wPre = poseidon([
+        poseidon([safeMN, 111n as Hash, 0n]),
+        poseidon([safeMS, 111n as Hash, 0n]),
       ]) as Hash;
-      const mk = (label: bigint, value: bigint, block: bigint, t: number): DepositEvent => ({
-        depositor: "0xbbb",
-        commitment: poseidon([value, label as Hash, pre0]) as Hash,
-        label: label as Hash, value, precommitment: pre0,
-        blockNumber: block, transactionHash: tx(t),
-      });
-      const older = mk(111n, 100n, 1200n, 1);
-      const newer = mk(222n, 700n, 1800n, 2);
+      const withdrawal: WithdrawalEvent = {
+        withdrawn: 700n,
+        spentNullifier: poseidon([poseidon([safeMN, SCOPE, 0n])]) as Hash,
+        newCommitment: poseidon([0n, 111n as Hash, wPre]) as Hash,
+        blockNumber: 1900n, transactionHash: tx(3),
+      };
 
       const { account } = await AccountService.initializeWithEvents(
-        mockDataService([older, newer], []), { mnemonic: MNEMONIC }, [POOL]
+        mockDataService([older, newer], [withdrawal]), { mnemonic: MNEMONIC }, [POOL]
       );
 
       const accounts = account.account.poolAccounts.get(SCOPE) ?? [];
-      expect(accounts).toHaveLength(2);
-      expect(accounts.map((a) => a.label).sort()).toEqual([111n, 222n]);
-      // Previously only the earliest block survived, hiding 700 permanently.
-      expect(visibleValue(account)).toBe(800n);
+      expect(accounts).toHaveLength(1);
+      expect(accounts[0]!.label).toBe(111n);
+
+      const commitments = account.getSpendableCommitments().get(SCOPE) ?? [];
+      expect(commitments.every((c) => c.value >= 0n)).toBe(true);
+      expect(accounts[0]!.isMigrated).toBeFalsy();
     });
 
-    it("groups deposit events by precommitment, oldest first", async () => {
-      const pre0 = poseidon([
-        poseidon([safeMN, SCOPE, 0n]),
-        poseidon([safeMS, SCOPE, 0n]),
-      ]) as Hash;
-      const mk = (label: bigint, block: bigint, t: number): DepositEvent => ({
-        depositor: "0xbbb", commitment: poseidon([1n, label as Hash, pre0]) as Hash,
-        label: label as Hash, value: 1n, precommitment: pre0,
-        blockNumber: block, transactionHash: tx(t),
-      });
-      const service = new AccountService(
-        mockDataService([mk(222n, 1800n, 2), mk(111n, 1200n, 1)], []),
-        { mnemonic: MNEMONIC }
+    it("orders a same-transaction collision by logIndex", async () => {
+      const second = collide(222n, 100n, 1200n, 1, 5);
+      const first = collide(111n, 700n, 1200n, 1, 2);
+
+      const service = new AccountService(mockDataService([second, first], []), { mnemonic: MNEMONIC });
+      const kept = await service.getDepositEvents(POOL);
+
+      // Same block and same transaction hash — only logIndex separates them.
+      expect(kept.get(pre0)?.label).toBe(111n);
+    });
+
+    it("does not inflate the next deposit index when indices collide", async () => {
+      const deposits = Array.from({ length: 12 }, (_, i) => collide(BigInt(500 + i), 10n, 1200n + BigInt(i), i, i));
+
+      const { account } = await AccountService.initializeWithEvents(
+        mockDataService(deposits, []), { mnemonic: MNEMONIC }, [POOL]
       );
 
-      const grouped = await service.getDepositEvents(POOL);
-      expect(grouped.get(pre0)?.map((e) => e.blockNumber)).toEqual([1200n, 1800n]);
+      // One account survives at index 0, so the next index is 1 — not 12, which
+      // would leave a gap wider than the scan's miss tolerance.
+      expect(account.createDepositSecrets(SCOPE).precommitment).toBe(
+        account.createDepositSecrets(SCOPE, 1n).precommitment
+      );
+    });
+  });
+
+  describe("scope load status", () => {
+    const OTHER_SCOPE = BigInt("987654321") as Hash;
+    const OTHER_POOL: PoolInfo = {
+      chainId: 1,
+      address: "0x1111111111111111111111111111111111111111" as Address,
+      scope: OTHER_SCOPE,
+      deploymentBlock: 1000n,
+    };
+
+    it("distinguishes never-loaded from complete", async () => {
+      const { account } = await AccountService.initializeWithEvents(
+        mockDataService([NOTE_A.deposit], [NOTE_A.migration]), { mnemonic: MNEMONIC }, [POOL]
+      );
+
+      expect(account.getScopeStatus(SCOPE)).toBe("complete");
+      expect(account.getScopeStatus(OTHER_SCOPE)).toBe("not-loaded");
+      expect(account.isScopeComplete(OTHER_SCOPE)).toBe(false);
+
+      // A scope nothing is known about must not yield an inferred index.
+      expect(() => account.createDepositSecrets(OTHER_SCOPE)).toThrow(AccountError);
+    });
+
+    it("still allows a first deposit on a brand-new account", () => {
+      // Nothing loaded at all: index 0 is genuinely correct here, so the guard
+      // must not block the very first deposit.
+      const fresh = new AccountService(mockDataService([], []), { mnemonic: MNEMONIC });
+
+      expect(() => fresh.createDepositSecrets(SCOPE)).not.toThrow();
+      expect(fresh.createDepositSecrets(SCOPE).precommitment).toBe(
+        fresh.createDepositSecrets(SCOPE, 0n).precommitment
+      );
+    });
+
+    it("survives persist and restore", async () => {
+      const first = await AccountService.initializeWithEvents(
+        mockDataService([], [], true), { mnemonic: MNEMONIC }, [POOL]
+      );
+      expect(first.account.getScopeStatus(SCOPE)).toBe("incomplete");
+
+      // Status rides on PrivacyPoolAccount, the serializable shape, so a service
+      // rebuilt from a restored account keeps the guard.
+      const restored = new AccountService(mockDataService([], []), {
+        account: first.account.account,
+      });
+
+      expect(restored.getScopeStatus(SCOPE)).toBe("incomplete");
+      expect(() => restored.createDepositSecrets(SCOPE)).toThrow(AccountError);
+    });
+
+    it("stays permissive for account state restored without a status map", () => {
+      // An account object written by an earlier version has no scopeStatus at
+      // all; blocking there would lock existing users out of depositing.
+      const legacy = new AccountService(mockDataService([], []), {
+        account: {
+          masterKeys: [1n as Secret, 2n as Secret],
+          poolAccounts: new Map(),
+        },
+      });
+
+      expect(() => legacy.createDepositSecrets(SCOPE)).not.toThrow();
+    });
+  });
+
+  describe("retry correctness", () => {
+    const NEW_SCOPE = BigInt("555000555") as Hash;
+    const NEW_POOL: PoolInfo = {
+      chainId: 1,
+      address: "0x2222222222222222222222222222222222222222" as Address,
+      scope: NEW_SCOPE,
+      deploymentBlock: 1000n,
+    };
+
+    it("does not drop a pool added after the first attempt", async () => {
+      let fail = true;
+      const dataService = {
+        getDeposits: vi.fn(async () => { if (fail) throw new Error("RPC 503"); return []; }),
+        getWithdrawals: vi.fn(async () => { if (fail) throw new Error("RPC 503"); return []; }),
+        getRagequits: vi.fn(async () => { if (fail) throw new Error("RPC 503"); return []; }),
+      } as unknown as DataService;
+
+      const first = await AccountService.initializeWithEvents(dataService, { mnemonic: MNEMONIC }, [POOL]);
+      expect(first.account.getScopeStatus(SCOPE)).toBe("incomplete");
+
+      fail = false;
+      // NEW_POOL was never attempted; narrowing the retry to only the
+      // incomplete scope would skip it silently and still report it complete.
+      const retry = await AccountService.initializeWithEvents(
+        dataService, { service: first.account, legacyService: first.legacyAccount }, [POOL, NEW_POOL]
+      );
+
+      expect(retry.account.getScopeStatus(SCOPE)).toBe("complete");
+      expect(retry.account.getScopeStatus(NEW_SCOPE)).toBe("complete");
+    });
+
+    it("does not duplicate legacy accounts when retrying a completed scope", async () => {
+      // Legacy note present and un-migrated: the legacy account holds an entry
+      // for SCOPE while the safe side holds none.
+      const dataService = mockDataService([NOTE_A.deposit], []);
+
+      const first = await AccountService.initializeWithEvents(dataService, { mnemonic: MNEMONIC }, [POOL]);
+      const legacyCount = () => (first.legacyAccount!.account.poolAccounts.get(SCOPE) ?? []).length;
+      expect(legacyCount()).toBe(1);
+      expect(first.account.getScopeStatus(SCOPE)).toBe("complete");
+
+      // Retrying a scope already marked complete must be a no-op. Keying off
+      // "the safe map has no entry" would re-run the legacy scan every time.
+      for (let i = 0; i < 3; i++) {
+        await AccountService.initializeWithEvents(
+          dataService, { service: first.account, legacyService: first.legacyAccount }, [POOL]
+        );
+      }
+
+      expect(legacyCount()).toBe(1);
+    });
+
+    it("clears incompleteness on the caller's original service handle", async () => {
+      let fail = true;
+      const deposit0 = safeDeposit(0n, SAFE_LABEL_0, 500n, 1500n, 9);
+      const dataService = {
+        getDeposits: vi.fn(async () => { if (fail) throw new Error("RPC 503"); return [NOTE_A.deposit, deposit0]; }),
+        getWithdrawals: vi.fn(async () => { if (fail) throw new Error("RPC 503"); return [NOTE_A.migration]; }),
+        getRagequits: vi.fn(async () => { if (fail) throw new Error("RPC 503"); return []; }),
+      } as unknown as DataService;
+
+      const first = await AccountService.initializeWithEvents(dataService, { mnemonic: MNEMONIC }, [POOL]);
+      fail = false;
+      await AccountService.initializeWithEvents(
+        dataService, { service: first.account, legacyService: first.legacyAccount }, [POOL]
+      );
+
+      // Apps commonly keep their original handle. It shares the underlying
+      // account, so it must see the scope as reconstructed rather than staying
+      // blocked forever.
+      expect(first.account.getScopeStatus(SCOPE)).toBe("complete");
+      expect(() => first.account.createDepositSecrets(SCOPE)).not.toThrow();
     });
   });
 });

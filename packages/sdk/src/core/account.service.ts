@@ -10,6 +10,7 @@ import {
   PoolAccount,
   PoolInfo,
   PrivacyPoolAccount,
+  ScopeLoadStatus,
 } from "../types/account.js";
 import {
   DepositEvent,
@@ -60,13 +61,6 @@ export class AccountService {
   private readonly logger: Logger;
   private readonly poolConcurrency: number;
   private readonly includeEmptyNodes: boolean;
-  /**
-   * Scopes whose event history failed to load during the last
-   * `initializeWithEvents`/`_processEvents` run. Reconstructed state for these
-   * scopes is absent, NOT empty — treating it as empty understates the deposit
-   * index and hides on-chain notes.
-   */
-  private readonly incompleteScopes: Set<Hash> = new Set();
 
   /**
    * Creates a new AccountService instance.
@@ -126,6 +120,7 @@ export class AccountService {
       return {
         masterKeys: [masterNullifier, masterSecret],
         poolAccounts: new Map(),
+        scopeStatus: new Map(),
         creationTimestamp: 0n,
         lastUpdateTimestamp: 0n,
       };
@@ -160,6 +155,7 @@ export class AccountService {
       return {
         masterKeys: [masterNullifier, masterSecret],
         poolAccounts: new Map(),
+        scopeStatus: new Map(),
         creationTimestamp: 0n,
         lastUpdateTimestamp: 0n,
       };
@@ -324,8 +320,8 @@ export class AccountService {
       // incomplete: the count would be understated and would collide with a
       // deposit index that is already in use on-chain. Callers that genuinely
       // want a specific index must pass it explicitly.
-      if (this.incompleteScopes.has(scope)) {
-        throw AccountError.incompleteScopeHistory(scope);
+      if (!this._canInferDepositIndex(scope)) {
+        throw AccountError.incompleteScopeHistory(scope, this.getScopeStatus(scope));
       }
       index = this._nextDepositIndex(scope);
     }
@@ -338,6 +334,28 @@ export class AccountService {
   }
 
   /**
+   * Total order over deposits sharing a precommitment: earliest block, then
+   * earliest log within the block, then transaction hash as a final tie-break.
+   *
+   * `logIndex` is what makes this total — two deposits emitted by one
+   * transaction share both `blockNumber` and `transactionHash`, so without it
+   * the order would depend on log-fetch chunking and concurrency, and two
+   * reconstructions of the same chain state could keep different deposits.
+   * Plain string comparison is used rather than `localeCompare`, which is
+   * locale- and ICU-version-dependent.
+   */
+  private static _compareDepositOrder(a: DepositEvent, b: DepositEvent): number {
+    if (a.blockNumber !== b.blockNumber) return a.blockNumber < b.blockNumber ? -1 : 1;
+
+    const aLog = a.logIndex ?? Number.MAX_SAFE_INTEGER;
+    const bLog = b.logIndex ?? Number.MAX_SAFE_INTEGER;
+    if (aLog !== bLog) return aLog < bLog ? -1 : 1;
+
+    if (a.transactionHash === b.transactionHash) return 0;
+    return a.transactionHash < b.transactionHash ? -1 : 1;
+  }
+
+  /**
    * Number of deposit indices already consumed for a scope.
    *
    * Counts only deposit-derived accounts and uses the recorded
@@ -347,43 +365,130 @@ export class AccountService {
    * `depositIndex` was recorded (e.g. restored history files).
    */
   private _nextDepositIndex(scope: Hash): bigint {
-    const accounts = this.account.poolAccounts.get(scope) ?? [];
-    const depositDerived = accounts.filter((a) => !a.isMigrationDerived);
+    const { maxDepositIndex, recordedIndices, depositDerivedCount } =
+      this._tallyScopeAccounts(scope);
 
-    let maxSeen = -1n;
-    for (const a of depositDerived) {
-      if (a.depositIndex !== undefined && a.depositIndex > maxSeen) {
-        maxSeen = a.depositIndex;
+    // Prefer the recorded indices: monotonic, so an index already used is never
+    // handed back even when earlier ones are unused (failed transactions leave
+    // gaps).
+    if (recordedIndices > 0) return maxDepositIndex + 1n;
+
+    // Fallback for accounts reconstructed before `depositIndex` was recorded
+    // (e.g. a restored history file): the deposit-derived count is the best
+    // available estimate.
+    return BigInt(depositDerivedCount);
+  }
+
+  /**
+   * Single pass over a scope's accounts, tallying everything the deposit-index
+   * and migration bookkeeping needs.
+   *
+   * `recordedIndices` counts DISTINCT recorded `depositIndex` values, not
+   * accounts: several accounts can share one index, and counting accounts would
+   * overstate the next index and open a gap wider than the scan's miss
+   * tolerance — hiding the very deposits this bookkeeping exists to find.
+   */
+  private _tallyScopeAccounts(scope: Hash): {
+    migrationDerivedCount: number;
+    depositDerivedCount: number;
+    recordedIndices: number;
+    maxDepositIndex: bigint;
+  } {
+    const accounts = this.account.poolAccounts.get(scope) ?? [];
+    const seenIndices = new Set<bigint>();
+    let migrationDerivedCount = 0;
+    let depositDerivedCount = 0;
+    let maxDepositIndex = -1n;
+
+    for (const account of accounts) {
+      if (account.isMigrationDerived) {
+        migrationDerivedCount++;
+        continue;
+      }
+
+      depositDerivedCount++;
+      if (account.depositIndex === undefined) continue;
+
+      seenIndices.add(account.depositIndex);
+      if (account.depositIndex > maxDepositIndex) {
+        maxDepositIndex = account.depositIndex;
       }
     }
 
-    // Monotonic: never hand back an index at or below one already used, and
-    // never below the number of deposit-derived accounts (legacy fallback).
-    const fromIndices = maxSeen + 1n;
-    const fromCount = BigInt(depositDerived.length);
-    return fromIndices > fromCount ? fromIndices : fromCount;
+    return {
+      migrationDerivedCount,
+      depositDerivedCount,
+      recordedIndices: seenIndices.size,
+      maxDepositIndex,
+    };
   }
 
   /** Number of migration-derived accounts reconstructed for a scope. */
   private _migrationDerivedCount(scope: Hash): number {
-    const accounts = this.account.poolAccounts.get(scope) ?? [];
-    return accounts.filter((a) => a.isMigrationDerived).length;
+    return this._tallyScopeAccounts(scope).migrationDerivedCount;
+  }
+
+  /**
+   * Load outcome for `scope`: `complete`, `incomplete`, or `not-loaded`.
+   *
+   * `not-loaded` is distinct from `complete` on purpose — a scope that was
+   * never fetched tells us nothing, and treating it as complete is what lets a
+   * deposit index be reused.
+   */
+  public getScopeStatus(scope: Hash): ScopeLoadStatus {
+    return this.account.scopeStatus?.get(scope) ?? "not-loaded";
   }
 
   /**
    * Whether the reconstructed state for `scope` is complete.
    *
-   * Returns `false` when the scope's event history failed to load, in which
-   * case absent accounts must not be read as "no accounts". Callers should
-   * block deposits and withdrawals for incomplete scopes.
+   * `false` for a scope that failed to load AND for one that was never
+   * attempted; in both cases absent accounts must not be read as "no
+   * accounts". Callers should block deposits and withdrawals for such scopes.
    */
   public isScopeComplete(scope: Hash): boolean {
-    return !this.incompleteScopes.has(scope);
+    return this.getScopeStatus(scope) === "complete";
   }
 
   /** Scopes whose history failed to load during the last processing run. */
   public getIncompleteScopes(): Hash[] {
-    return [...this.incompleteScopes];
+    if (!this.account.scopeStatus) return [];
+    return [...this.account.scopeStatus.entries()]
+      .filter(([, status]) => status === "incomplete")
+      .map(([scope]) => scope);
+  }
+
+  /**
+   * Records the load outcome for a scope on the underlying account.
+   *
+   * Written to `this.account`, which retry paths share with the service they
+   * were derived from — so a scope reconstructed on retry stops reading as
+   * incomplete on the caller's original service handle too.
+   */
+  private _setScopeStatus(scope: Hash, status: ScopeLoadStatus): void {
+    if (!this.account.scopeStatus) this.account.scopeStatus = new Map();
+    this.account.scopeStatus.set(scope, status);
+  }
+
+  /**
+   * Whether an unspecified deposit index may be inferred for `scope`.
+   *
+   * Permitted when the scope loaded completely, and for an account that has
+   * loaded nothing at all — a brand-new account genuinely has no history, so
+   * index 0 is correct and refusing would block the first deposit. Refused once
+   * anything has been loaded but this scope has not, since notes may exist here
+   * that we have not seen.
+   */
+  private _canInferDepositIndex(scope: Hash): boolean {
+    const status = this.getScopeStatus(scope);
+    if (status === "complete") return true;
+    if (status === "incomplete") return false;
+
+    // Legacy account object with no status map: preserve prior behaviour.
+    if (!this.account.scopeStatus) return true;
+
+    // Nothing loaded yet — a fresh account.
+    return this.account.scopeStatus.size === 0;
   }
 
   /**
@@ -466,7 +571,9 @@ export class AccountService {
       },
       children: [],
       ...(meta?.depositIndex !== undefined ? { depositIndex: meta.depositIndex } : {}),
-      ...(meta?.isMigrationDerived ? { isMigrationDerived: true } : {}),
+      ...(meta?.isMigrationDerived !== undefined
+        ? { isMigrationDerived: meta.isMigrationDerived }
+        : {}),
     };
 
     if (!this.account.poolAccounts.has(scope)) {
@@ -666,24 +773,29 @@ export class AccountService {
   }
 
   /**
-   * Fetches deposit events for a given pool, grouped by precommitment for
+   * Fetches deposit events for a given pool, keyed by precommitment for
    * efficient lookup during reconstruction.
    *
    * @param pool - The pool to fetch deposit events for
    *
-   * @returns A map of precommitment to every deposit sharing it, oldest first
+   * @returns A map of precommitment to the earliest deposit carrying it
    *
    * @remarks
-   * Deposits are grouped rather than deduplicated. A precommitment is derived
-   * from (masterKeys, scope, depositIndex), so two deposits collide only when
-   * the same index was used twice — which older SDK versions could do when
-   * reconstructed state was incomplete. Keeping just one event (as this method
-   * previously did, retaining the earliest block) permanently hid the others
-   * from reconstruction even though they are spendable on-chain.
+   * Exactly one event per precommitment. A precommitment is derived from
+   * (masterKeys, scope, depositIndex), so two deposits collide only when the
+   * same index was used twice — and since the deposit nullifier shares that
+   * derivation, the colliding deposits also share a nullifier hash. The pool
+   * marks a nullifier hash spent on first withdrawal (`State.sol` reverts
+   * `NullifierAlreadySpent` afterwards), so at most one of them is ever
+   * withdrawable. Reconstructing both as spendable accounts would overstate the
+   * balance and, because a single withdrawal event then matches every one of
+   * them, produce negative-value commitments. The earliest deposit is kept and
+   * the collision is logged with its transaction hashes so affected accounts
+   * can be found and handled deliberately.
    */
   public async getDepositEvents(
     pool: PoolInfo
-  ): Promise<Map<Hash, DepositEvent[]>> {
+  ): Promise<Map<Hash, DepositEvent>> {
     try {
       const depositEvents = await this.dataService.getDeposits(pool);
 
@@ -693,35 +805,45 @@ export class AccountService {
         depositCount: depositEvents.length,
       });
 
-      const depositMap = new Map<Hash, DepositEvent[]>();
+      const depositMap = new Map<Hash, DepositEvent>();
+      const collisions = new Map<Hash, DepositEvent[]>();
+
       for (const event of depositEvents) {
-        const group = depositMap.get(event.precommitment);
+        const existing = depositMap.get(event.precommitment);
+
+        if (!existing) {
+          depositMap.set(event.precommitment, event);
+          continue;
+        }
+
+        // Track every colliding deposit, including the one already kept, so the
+        // warning below reports the full set.
+        const group = collisions.get(event.precommitment);
         if (group) {
           group.push(event);
         } else {
-          depositMap.set(event.precommitment, [event]);
+          collisions.set(event.precommitment, [existing, event]);
+        }
+
+        if (AccountService._compareDepositOrder(event, existing) < 0) {
+          depositMap.set(event.precommitment, event);
         }
       }
 
-      // Deterministic order: oldest block first, tx hash as tie-break.
-      for (const [precommitment, group] of depositMap.entries()) {
-        if (group.length > 1) {
-          group.sort(
-            (a, b) =>
-              a.blockNumber === b.blockNumber
-                ? a.transactionHash.localeCompare(b.transactionHash)
-                : a.blockNumber < b.blockNumber ? -1 : 1
-          );
-          this.logger.warn(
-            `Multiple deposits share one precommitment — the same deposit index was used more than once`,
-            {
-              precommitment,
-              scope: pool.scope,
-              count: group.length,
-              txHashes: group.map((e) => e.transactionHash),
-            }
-          );
-        }
+      for (const [precommitment, group] of collisions.entries()) {
+        group.sort(AccountService._compareDepositOrder);
+        this.logger.warn(
+          `Multiple deposits share one precommitment — the same deposit index was used more than once. ` +
+          `They also share a nullifier hash, so only the first to be withdrawn can ever be spent; ` +
+          `reconstruction keeps the earliest and ignores the rest.`,
+          {
+            precommitment,
+            scope: pool.scope,
+            count: group.length,
+            keptTxHash: group[0]!.transactionHash,
+            ignoredTxHashes: group.slice(1).map((e) => e.transactionHash),
+          }
+        );
       }
 
       return depositMap;
@@ -863,12 +985,12 @@ export class AccountService {
    * Deterministically generate deposit secrets and check if they match on-chain deposits
    *
    * @param scope - The scope of the pool
-   * @param depositEvents - Deposit events grouped by precommitment
+   * @param depositEvents - Deposit events keyed by precommitment
    *
    */
   private _processDepositEvents(
     scope: Hash,
-    depositEvents: Map<Hash, DepositEvent[]>,
+    depositEvents: Map<Hash, DepositEvent>,
     startIndex: bigint = 0n,
     extraMissTolerance: number = 0,
   ): void {
@@ -876,7 +998,6 @@ export class AccountService {
     // historical off-by-migration-count deposits (see `_processEvents`).
     const MAX_CONSECUTIVE_MISSES = 10 + extraMissTolerance;
 
-    const foundIndices = new Set<bigint>();
     let consecutiveMisses = 0;
 
     for (let index = startIndex; ; index++) {
@@ -886,12 +1007,10 @@ export class AccountService {
         index
       );
 
-      // Look for deposits with this precommitment. More than one is possible
-      // when the same index was used twice; every one of them is spendable and
-      // must become its own account.
-      const events = depositEvents.get(precommitment);
+      // Look for a deposit with this precommitment
+      const event = depositEvents.get(precommitment);
 
-      if (!events || events.length === 0) {
+      if (!event) {
         consecutiveMisses++;
         if (consecutiveMisses >= MAX_CONSECUTIVE_MISSES) {
           break;
@@ -902,26 +1021,21 @@ export class AccountService {
       // Can reset counter in case if user had any tx failures for
       // newer deposits
       consecutiveMisses = 0;
-      foundIndices.add(index);
 
-      for (const event of events) {
-        // Create a new pool account for this deposit, recording the derivation
-        // index so the next index never has to be inferred from array position.
-        this.addPoolAccount(
-          scope,
-          event.value,
-          nullifier,
-          secret,
-          event.label,
-          event.blockNumber,
-          event.transactionHash,
-          { depositIndex: index }
-        );
-      }
-
-      this.logger.debug(
-        `Found ${events.length} deposit(s) at index ${index} for scope ${scope}`
+      // Create a new pool account for this deposit, recording the derivation
+      // index so the next index never has to be inferred from array position.
+      this.addPoolAccount(
+        scope,
+        event.value,
+        nullifier,
+        secret,
+        event.label,
+        event.blockNumber,
+        event.transactionHash,
+        { depositIndex: index }
       );
+
+      this.logger.debug(`Found deposit at index ${index} for scope ${scope}`);
     }
   }
 
@@ -1218,19 +1332,30 @@ export class AccountService {
         { account: source.service.account, ...options }
       );
 
-      // Carry over which scopes are still incomplete so the retry targets them
-      // precisely. `poolAccounts.has(scope)` is only a proxy for "processed":
-      // a scope that processed successfully but matched no commitments leaves
-      // no entry, and reprocessing it would duplicate legacy-side accounts.
-      const carriedIncomplete = new Set<Hash>(source.service.getIncompleteScopes());
-      for (const scope of carriedIncomplete) {
-        account.incompleteScopes.add(scope);
-      }
-
-      const processedScopes = source.service.account.poolAccounts;
-      const newPools = carriedIncomplete.size > 0
-        ? pools.filter((p) => carriedIncomplete.has(p.scope))
-        : pools.filter((p) => !processedScopes.has(p.scope));
+      // Decide per scope whether it still needs processing:
+      //
+      //  - `incomplete`  — it failed; retry it.
+      //  - `complete`    — skip, even if it matched no commitments. The old
+      //                    `!poolAccounts.has(scope)` proxy could not tell this
+      //                    case from "never attempted", so it re-ran the legacy
+      //                    scan and duplicated that scope's accounts on every
+      //                    retry.
+      //  - `not-loaded`  — process it if it has no reconstructed accounts. A
+      //                    pool newly added to `pools` lands here and must not
+      //                    be silently dropped. Accounts present without a
+      //                    recorded status mean state restored by an older
+      //                    version, so fall back to the proxy and skip rather
+      //                    than risk duplicating them.
+      //
+      // Status lives on the shared `PrivacyPoolAccount`, so marking a scope
+      // complete here is visible on the caller's original service too.
+      const existingScopes = source.service.account.poolAccounts;
+      const newPools = pools.filter((p) => {
+        const status = account.getScopeStatus(p.scope);
+        if (status === "complete") return false;
+        if (status === "incomplete") return true;
+        return !existingScopes.has(p.scope);
+      });
 
       const legacyAccount = source.legacyService;
       const errors = await account._processEvents(newPools, legacyAccount);
@@ -1282,7 +1407,7 @@ export class AccountService {
 
     for (const [scope, result] of events.entries()) {
       if ("reason" in result) {
-        this.incompleteScopes.add(scope);
+        this._setScopeStatus(scope, "incomplete");
         errors.push(result);
       } else {
         try {
@@ -1328,11 +1453,11 @@ export class AccountService {
           }
           this._processRagequitEvents(scope, result.ragequitEvents);
 
-          this.incompleteScopes.delete(scope);
+          this._setScopeStatus(scope, "complete");
         } catch (e) {
           this.account.poolAccounts.delete(scope);
           legacyAccount?.account.poolAccounts.delete(scope);
-          this.incompleteScopes.add(scope);
+          this._setScopeStatus(scope, "incomplete");
           errors.push({
             reason: e instanceof Error ? e.message : String(e),
             scope,
@@ -1388,10 +1513,13 @@ export class AccountService {
           `Found ${deposits.length} deposits for pool ${pool.address}`
         );
 
-        // Create a map of deposits by precommitment for efficient lookup
+        // Create a map of deposits by precommitment for efficient lookup.
+        // Keep the earliest on collision, matching `getDepositEvents`, so both
+        // reconstruction paths agree on which deposit is the spendable one.
         const depositMap = new Map<Hash, DepositEvent>();
         for (const deposit of deposits) {
-          if (!depositMap.has(deposit.precommitment)) {
+          const existing = depositMap.get(deposit.precommitment);
+          if (!existing || AccountService._compareDepositOrder(deposit, existing) < 0) {
             depositMap.set(deposit.precommitment, deposit);
           }
         }

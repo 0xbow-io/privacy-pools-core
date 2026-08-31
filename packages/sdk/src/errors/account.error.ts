@@ -1,5 +1,6 @@
 import { ErrorCode, SDKError } from "./base.error.js";
 import { Hash } from "../types/commitment.js";
+import { ScopeLoadStatus } from "../types/account.js";
 
 export class AccountError extends SDKError {
   constructor(
@@ -47,13 +48,23 @@ export class AccountError extends SDKError {
     );
   }
 
-  public static incompleteScopeHistory(scope: Hash): AccountError {
+  public static incompleteScopeHistory(
+    scope: Hash,
+    status: ScopeLoadStatus = "incomplete",
+  ): AccountError {
+    const cause =
+      status === "not-loaded"
+        ? "its event history has not been loaded"
+        : "its event history failed to load";
+
     return new AccountError(
       `Cannot derive the next deposit index for scope ${scope.toString()}: ` +
-      `its event history failed to load, so reconstructed state is incomplete. ` +
+      `${cause}, so reconstructed state may be missing deposits. Reusing an ` +
+      `index would produce a deposit sharing a nullifier hash with an existing ` +
+      `one, and the pool only ever allows one of those to be withdrawn. ` +
       `Reload the account for this scope, or pass an explicit index.`,
       ErrorCode.OPERATION_FAILED,
-      { scope },
+      { scope, status },
     );
   }
 } 
