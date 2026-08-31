@@ -9,7 +9,7 @@ cache
 out-via-ir
 
 # Config files
-.env
+.env*
 
 # Avoid ignoring gitkeep
 !/**/.gitkeep

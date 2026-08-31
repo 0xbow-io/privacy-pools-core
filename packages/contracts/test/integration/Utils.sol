@@ -43,7 +43,6 @@ contract IntegrationUtils is Test {
     string newSecret;
     address recipient;
     Commitment commitment;
-    bytes4 revertReason;
   }
 
   struct WithdrawalProofParams {

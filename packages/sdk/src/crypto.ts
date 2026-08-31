@@ -1,5 +1,4 @@
 import { mnemonicToAccount } from "viem/accounts";
-import { bytesToNumber } from "viem/utils";
 import { poseidon } from "maci-crypto/build/ts/hashing.js";
 import { LeanIMT, LeanIMTMerkleProof } from "@zk-kit/lean-imt";
 import {
@@ -13,7 +12,7 @@ import {
   Withdrawal,
   MasterKeys,
 } from "./types/index.js";
-import { encodeAbiParameters, Hex, keccak256, numberToHex } from "viem";
+import { bytesToBigInt, encodeAbiParameters, Hex, keccak256, numberToHex } from "viem";
 import { SNARK_SCALAR_FIELD } from "./constants.js";
 
 /**
@@ -45,16 +44,16 @@ export function generateMasterKeys(mnemonic: string): MasterKeys {
         );
     }
      
-    const key1 = bytesToNumber(
+    const key1 = bytesToBigInt(
       mnemonicToAccount(mnemonic, { accountIndex: 0 }).getHdKey().privateKey!,
     );
 
-    const key2 = bytesToNumber(
+    const key2 = bytesToBigInt(
       mnemonicToAccount(mnemonic, { accountIndex: 1 }).getHdKey().privateKey!,
     );
 
-    const masterNullifier = poseidon([BigInt(key1)]) as Secret;
-    const masterSecret = poseidon([BigInt(key2)]) as Secret;
+    const masterNullifier = poseidon([key1]) as Secret;
+    const masterSecret = poseidon([key2]) as Secret;
 
   return { masterNullifier, masterSecret };
 }

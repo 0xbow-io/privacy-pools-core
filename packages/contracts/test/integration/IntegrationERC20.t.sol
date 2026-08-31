@@ -36,9 +36,9 @@ contract IntegrationERC20 is IntegrationBase {
         newNullifier: 'nullifier_2',
         newSecret: 'secret_2',
         recipient: _BOB,
-        commitment: _commitment,
-        revertReason: NONE
-      })
+        commitment: _commitment
+      }),
+      NONE
     );
   }
 
@@ -62,9 +62,9 @@ contract IntegrationERC20 is IntegrationBase {
         newNullifier: 'nullifier_2',
         newSecret: 'secret_2',
         recipient: _BOB,
-        commitment: _commitment,
-        revertReason: NONE
-      })
+        commitment: _commitment
+      }),
+      NONE
     );
   }
 
@@ -88,9 +88,9 @@ contract IntegrationERC20 is IntegrationBase {
         newNullifier: 'nullifier_2',
         newSecret: 'secret_2',
         recipient: _BOB,
-        commitment: _commitment,
-        revertReason: NONE
-      })
+        commitment: _commitment
+      }),
+      NONE
     );
   }
 
@@ -114,9 +114,9 @@ contract IntegrationERC20 is IntegrationBase {
         newNullifier: 'nullifier_2',
         newSecret: 'secret_2',
         recipient: _BOB,
-        commitment: _commitment,
-        revertReason: NONE
-      })
+        commitment: _commitment
+      }),
+      NONE
     );
 
     // Withdraw 2000 DAI to Bob
@@ -126,9 +126,9 @@ contract IntegrationERC20 is IntegrationBase {
         newNullifier: 'nullifier_3',
         newSecret: 'secret_3',
         recipient: _BOB,
-        commitment: _commitment,
-        revertReason: NONE
-      })
+        commitment: _commitment
+      }),
+      NONE
     );
 
     // Withdraw 500 DAI to Bob
@@ -138,9 +138,9 @@ contract IntegrationERC20 is IntegrationBase {
         newNullifier: 'nullifier_4',
         newSecret: 'secret_4',
         recipient: _BOB,
-        commitment: _commitment,
-        revertReason: NONE
-      })
+        commitment: _commitment
+      }),
+      NONE
     );
 
     // Withdraw remaining balance to Bob
@@ -150,9 +150,9 @@ contract IntegrationERC20 is IntegrationBase {
         newNullifier: 'nullifier_5',
         newSecret: 'secret_5',
         recipient: _BOB,
-        commitment: _commitment,
-        revertReason: NONE
-      })
+        commitment: _commitment
+      }),
+      NONE
     );
   }
 
@@ -176,9 +176,9 @@ contract IntegrationERC20 is IntegrationBase {
         newNullifier: 'nullifier_2',
         newSecret: 'secret_2',
         recipient: _BOB,
-        commitment: _commitment,
-        revertReason: NONE
-      })
+        commitment: _commitment
+      }),
+      NONE
     );
   }
 
@@ -202,9 +202,9 @@ contract IntegrationERC20 is IntegrationBase {
         newNullifier: 'nullifier_2',
         newSecret: 'secret_2',
         recipient: _BOB,
-        commitment: _commitment,
-        revertReason: NONE
-      })
+        commitment: _commitment
+      }),
+      NONE
     );
 
     // Withdraw 2000 DAI to Bob
@@ -214,9 +214,9 @@ contract IntegrationERC20 is IntegrationBase {
         newNullifier: 'nullifier_3',
         newSecret: 'secret_3',
         recipient: _BOB,
-        commitment: _commitment,
-        revertReason: NONE
-      })
+        commitment: _commitment
+      }),
+      NONE
     );
 
     // Withdraw 500 DAI to Bob
@@ -226,9 +226,9 @@ contract IntegrationERC20 is IntegrationBase {
         newNullifier: 'nullifier_4',
         newSecret: 'secret_4',
         recipient: _BOB,
-        commitment: _commitment,
-        revertReason: NONE
-      })
+        commitment: _commitment
+      }),
+      NONE
     );
 
     // Withdraw remaining balance to Bob
@@ -238,9 +238,9 @@ contract IntegrationERC20 is IntegrationBase {
         newNullifier: 'nullifier_5',
         newSecret: 'secret_5',
         recipient: _BOB,
-        commitment: _commitment,
-        revertReason: NONE
-      })
+        commitment: _commitment
+      }),
+      NONE
     );
   }
 
@@ -266,9 +266,9 @@ contract IntegrationERC20 is IntegrationBase {
         newNullifier: 'nullifier_2',
         newSecret: 'secret_2',
         recipient: _BOB,
-        commitment: _commitment,
-        revertReason: IPrivacyPool.IncorrectASPRoot.selector
-      })
+        commitment: _commitment
+      }),
+      IPrivacyPool.IncorrectASPRoot.selector
     );
 
     // Ragequit full amount
@@ -295,9 +295,9 @@ contract IntegrationERC20 is IntegrationBase {
         newNullifier: 'nullifier_2',
         newSecret: 'secret_2',
         recipient: _BOB,
-        commitment: _commitment,
-        revertReason: NONE
-      })
+        commitment: _commitment
+      }),
+      NONE
     );
 
     // Remove label from ASP
@@ -313,9 +313,9 @@ contract IntegrationERC20 is IntegrationBase {
         newNullifier: 'nullifier_3',
         newSecret: 'secret_3',
         recipient: _BOB,
-        commitment: _commitment,
-        revertReason: IPrivacyPool.IncorrectASPRoot.selector
-      })
+        commitment: _commitment
+      }),
+      IPrivacyPool.IncorrectASPRoot.selector
     );
 
     // Ragequit
@@ -342,9 +342,9 @@ contract IntegrationERC20 is IntegrationBase {
         newNullifier: 'nullifier_2',
         newSecret: 'secret_2',
         recipient: _BOB,
-        commitment: _commitment,
-        revertReason: NONE
-      })
+        commitment: _commitment
+      }),
+      NONE
     );
 
     // Fail to spend same commitment that was just spent
@@ -354,9 +354,9 @@ contract IntegrationERC20 is IntegrationBase {
         newNullifier: 'nullifier_2',
         newSecret: 'secret_2',
         recipient: _BOB,
-        commitment: _commitment,
-        revertReason: IState.NullifierAlreadySpent.selector
-      })
+        commitment: _commitment
+      }),
+      IState.NullifierAlreadySpent.selector
     );
   }
 
@@ -383,9 +383,9 @@ contract IntegrationERC20 is IntegrationBase {
         newNullifier: 'nullifier_2',
         newSecret: 'secret_2',
         recipient: _BOB,
-        commitment: _commitment,
-        revertReason: IState.NullifierAlreadySpent.selector
-      })
+        commitment: _commitment
+      }),
+      IState.NullifierAlreadySpent.selector
     );
   }
 

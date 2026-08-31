@@ -30,7 +30,9 @@ export class DataService {
   /**
    * Initialize the data service with chain configurations
    *
-   * @param chainConfigs - Array of chain configurations containing chainId, RPC URL, and API key
+   * @param chainConfigs - Array of chain configurations containing chainId, RPC URL, and API key.
+   *                       Optionally carries per-chain transport tuning (`timeout`, `retryCount`)
+   *                       applied to the viem client built for that chain.
    * @param logFetchConfig - Per-chain configuration for rate-limited log fetching as a Map<chainId, config>.
    *                         Each chain can have its own specific settings (e.g., different block chunk sizes).
    * @throws {DataError} If client initialization fails for any chain
@@ -57,8 +59,13 @@ export class DataService {
           throw new Error(`Missing RPC URL for chain ${config.chainId}`);
         }
 
+        // `timeout`/`retryCount` fall back to viem's own defaults when
+        // undefined (10s and 3 retries), so omitting them changes nothing.
         const client = createPublicClient({
-          transport: http(config.rpcUrl),
+          transport: http(config.rpcUrl, {
+            timeout: config.timeout,
+            retryCount: config.retryCount,
+          }),
         });
         this.clients.set(config.chainId, client);
       }
@@ -129,6 +136,7 @@ export class DataService {
             };
             blockNumber?: bigint;
             transactionHash?: Hex;
+            logIndex?: number;
           };
 
           if (!typedLog.args) {
@@ -158,10 +166,11 @@ export class DataService {
             depositor: depositor.toLowerCase(),
             commitment: commitment as Hash,
             label: label as Hash,
-            value: value || BigInt(0),
+            value: value ?? BigInt(0),
             precommitment: precommitment as Hash,
             blockNumber: BigInt(typedLog.blockNumber),
             transactionHash: typedLog.transactionHash,
+            logIndex: typedLog.logIndex,
           };
         } catch (error) {
           if (error instanceof DataError) throw error;
@@ -252,14 +261,7 @@ export class DataService {
             _newCommitment: newCommitment,
           } = typedLog.args;
 
-          if (
-            value === undefined ||
-            value === null ||
-            !spentNullifier ||
-            !newCommitment ||
-            !typedLog.blockNumber ||
-            !typedLog.transactionHash
-          ) {
+          if (value == null || !spentNullifier || !newCommitment || !typedLog.blockNumber || !typedLog.transactionHash) {
             throw DataError.invalidLog("withdrawal", "missing required fields");
           }
 
@@ -375,7 +377,7 @@ export class DataService {
             ragequitter: ragequitter.toLowerCase(),
             commitment: commitment as Hash,
             label: label as Hash,
-            value: value || BigInt(0),
+            value: value ?? BigInt(0),
             blockNumber: BigInt(typedLog.blockNumber),
             transactionHash: typedLog.transactionHash,
           };

@@ -2,6 +2,7 @@ import { poseidon } from "maci-crypto/build/ts/hashing.js";
 import { Hash, Secret } from "../types/commitment.js";
 import { Hex, bytesToNumber } from "viem";
 import { mnemonicToAccount } from "viem/accounts";
+import { generateMasterKeys } from "../crypto.js";
 import { mapLimit } from "async";
 import { DataService } from "./data.service.js";
 import {
@@ -9,6 +10,7 @@ import {
   PoolAccount,
   PoolInfo,
   PrivacyPoolAccount,
+  ScopeLoadStatus,
 } from "../types/account.js";
 import {
   DepositEvent,
@@ -23,15 +25,28 @@ import { AccountError } from "../errors/account.error.js";
 import { ErrorCode } from "../errors/base.error.js";
 import { EventError } from "../errors/events.error.js";
 
+/**
+ * Optional behavioral configuration shared across the AccountService
+ * construction paths (direct constructor and `initializeWithEvents`).
+ */
+type AccountServiceOptions = {
+  /** Maximum number of pools to fetch events for concurrently (default: 2). */
+  poolConcurrency?: number;
+  /**
+   * Whether reconstructed empty nodes are included in the user's decrypted
+   * nodes returned by {@link AccountService.getSpendableCommitments}.
+   *
+   * When `true` (the default), every account's latest commitment is returned,
+   * including empty (zero-value), migrated, and ragequit commitments. Set to
+   * `false` to restore the spendable-only behavior, where those nodes are
+   * filtered out.
+   */
+  includeEmptyNodes?: boolean;
+};
+
 type AccountServiceConfig =
-  | {
-    mnemonic: string;
-    poolConcurrency?: number;
-  }
-  | {
-    account: PrivacyPoolAccount;
-    poolConcurrency?: number;
-  };
+  | ({ mnemonic: string } & AccountServiceOptions)
+  | ({ account: PrivacyPoolAccount } & AccountServiceOptions);
 
 /**
  * Service responsible for managing privacy pool accounts and their associated commitments.
@@ -45,6 +60,7 @@ export class AccountService {
   account: PrivacyPoolAccount;
   private readonly logger: Logger;
   private readonly poolConcurrency: number;
+  private readonly includeEmptyNodes: boolean;
 
   /**
    * Creates a new AccountService instance.
@@ -54,6 +70,7 @@ export class AccountService {
    * @param config.mnemonic - Optional mnemonic for deterministic key generation
    * @param config.account - Optional existing account to initialize with
    * @param config.poolConcurrency - Optional maximum number of pools to fetch events for concurrently (default: 2)
+   * @param config.includeEmptyNodes - Optional flag controlling whether empty (zero-value), migrated, and ragequit nodes are included in `getSpendableCommitments` (default: true)
    *
    * @throws {AccountError} If account initialization fails
    */
@@ -63,10 +80,54 @@ export class AccountService {
   ) {
     this.logger = new Logger({ prefix: "Account" });
     this.poolConcurrency = config.poolConcurrency ?? 2;
+    this.includeEmptyNodes = config.includeEmptyNodes ?? true;
     if ("mnemonic" in config) {
       this.account = this._initializeAccount(config.mnemonic);
     } else {
       this.account = config.account;
+    }
+  }
+
+  /**
+   * Initializes a new account from a mnemonic phrase for the legacy account.
+   *
+   * @param mnemonic - The mnemonic phrase to derive keys from
+   * @returns A new PrivacyPoolAccount with derived master keys
+   *
+   * @remarks
+   * This method derives two master keys from the mnemonic:
+   * 1. A master nullifier key from account index 0
+   * 2. A master secret key from account index 1
+   * These keys are used to deterministically generate nullifiers and secrets for deposits and withdrawals.
+   *
+   * @throws {AccountError} If account initialization fails
+   * @private
+   */
+  protected static _initializeLegacyAccount(mnemonic: string): PrivacyPoolAccount {
+    try {
+
+      const masterNullifierSeed = bytesToNumber(
+        mnemonicToAccount(mnemonic, { accountIndex: 0 }).getHdKey().privateKey!
+      );
+
+      const masterSecretSeed = bytesToNumber(
+        mnemonicToAccount(mnemonic, { accountIndex: 1 }).getHdKey().privateKey!
+      );
+
+      const masterNullifier = poseidon([BigInt(masterNullifierSeed)]) as Secret;
+      const masterSecret = poseidon([BigInt(masterSecretSeed)]) as Secret;
+
+      return {
+        masterKeys: [masterNullifier, masterSecret],
+        poolAccounts: new Map(),
+        scopeStatus: new Map(),
+        creationTimestamp: 0n,
+        lastUpdateTimestamp: 0n,
+      };
+    } catch (error) {
+      throw AccountError.accountInitializationFailed(
+        error instanceof Error ? error.message : "Unknown error"
+      );
     }
   }
 
@@ -89,20 +150,12 @@ export class AccountService {
     try {
       this.logger.debug("Initializing account with mnemonic");
 
-      const masterNullifierSeed = bytesToNumber(
-        mnemonicToAccount(mnemonic, { accountIndex: 0 }).getHdKey().privateKey!
-      );
-
-      const masterSecretSeed = bytesToNumber(
-        mnemonicToAccount(mnemonic, { accountIndex: 1 }).getHdKey().privateKey!
-      );
-
-      const masterNullifier = poseidon([BigInt(masterNullifierSeed)]) as Secret;
-      const masterSecret = poseidon([BigInt(masterSecretSeed)]) as Secret;
+      const { masterNullifier, masterSecret } = generateMasterKeys(mnemonic);
 
       return {
         masterKeys: [masterNullifier, masterSecret],
         poolAccounts: new Map(),
+        scopeStatus: new Map(),
         creationTimestamp: 0n,
         lastUpdateTimestamp: 0n,
       };
@@ -195,24 +248,29 @@ export class AccountService {
   }
 
   /**
-   * Gets all spendable commitments across all pools.
+   * Gets the latest decrypted commitment of each account across all pools.
    *
-   * @returns A map of scope to array of spendable commitments
+   * @returns A map of scope to array of commitments
    *
    * @remarks
-   * A commitment is considered spendable if:
-   * 1. It has a non-zero value
-   * 2. The account it belongs to has not been ragequit
+   * The result depends on the `includeEmptyNodes` option (default `true`):
+   *
+   * - When `includeEmptyNodes` is `true`, every account's latest commitment is
+   *   returned, including empty (zero-value), migrated, and ragequit nodes.
+   * - When `includeEmptyNodes` is `false`, only spendable commitments are
+   *   returned. A commitment is spendable if it has a non-zero value and its
+   *   account has not been ragequit or migrated.
    */
   public getSpendableCommitments(): Map<bigint, AccountCommitment[]> {
     const result = new Map<bigint, AccountCommitment[]>();
 
     for (const [scope, accounts] of this.account.poolAccounts.entries()) {
-      const nonZeroCommitments: AccountCommitment[] = [];
+      const commitments: AccountCommitment[] = [];
 
       for (const account of accounts) {
-        // Skip accounts that have been ragequit
-        if (account.ragequit) {
+        // When empty-node decryption is disabled, skip accounts that have been
+        // ragequit or migrated — their value is no longer spendable from here.
+        if (!this.includeEmptyNodes && (account.ragequit || account.isMigrated)) {
           continue;
         }
 
@@ -221,13 +279,14 @@ export class AccountService {
             ? account.children[account.children.length - 1]
             : account.deposit;
 
-        if (lastCommitment!.value !== BigInt(0)) {
-          nonZeroCommitments.push(lastCommitment!);
+        // When empty-node decryption is disabled, drop zero-value commitments.
+        if (this.includeEmptyNodes || lastCommitment!.value !== BigInt(0)) {
+          commitments.push(lastCommitment!);
         }
       }
 
-      if (nonZeroCommitments.length > 0) {
-        result.set(scope, nonZeroCommitments);
+      if (commitments.length > 0) {
+        result.set(scope, commitments);
       }
     }
     return result;
@@ -252,18 +311,184 @@ export class AccountService {
     secret: Secret;
     precommitment: Hash;
   } {
-    if (index && index < 0n) {
+    if (index !== undefined && index < 0n) {
       throw AccountError.invalidIndex(index);
     }
 
-    const accounts = this.account.poolAccounts.get(scope);
-    index = index ?? BigInt(accounts?.length || 0);
+    if (index === undefined) {
+      // Refuse to guess an index for a scope whose history is known to be
+      // incomplete: the count would be understated and would collide with a
+      // deposit index that is already in use on-chain. Callers that genuinely
+      // want a specific index must pass it explicitly.
+      if (!this._canInferDepositIndex(scope)) {
+        throw AccountError.incompleteScopeHistory(scope, this.getScopeStatus(scope));
+      }
+      index = this._nextDepositIndex(scope);
+    }
 
     const nullifier = this._genDepositNullifier(scope, index);
     const secret = this._genDepositSecret(scope, index);
     const precommitment = this._hashPrecommitment(nullifier, secret);
 
     return { nullifier, secret, precommitment };
+  }
+
+  /**
+   * Total order over deposits sharing a precommitment: earliest block, then
+   * earliest log within the block, then transaction hash as a final tie-break.
+   *
+   * `logIndex` is what makes this total — two deposits emitted by one
+   * transaction share both `blockNumber` and `transactionHash`, so without it
+   * the order would depend on log-fetch chunking and concurrency, and two
+   * reconstructions of the same chain state could keep different deposits.
+   * Plain string comparison is used rather than `localeCompare`, which is
+   * locale- and ICU-version-dependent.
+   */
+  private static _compareDepositOrder(a: DepositEvent, b: DepositEvent): number {
+    if (a.blockNumber !== b.blockNumber) return a.blockNumber < b.blockNumber ? -1 : 1;
+
+    const aLog = a.logIndex ?? Number.MAX_SAFE_INTEGER;
+    const bLog = b.logIndex ?? Number.MAX_SAFE_INTEGER;
+    if (aLog !== bLog) return aLog < bLog ? -1 : 1;
+
+    if (a.transactionHash === b.transactionHash) return 0;
+    return a.transactionHash < b.transactionHash ? -1 : 1;
+  }
+
+  /**
+   * Number of deposit indices already consumed for a scope.
+   *
+   * Counts only deposit-derived accounts and uses the recorded
+   * `depositIndex` rather than array position, so migration-derived accounts
+   * (which occupy no deposit index) cannot shift the result. Falls back to the
+   * deposit-derived account count for accounts reconstructed before
+   * `depositIndex` was recorded (e.g. restored history files).
+   */
+  private _nextDepositIndex(scope: Hash): bigint {
+    const { maxDepositIndex, recordedIndices, depositDerivedCount } =
+      this._tallyScopeAccounts(scope);
+
+    // Prefer the recorded indices: monotonic, so an index already used is never
+    // handed back even when earlier ones are unused (failed transactions leave
+    // gaps).
+    if (recordedIndices > 0) return maxDepositIndex + 1n;
+
+    // Fallback for accounts reconstructed before `depositIndex` was recorded
+    // (e.g. a restored history file): the deposit-derived count is the best
+    // available estimate.
+    return BigInt(depositDerivedCount);
+  }
+
+  /**
+   * Single pass over a scope's accounts, tallying everything the deposit-index
+   * and migration bookkeeping needs.
+   *
+   * `recordedIndices` counts DISTINCT recorded `depositIndex` values, not
+   * accounts: several accounts can share one index, and counting accounts would
+   * overstate the next index and open a gap wider than the scan's miss
+   * tolerance — hiding the very deposits this bookkeeping exists to find.
+   */
+  private _tallyScopeAccounts(scope: Hash): {
+    migrationDerivedCount: number;
+    depositDerivedCount: number;
+    recordedIndices: number;
+    maxDepositIndex: bigint;
+  } {
+    const accounts = this.account.poolAccounts.get(scope) ?? [];
+    const seenIndices = new Set<bigint>();
+    let migrationDerivedCount = 0;
+    let depositDerivedCount = 0;
+    let maxDepositIndex = -1n;
+
+    for (const account of accounts) {
+      if (account.isMigrationDerived) {
+        migrationDerivedCount++;
+        continue;
+      }
+
+      depositDerivedCount++;
+      if (account.depositIndex === undefined) continue;
+
+      seenIndices.add(account.depositIndex);
+      if (account.depositIndex > maxDepositIndex) {
+        maxDepositIndex = account.depositIndex;
+      }
+    }
+
+    return {
+      migrationDerivedCount,
+      depositDerivedCount,
+      recordedIndices: seenIndices.size,
+      maxDepositIndex,
+    };
+  }
+
+  /** Number of migration-derived accounts reconstructed for a scope. */
+  private _migrationDerivedCount(scope: Hash): number {
+    return this._tallyScopeAccounts(scope).migrationDerivedCount;
+  }
+
+  /**
+   * Load outcome for `scope`: `complete`, `incomplete`, or `not-loaded`.
+   *
+   * `not-loaded` is distinct from `complete` on purpose — a scope that was
+   * never fetched tells us nothing, and treating it as complete is what lets a
+   * deposit index be reused.
+   */
+  public getScopeStatus(scope: Hash): ScopeLoadStatus {
+    return this.account.scopeStatus?.get(scope) ?? "not-loaded";
+  }
+
+  /**
+   * Whether the reconstructed state for `scope` is complete.
+   *
+   * `false` for a scope that failed to load AND for one that was never
+   * attempted; in both cases absent accounts must not be read as "no
+   * accounts". Callers should block deposits and withdrawals for such scopes.
+   */
+  public isScopeComplete(scope: Hash): boolean {
+    return this.getScopeStatus(scope) === "complete";
+  }
+
+  /** Scopes whose history failed to load during the last processing run. */
+  public getIncompleteScopes(): Hash[] {
+    if (!this.account.scopeStatus) return [];
+    return [...this.account.scopeStatus.entries()]
+      .filter(([, status]) => status === "incomplete")
+      .map(([scope]) => scope);
+  }
+
+  /**
+   * Records the load outcome for a scope on the underlying account.
+   *
+   * Written to `this.account`, which retry paths share with the service they
+   * were derived from — so a scope reconstructed on retry stops reading as
+   * incomplete on the caller's original service handle too.
+   */
+  private _setScopeStatus(scope: Hash, status: ScopeLoadStatus): void {
+    if (!this.account.scopeStatus) this.account.scopeStatus = new Map();
+    this.account.scopeStatus.set(scope, status);
+  }
+
+  /**
+   * Whether an unspecified deposit index may be inferred for `scope`.
+   *
+   * Permitted when the scope loaded completely, and for an account that has
+   * loaded nothing at all — a brand-new account genuinely has no history, so
+   * index 0 is correct and refusing would block the first deposit. Refused once
+   * anything has been loaded but this scope has not, since notes may exist here
+   * that we have not seen.
+   */
+  private _canInferDepositIndex(scope: Hash): boolean {
+    const status = this.getScopeStatus(scope);
+    if (status === "complete") return true;
+    if (status === "incomplete") return false;
+
+    // Legacy account object with no status map: preserve prior behaviour.
+    if (!this.account.scopeStatus) return true;
+
+    // Nothing loaded yet — a fresh account.
+    return this.account.scopeStatus.size === 0;
   }
 
   /**
@@ -327,7 +552,8 @@ export class AccountService {
     secret: Secret,
     label: Hash,
     blockNumber: bigint,
-    txHash: Hex
+    txHash: Hex,
+    meta?: { depositIndex?: bigint; isMigrationDerived?: boolean }
   ): PoolAccount {
     const precommitment = this._hashPrecommitment(nullifier, secret);
     const commitment = this._hashCommitment(value, label, precommitment);
@@ -344,6 +570,10 @@ export class AccountService {
         txHash,
       },
       children: [],
+      ...(meta?.depositIndex !== undefined ? { depositIndex: meta.depositIndex } : {}),
+      ...(meta?.isMigrationDerived !== undefined
+        ? { isMigrationDerived: meta.isMigrationDerived }
+        : {}),
     };
 
     if (!this.account.poolAccounts.has(scope)) {
@@ -427,6 +657,75 @@ export class AccountService {
   }
 
   /**
+   * Adds a new commitment to the account after migrate
+   *
+   * @param parentCommitment - The commitment that was spent
+   * @param value - The remaining value after spending
+   * @param nullifier - The nullifier used for migrate
+   * @param secret - The secret used for migrate
+   * @param blockNumber - The block number of the withdrawal
+   * @param txHash - The transaction hash of the withdrawal
+   * @returns The new commitment
+   *
+   * @remarks
+   * This method finds the account containing the parent commitment, creates a new
+   * commitment with the provided parameters, and adds it to the account's children.
+   * The new commitment inherits the label from the parent commitment.
+   *
+   * @throws {AccountError} If no account is found for the commitment
+   */
+  public addMigrationCommitment(
+    parentCommitment: AccountCommitment,
+    value: bigint,
+    nullifier: Secret,
+    secret: Secret,
+    blockNumber: bigint,
+    txHash: Hex
+  ): AccountCommitment {
+    let foundAccount: PoolAccount | undefined;
+    let foundScope: bigint | undefined;
+
+    for (const [scope, accounts] of this.account.poolAccounts.entries()) {
+      foundAccount = accounts.find((account) => {
+        if (account.deposit.hash === parentCommitment.hash) return true;
+        return account.children.some(
+          (child) => child.hash === parentCommitment.hash
+        );
+      });
+
+      if (foundAccount) {
+        foundScope = scope;
+        break;
+      }
+    }
+
+    if (!foundAccount || !foundScope) {
+      throw AccountError.commitmentNotFound(parentCommitment.hash);
+    }
+
+    const precommitment = this._hashPrecommitment(nullifier, secret);
+    const newCommitment: AccountCommitment = {
+      hash: this._hashCommitment(value, parentCommitment.label, precommitment),
+      value,
+      label: parentCommitment.label,
+      nullifier,
+      secret,
+      blockNumber,
+      txHash,
+      isMigration: true
+    };
+
+    foundAccount.children.push(newCommitment);
+    foundAccount.isMigrated = true;
+
+    this.logger.info(
+      `Added new commitment with value ${value} to account with label ${parentCommitment.label}`
+    );
+
+    return newCommitment;
+  }
+
+  /**
    * Adds a ragequit event to an existing pool account
    *
    * @param label - The label of the account to add the ragequit to
@@ -474,11 +773,25 @@ export class AccountService {
   }
 
   /**
-   * Fetches deposit events for a given pool and returns a map of precommitments to their events for efficient lookup
+   * Fetches deposit events for a given pool, keyed by precommitment for
+   * efficient lookup during reconstruction.
    *
    * @param pool - The pool to fetch deposit events for
    *
-   * @returns A map of precommitments to their events
+   * @returns A map of precommitment to the earliest deposit carrying it
+   *
+   * @remarks
+   * Exactly one event per precommitment. A precommitment is derived from
+   * (masterKeys, scope, depositIndex), so two deposits collide only when the
+   * same index was used twice — and since the deposit nullifier shares that
+   * derivation, the colliding deposits also share a nullifier hash. The pool
+   * marks a nullifier hash spent on first withdrawal (`State.sol` reverts
+   * `NullifierAlreadySpent` afterwards), so at most one of them is ever
+   * withdrawable. Reconstructing both as spendable accounts would overstate the
+   * balance and, because a single withdrawal event then matches every one of
+   * them, produce negative-value commitments. The earliest deposit is kept and
+   * the collision is logged with its transaction hashes so affected accounts
+   * can be found and handled deliberately.
    */
   public async getDepositEvents(
     pool: PoolInfo
@@ -493,13 +806,44 @@ export class AccountService {
       });
 
       const depositMap = new Map<Hash, DepositEvent>();
-      for (const event of depositEvents) {
-        const existingEvent = depositMap.get(event.precommitment);
+      const collisions = new Map<Hash, DepositEvent[]>();
 
-        // If no existing event, or current event is older (earlier block), use current event
-        if (!existingEvent || event.blockNumber < existingEvent.blockNumber) {
+      for (const event of depositEvents) {
+        const existing = depositMap.get(event.precommitment);
+
+        if (!existing) {
+          depositMap.set(event.precommitment, event);
+          continue;
+        }
+
+        // Track every colliding deposit, including the one already kept, so the
+        // warning below reports the full set.
+        const group = collisions.get(event.precommitment);
+        if (group) {
+          group.push(event);
+        } else {
+          collisions.set(event.precommitment, [existing, event]);
+        }
+
+        if (AccountService._compareDepositOrder(event, existing) < 0) {
           depositMap.set(event.precommitment, event);
         }
+      }
+
+      for (const [precommitment, group] of collisions.entries()) {
+        group.sort(AccountService._compareDepositOrder);
+        this.logger.warn(
+          `Multiple deposits share one precommitment — the same deposit index was used more than once. ` +
+          `They also share a nullifier hash, so only the first to be withdrawn can ever be spent; ` +
+          `reconstruction keeps the earliest and ignores the rest.`,
+          {
+            precommitment,
+            scope: pool.scope,
+            count: group.length,
+            keptTxHash: group[0]!.transactionHash,
+            ignoredTxHashes: group.slice(1).map((e) => e.transactionHash),
+          }
+        );
       }
 
       return depositMap;
@@ -641,19 +985,22 @@ export class AccountService {
    * Deterministically generate deposit secrets and check if they match on-chain deposits
    *
    * @param scope - The scope of the pool
-   * @param depositEvents - The map of deposit events
+   * @param depositEvents - Deposit events keyed by precommitment
    *
    */
   private _processDepositEvents(
     scope: Hash,
-    depositEvents: Map<Hash, DepositEvent>
+    depositEvents: Map<Hash, DepositEvent>,
+    startIndex: bigint = 0n,
+    extraMissTolerance: number = 0,
   ): void {
-    const MAX_CONSECUTIVE_MISSES = 10; // Large enough to avoid tx failures
+    // Large enough to avoid tx failures, plus headroom for indices skipped by
+    // historical off-by-migration-count deposits (see `_processEvents`).
+    const MAX_CONSECUTIVE_MISSES = 10 + extraMissTolerance;
 
-    const foundIndices = new Set<bigint>();
     let consecutiveMisses = 0;
 
-    for (let index = BigInt(0); ; index++) {
+    for (let index = startIndex; ; index++) {
       // Generate nullifier, secret, and precommitment for this index
       const { nullifier, secret, precommitment } = this.createDepositSecrets(
         scope,
@@ -674,9 +1021,9 @@ export class AccountService {
       // Can reset counter in case if user had any tx failures for
       // newer deposits
       consecutiveMisses = 0;
-      foundIndices.add(index);
 
-      // Create a new pool account for this deposit
+      // Create a new pool account for this deposit, recording the derivation
+      // index so the next index never has to be inferred from array position.
       this.addPoolAccount(
         scope,
         event.value,
@@ -684,7 +1031,8 @@ export class AccountService {
         secret,
         event.label,
         event.blockNumber,
-        event.transactionHash
+        event.transactionHash,
+        { depositIndex: index }
       );
 
       this.logger.debug(`Found deposit at index ${index} for scope ${scope}`);
@@ -727,9 +1075,9 @@ export class AccountService {
     // Process each account in parallel for better performance
     for (const account of accounts) {
       let currentCommitment = account.deposit;
-      let index = BigInt(0);
+      let index = BigInt(account.children.length);
 
-      // Continue processing withdrawals until no more are found secuentially
+      // Continue processing withdrawals until no more are found sequentially
       while (true) {
         // Generate nullifier for this withdrawal
         const nullifierHash = poseidon([currentCommitment.nullifier]) as Hash;
@@ -740,22 +1088,48 @@ export class AccountService {
           break;
         }
 
+        const remainingValue = currentCommitment.value - withdrawal.withdrawn;
+
         // Generate secret for this withdrawal
         const nullifier = this._genWithdrawalNullifier(account.label, index);
         const secret = this._genWithdrawalSecret(account.label, index);
+        const precommitment = this._hashPrecommitment(nullifier, secret);
+        const accountCommitment = this._hashCommitment(remainingValue, currentCommitment.label, precommitment)
+        
+        
+        // If the locally-computed hash doesn't match the on-chain commitment,
+        // the withdrawal was performed with different keys (e.g. migration from
+        // legacy to safe keys). Mark the child as unspendable from this account.
+        if (accountCommitment !== withdrawal.newCommitment) {
+          this.logger.info(
+            `Withdrawal commitment hash mismatch — marking as unspendable (migrated with different keys)`,
+            { label: currentCommitment.label, expected: withdrawal.newCommitment, computed: accountCommitment }
+          );
+          
+          // Add the withdrawal commitment to the account
+          const migrationCommitment = this.addMigrationCommitment(
+            currentCommitment,
+            remainingValue,
+            nullifier,
+            secret,
+            withdrawal.blockNumber,
+            withdrawal.transactionHash
+          );    
 
-        // Add the withdrawal commitment to the account
-        const newCommitment = this.addWithdrawalCommitment(
-          currentCommitment,
-          currentCommitment.value - withdrawal.withdrawn,
-          nullifier,
-          secret,
-          withdrawal.blockNumber,
-          withdrawal.transactionHash
-        );
+          currentCommitment = migrationCommitment;
+        } else {
+          // Add the withdrawal commitment to the account
+          const withdrawalCommitment = this.addWithdrawalCommitment(
+            currentCommitment,
+            remainingValue,
+            nullifier,
+            secret,
+            withdrawal.blockNumber,
+            withdrawal.transactionHash
+          );
 
-        // Update current commitment to the newly created one
-        currentCommitment = newCommitment;
+          currentCommitment = withdrawalCommitment;
+        }
 
         // Increment index for next potential withdrawal
         index++;
@@ -800,11 +1174,95 @@ export class AccountService {
   }
 
   /**
+   * Discovers commitments that were migrated from legacy accounts via 0-value withdrawal.
+   *
+   * @param scope - The scope of the pool
+   * @param legacyAccounts - The legacy pool accounts for this scope
+   * @param withdrawalEvents - The map of withdrawal events (keyed by spentNullifier)
+   *
+   * @remarks
+   * When a legacy account performs a 0-value withdrawal to rotate keys (migration),
+   * the resulting on-chain commitment is created with safe keys. This method finds
+   * those commitments by:
+   * 1. Identifying legacy accounts with the `isMigrated` flag (set by `addMigrationCommitment`)
+   * 2. Computing the expected commitment hash using safe keys at withdrawal index 0
+   * 3. Verifying the hash exists in on-chain withdrawal events
+   * 4. Adding verified commitments as new safe pool accounts
+   *
+   * @private
+   */
+  private _discoverMigratedCommitments(
+    scope: Hash,
+    legacyAccounts: PoolAccount[],
+    withdrawalEvents: Map<Hash, WithdrawalEvent>
+  ): void {
+    // Build reverse lookup: newCommitment hash → WithdrawalEvent
+    const newCommitmentMap = new Map<Hash, WithdrawalEvent>();
+    for (const event of withdrawalEvents.values()) {
+      newCommitmentMap.set(event.newCommitment, event);
+    }
+
+    for (const legacyAccount of legacyAccounts) {
+      // Skip if not flagged as migrated (set by addMigrationCommitment)
+      if (!legacyAccount.isMigrated) continue;
+
+      const migrationChild = legacyAccount.children.find(c => c.isMigration);
+      if (!migrationChild) continue;
+
+      const label = legacyAccount.label;
+
+      // The migration child's value is the remaining value carried forward.
+      // Zero-value migrations (full withdrawal + key rotation) are valid and
+      // must still be registered so that poolAccounts.length reflects the
+      // correct slot count for deposit index alignment in step C.
+      const remainingValue = migrationChild.value;
+
+      // Generate safe nullifier/secret at withdrawal index 0
+      const nullifier = this._genWithdrawalNullifier(label, 0n);
+      const secret = this._genWithdrawalSecret(label, 0n);
+
+      // Compute expected commitment hash
+      const precommitment = this._hashPrecommitment(nullifier, secret);
+      const expectedHash = this._hashCommitment(remainingValue, label, precommitment);
+
+      // Verify hash exists in withdrawal events' newCommitment
+      const withdrawalEvent = newCommitmentMap.get(expectedHash);
+      if (!withdrawalEvent) continue;
+
+      // Verified — add as a new safe pool account
+      const newAccount = this.addPoolAccount(
+        scope,
+        remainingValue,
+        nullifier,
+        secret,
+        label,
+        withdrawalEvent.blockNumber,
+        withdrawalEvent.transactionHash,
+        { isMigrationDerived: true },
+      );
+
+      this.addWithdrawalCommitment(
+        newAccount.deposit,
+        remainingValue,
+        nullifier,
+        secret,
+        withdrawalEvent.blockNumber,
+        withdrawalEvent.transactionHash,
+      )
+
+      this.logger.info(
+        `Discovered migrated commitment for label ${label} with value ${remainingValue}`,
+      );
+    }
+  }
+
+  /**
    * Initializes an AccountService instance with events for a given set of pools
    *
    * @param dataService - The data service to use for fetching events
    * @param source - The source to use for initializing the account. Either a mnemonic or an existing account service instance
    * @param pools - The pools to fetch events for
+   * @param options - Optional behavioral configuration applied to the constructed account(s), e.g. `includeEmptyNodes` and `poolConcurrency`
    *
    * @remarks
    * This method performs the following steps for each pool:
@@ -815,8 +1273,15 @@ export class AccountService {
    *
    * @returns The initialized AccountService instance and array of errors if any pool events fetching fails
    *
-   * if any pool events fetching fails, the account will be initialized without the events for that pool
-   * user can then call to this method again with the same account and missing pools to fetch the missing events
+   * If any pool's event fetching fails, the account is initialized without the
+   * events for that pool and the scope is recorded as incomplete (see
+   * {@link AccountService.isScopeComplete}). Reconstructed state for such a
+   * scope is absent, NOT empty — callers must not read it as "no accounts".
+   *
+   * To retry, call this method again with `{ service, legacyService }` — both
+   * values returned by the original `{ mnemonic }` call. Passing
+   * `legacyService` keeps the retry migration-aware; omitting it reconstructs
+   * the retried scopes without migration discovery.
    *
    * @throws {AccountError} If account state reconstruction fails or if duplicate pools are found
    */
@@ -828,9 +1293,18 @@ export class AccountService {
       }
       | {
         service: AccountService;
+        /**
+         * The legacy-key service returned alongside `service` by the original
+         * `{ mnemonic }` call. Pass it so a retry stays migration-aware:
+         * without it the retried scopes are reconstructed with no migration
+         * discovery, which silently omits migration-derived accounts and
+         * produces a different — also incomplete — view of the same account.
+         */
+        legacyService?: AccountService;
       },
-    pools: PoolInfo[]
-  ): Promise<{ account: AccountService; errors: PoolEventsError[] }> {
+    pools: PoolInfo[],
+    options?: AccountServiceOptions
+  ): Promise<{ account: AccountService; legacyAccount?: AccountService; errors: PoolEventsError[] }> {
     // Log the start of the history retrieval process
     const logger = new Logger({ prefix: "Account" });
     logger.info(`Fetching events for pools`, { poolLength: pools.length });
@@ -844,32 +1318,155 @@ export class AccountService {
       uniqueScopes.add(pool.scope);
     }
 
-    const errors: PoolEventsError[] = [];
-    const account = new AccountService(
-      dataService,
-      "mnemonic" in source
-        ? { mnemonic: source.mnemonic }
-        : { account: source.service.account }
-    );
+    // Retry path: reuse the existing service's account and only reprocess
+    // scopes that actually still need it, to avoid duplicate deposits and
+    // withdrawal misclassification.
+    //
+    // When the caller passes `legacyService`, the retry runs the same
+    // migration-aware pipeline as the mnemonic path. Without it the retry can
+    // only do simple deposit/withdrawal/ragequit processing, which omits
+    // migration-derived accounts for the retried scopes.
+    if (!('mnemonic' in source)) {
+      const account = new AccountService(
+        dataService,
+        { account: source.service.account, ...options }
+      );
 
-    const events = await account.getEvents(pools);
+      // Decide per scope whether it still needs processing:
+      //
+      //  - `incomplete`  — it failed; retry it.
+      //  - `complete`    — skip, even if it matched no commitments. The old
+      //                    `!poolAccounts.has(scope)` proxy could not tell this
+      //                    case from "never attempted", so it re-ran the legacy
+      //                    scan and duplicated that scope's accounts on every
+      //                    retry.
+      //  - `not-loaded`  — process it if it has no reconstructed accounts. A
+      //                    pool newly added to `pools` lands here and must not
+      //                    be silently dropped. Accounts present without a
+      //                    recorded status mean state restored by an older
+      //                    version, so fall back to the proxy and skip rather
+      //                    than risk duplicating them.
+      //
+      // Status lives on the shared `PrivacyPoolAccount`, so marking a scope
+      // complete here is visible on the caller's original service too.
+      const existingScopes = source.service.account.poolAccounts;
+      const newPools = pools.filter((p) => {
+        const status = account.getScopeStatus(p.scope);
+        if (status === "complete") return false;
+        if (status === "incomplete") return true;
+        return !existingScopes.has(p.scope);
+      });
+
+      const legacyAccount = source.legacyService;
+      const errors = await account._processEvents(newPools, legacyAccount);
+      return { account, legacyAccount, errors };
+    }
+
+    // Mnemonic path: phased processing with migration discovery
+    const account = new AccountService(dataService, { mnemonic: source.mnemonic, ...options });
+    const legacyPrivacyPoolAccount = AccountService._initializeLegacyAccount(source.mnemonic);
+    const legacyAccount = new AccountService(dataService, { account: legacyPrivacyPoolAccount, ...options });
+
+    const errors = await account._processEvents(pools, legacyAccount);
+    return { account, legacyAccount, errors };
+  }
+
+  /**
+   * Fetches and processes events for a set of pools.
+   *
+   * When a legacyAccount is provided, the full migration-aware pipeline runs
+   * for each scope:
+   *   1. Legacy account: process deposits and withdrawals (to detect migrations)
+   *   2. Safe account: discover migrated commitments from the legacy accounts
+   *   3. Safe account (this): process deposits, always scanning from index 0
+   *   4. Safe account: process withdrawals (now includes migrated accounts)
+   *   5. Both accounts: process ragequits
+   *
+   * Step 3 always scans from index 0. Deposit indices and migration-derived
+   * accounts live in separate namespaces — deposit indices are never offset by
+   * the number of migrations — so starting the scan at the migrated-account
+   * count silently skips any deposit made while fewer migrations were visible
+   * (a scope whose history failed to load, or a deposit placed between two
+   * staged migrations). The miss tolerance is widened by the migration count
+   * instead, which bridges gaps left by older versions that did offset the
+   * index without ever skipping a real deposit.
+   *
+   * Without a legacyAccount, only steps 3, 4, and 5 run (simple processing).
+   *
+   * Per-scope errors are caught and returned rather than thrown, and any
+   * partial state left by a mid-scope failure is cleaned from both accounts
+   * so that a subsequent retry starts fresh for that scope.
+   */
+  private async _processEvents(
+    pools: PoolInfo[],
+    legacyAccount?: AccountService,
+  ): Promise<PoolEventsError[]> {
+    const errors: PoolEventsError[] = [];
+
+    const events = await this.getEvents(pools);
 
     for (const [scope, result] of events.entries()) {
       if ("reason" in result) {
+        this._setScopeStatus(scope, "incomplete");
         errors.push(result);
       } else {
-        // Process deposit events an create pool accounts
-        account._processDepositEvents(scope, result.depositEvents);
+        try {
+          // a. Legacy: process deposits + withdrawals
+          if (legacyAccount) {
+            legacyAccount._processDepositEvents(scope, result.depositEvents);
+            legacyAccount._processWithdrawalEvents(scope, result.withdrawalEvents);
+          }
 
-        // Process withdrawal events and add commitments to pool accounts
-        account._processWithdrawalEvents(scope, result.withdrawalEvents);
+          // b. Safe: discover migrated commitments from legacy accounts.
+          //    Must run before safe deposit scanning so that the migrated
+          //    account count can serve as the starting index for step (c),
+          //    avoiding a gap of consecutive misses over legacy-key indices.
+          if (legacyAccount) {
+            const legacyAccounts = legacyAccount.account.poolAccounts.get(scope) ?? [];
+            this._discoverMigratedCommitments(scope, legacyAccounts, result.withdrawalEvents);
+          }
 
-        // Process ragequit events and add ragequit to pool accounts
-        account._processRagequitEvents(scope, result.ragequitEvents);
+          // c. Safe: process deposits. ALWAYS scan from index 0 — deposit
+          //    indices live in their own namespace and are never offset by the
+          //    number of migration-derived accounts. Starting the scan at the
+          //    migrated-account count silently skips any deposit made while
+          //    fewer migrations were visible (failed history load, or a
+          //    deposit placed between two staged migrations).
+          //
+          //    Historical deposits may still sit at an offset index because
+          //    older versions derived the index from poolAccounts.length, so
+          //    widen the miss tolerance by the migration count to bridge the
+          //    resulting gap.
+          this._processDepositEvents(
+            scope,
+            result.depositEvents,
+            0n,
+            this._migrationDerivedCount(scope),
+          );
+
+          // d. Safe: process withdrawals (now includes migrated accounts)
+          this._processWithdrawalEvents(scope, result.withdrawalEvents);
+
+          // e. Both: process ragequits
+          if (legacyAccount) {
+            legacyAccount._processRagequitEvents(scope, result.ragequitEvents);
+          }
+          this._processRagequitEvents(scope, result.ragequitEvents);
+
+          this._setScopeStatus(scope, "complete");
+        } catch (e) {
+          this.account.poolAccounts.delete(scope);
+          legacyAccount?.account.poolAccounts.delete(scope);
+          this._setScopeStatus(scope, "incomplete");
+          errors.push({
+            reason: e instanceof Error ? e.message : String(e),
+            scope,
+          });
+        }
       }
     }
 
-    return { account, errors };
+    return errors;
   }
 
   /**
@@ -916,10 +1513,13 @@ export class AccountService {
           `Found ${deposits.length} deposits for pool ${pool.address}`
         );
 
-        // Create a map of deposits by precommitment for efficient lookup
+        // Create a map of deposits by precommitment for efficient lookup.
+        // Keep the earliest on collision, matching `getDepositEvents`, so both
+        // reconstruction paths agree on which deposit is the spendable one.
         const depositMap = new Map<Hash, DepositEvent>();
         for (const deposit of deposits) {
-          if (!depositMap.has(deposit.precommitment)) {
+          const existing = depositMap.get(deposit.precommitment);
+          if (!existing || AccountService._compareDepositOrder(deposit, existing) < 0) {
             depositMap.set(deposit.precommitment, deposit);
           }
         }
@@ -961,7 +1561,8 @@ export class AccountService {
             secret,
             deposit.label,
             deposit.blockNumber,
-            deposit.transactionHash
+            deposit.transactionHash,
+            { depositIndex: index }
           );
 
           // Track the found deposit
