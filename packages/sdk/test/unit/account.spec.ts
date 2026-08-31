@@ -988,8 +988,10 @@ describe("AccountService", () => {
       const result = await accountService.getDepositEvents(TEST_POOL);
 
       expect(result.size).toBe(2);
-      expect(result.get(depositEvent1.precommitment)).toEqual(depositEvent1);
-      expect(result.get(depositEvent2.precommitment)).toEqual(depositEvent2);
+      // Deposits are grouped by precommitment so that two deposits sharing one
+      // (same index used twice) are both preserved rather than deduplicated.
+      expect(result.get(depositEvent1.precommitment)).toEqual([depositEvent1]);
+      expect(result.get(depositEvent2.precommitment)).toEqual([depositEvent2]);
 
       expect(dataService.getDeposits).toHaveBeenCalledWith(TEST_POOL);
     });
@@ -1205,7 +1207,7 @@ describe("AccountService", () => {
         expect(pool1Result.depositEvents.size).toBe(1);
         expect(
           pool1Result.depositEvents.get(depositEvent1.precommitment)
-        ).toEqual(depositEvent1);
+        ).toEqual([depositEvent1]);
 
         expect(pool1Result.withdrawalEvents.size).toBe(1);
         expect(

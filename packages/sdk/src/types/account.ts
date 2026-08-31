@@ -8,6 +8,21 @@ export interface PoolAccount {
   children: AccountCommitment[];
   ragequit?: RagequitEvent;
   isMigrated?: boolean;
+  /**
+   * The deposit derivation index this account was reconstructed from, i.e. the
+   * `index` fed to `createDepositSecrets(scope, index)`. Present only on
+   * deposit-derived accounts; `undefined` on migration-derived accounts, which
+   * are keyed by (label, withdrawalIndex) and occupy no deposit index.
+   *
+   * Array position in `poolAccounts[scope]` is NOT a derivation index — the two
+   * namespaces are independent, and conflating them hides deposits.
+   */
+  depositIndex?: bigint;
+  /**
+   * True when this account was created by migration discovery (a legacy note
+   * rotated to corrected keys) rather than by a deposit.
+   */
+  isMigrationDerived?: boolean;
 }
 
 export interface AccountCommitment {

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+import { http } from 'viem';
 import { DataService } from '../../src/core/data.service.js';
 import { ChainConfig, DepositEvent, WithdrawalEvent, RagequitEvent } from '../../src/types/events.js';
 import { Hash } from '../../src/types/commitment.js';
@@ -15,6 +16,8 @@ vi.mock('viem', async (importOriginal) => {
   const actual = await importOriginal<typeof import('viem')>();
   return {
     ...actual,
+    // Spied but not stubbed, so transport options can be asserted on.
+    http: vi.fn(actual.http),
     createPublicClient: vi.fn(() => ({
       getLogs: mockGetLogs,
       getBlockNumber: mockGetBlockNumber,
@@ -271,5 +274,52 @@ describe('DataService', () => {
     ]);
 
     await expect(dataService.getWithdrawals(poolInfo)).rejects.toThrow(DataError);
+  });
+
+  describe('transport configuration', () => {
+    const transportConfig: ChainConfig = {
+      chainId: SEPOLIA_CHAIN_ID,
+      privacyPoolAddress: POOL_ADDRESS,
+      startBlock: START_BLOCK,
+      rpcUrl: 'https://sepolia.rpc.hypersync.xyz',
+    };
+
+    beforeEach(() => {
+      vi.mocked(http).mockClear();
+    });
+
+    it('should apply per-chain timeout and retryCount to the transport', () => {
+      new DataService([{ ...transportConfig, timeout: 45_000, retryCount: 1 }]);
+
+      expect(http).toHaveBeenCalledWith(transportConfig.rpcUrl, {
+        timeout: 45_000,
+        retryCount: 1,
+      });
+    });
+
+    it("should leave viem's defaults in place when neither is configured", () => {
+      new DataService([transportConfig]);
+
+      expect(http).toHaveBeenCalledWith(transportConfig.rpcUrl, {
+        timeout: undefined,
+        retryCount: undefined,
+      });
+    });
+
+    it('should configure each chain independently', () => {
+      new DataService([
+        { ...transportConfig, timeout: 45_000 },
+        { ...transportConfig, chainId: 1, rpcUrl: 'https://eth.rpc.hypersync.xyz', timeout: 5_000 },
+      ]);
+
+      expect(http).toHaveBeenNthCalledWith(1, 'https://sepolia.rpc.hypersync.xyz', {
+        timeout: 45_000,
+        retryCount: undefined,
+      });
+      expect(http).toHaveBeenNthCalledWith(2, 'https://eth.rpc.hypersync.xyz', {
+        timeout: 5_000,
+        retryCount: undefined,
+      });
+    });
   });
 });

@@ -46,4 +46,14 @@ export class AccountError extends SDKError {
       ErrorCode.INVALID_INPUT,
     );
   }
+
+  public static incompleteScopeHistory(scope: Hash): AccountError {
+    return new AccountError(
+      `Cannot derive the next deposit index for scope ${scope.toString()}: ` +
+      `its event history failed to load, so reconstructed state is incomplete. ` +
+      `Reload the account for this scope, or pass an explicit index.`,
+      ErrorCode.OPERATION_FAILED,
+      { scope },
+    );
+  }
 } 

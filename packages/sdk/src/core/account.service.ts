@@ -60,6 +60,13 @@ export class AccountService {
   private readonly logger: Logger;
   private readonly poolConcurrency: number;
   private readonly includeEmptyNodes: boolean;
+  /**
+   * Scopes whose event history failed to load during the last
+   * `initializeWithEvents`/`_processEvents` run. Reconstructed state for these
+   * scopes is absent, NOT empty — treating it as empty understates the deposit
+   * index and hides on-chain notes.
+   */
+  private readonly incompleteScopes: Set<Hash> = new Set();
 
   /**
    * Creates a new AccountService instance.
@@ -308,18 +315,75 @@ export class AccountService {
     secret: Secret;
     precommitment: Hash;
   } {
-    if (index && index < 0n) {
+    if (index !== undefined && index < 0n) {
       throw AccountError.invalidIndex(index);
     }
 
-    const accounts = this.account.poolAccounts.get(scope);
-    index = index ?? BigInt(accounts?.length || 0);
+    if (index === undefined) {
+      // Refuse to guess an index for a scope whose history is known to be
+      // incomplete: the count would be understated and would collide with a
+      // deposit index that is already in use on-chain. Callers that genuinely
+      // want a specific index must pass it explicitly.
+      if (this.incompleteScopes.has(scope)) {
+        throw AccountError.incompleteScopeHistory(scope);
+      }
+      index = this._nextDepositIndex(scope);
+    }
 
     const nullifier = this._genDepositNullifier(scope, index);
     const secret = this._genDepositSecret(scope, index);
     const precommitment = this._hashPrecommitment(nullifier, secret);
 
     return { nullifier, secret, precommitment };
+  }
+
+  /**
+   * Number of deposit indices already consumed for a scope.
+   *
+   * Counts only deposit-derived accounts and uses the recorded
+   * `depositIndex` rather than array position, so migration-derived accounts
+   * (which occupy no deposit index) cannot shift the result. Falls back to the
+   * deposit-derived account count for accounts reconstructed before
+   * `depositIndex` was recorded (e.g. restored history files).
+   */
+  private _nextDepositIndex(scope: Hash): bigint {
+    const accounts = this.account.poolAccounts.get(scope) ?? [];
+    const depositDerived = accounts.filter((a) => !a.isMigrationDerived);
+
+    let maxSeen = -1n;
+    for (const a of depositDerived) {
+      if (a.depositIndex !== undefined && a.depositIndex > maxSeen) {
+        maxSeen = a.depositIndex;
+      }
+    }
+
+    // Monotonic: never hand back an index at or below one already used, and
+    // never below the number of deposit-derived accounts (legacy fallback).
+    const fromIndices = maxSeen + 1n;
+    const fromCount = BigInt(depositDerived.length);
+    return fromIndices > fromCount ? fromIndices : fromCount;
+  }
+
+  /** Number of migration-derived accounts reconstructed for a scope. */
+  private _migrationDerivedCount(scope: Hash): number {
+    const accounts = this.account.poolAccounts.get(scope) ?? [];
+    return accounts.filter((a) => a.isMigrationDerived).length;
+  }
+
+  /**
+   * Whether the reconstructed state for `scope` is complete.
+   *
+   * Returns `false` when the scope's event history failed to load, in which
+   * case absent accounts must not be read as "no accounts". Callers should
+   * block deposits and withdrawals for incomplete scopes.
+   */
+  public isScopeComplete(scope: Hash): boolean {
+    return !this.incompleteScopes.has(scope);
+  }
+
+  /** Scopes whose history failed to load during the last processing run. */
+  public getIncompleteScopes(): Hash[] {
+    return [...this.incompleteScopes];
   }
 
   /**
@@ -383,7 +447,8 @@ export class AccountService {
     secret: Secret,
     label: Hash,
     blockNumber: bigint,
-    txHash: Hex
+    txHash: Hex,
+    meta?: { depositIndex?: bigint; isMigrationDerived?: boolean }
   ): PoolAccount {
     const precommitment = this._hashPrecommitment(nullifier, secret);
     const commitment = this._hashCommitment(value, label, precommitment);
@@ -400,6 +465,8 @@ export class AccountService {
         txHash,
       },
       children: [],
+      ...(meta?.depositIndex !== undefined ? { depositIndex: meta.depositIndex } : {}),
+      ...(meta?.isMigrationDerived ? { isMigrationDerived: true } : {}),
     };
 
     if (!this.account.poolAccounts.has(scope)) {
@@ -599,15 +666,24 @@ export class AccountService {
   }
 
   /**
-   * Fetches deposit events for a given pool and returns a map of precommitments to their events for efficient lookup
+   * Fetches deposit events for a given pool, grouped by precommitment for
+   * efficient lookup during reconstruction.
    *
    * @param pool - The pool to fetch deposit events for
    *
-   * @returns A map of precommitments to their events
+   * @returns A map of precommitment to every deposit sharing it, oldest first
+   *
+   * @remarks
+   * Deposits are grouped rather than deduplicated. A precommitment is derived
+   * from (masterKeys, scope, depositIndex), so two deposits collide only when
+   * the same index was used twice — which older SDK versions could do when
+   * reconstructed state was incomplete. Keeping just one event (as this method
+   * previously did, retaining the earliest block) permanently hid the others
+   * from reconstruction even though they are spendable on-chain.
    */
   public async getDepositEvents(
     pool: PoolInfo
-  ): Promise<Map<Hash, DepositEvent>> {
+  ): Promise<Map<Hash, DepositEvent[]>> {
     try {
       const depositEvents = await this.dataService.getDeposits(pool);
 
@@ -617,13 +693,34 @@ export class AccountService {
         depositCount: depositEvents.length,
       });
 
-      const depositMap = new Map<Hash, DepositEvent>();
+      const depositMap = new Map<Hash, DepositEvent[]>();
       for (const event of depositEvents) {
-        const existingEvent = depositMap.get(event.precommitment);
+        const group = depositMap.get(event.precommitment);
+        if (group) {
+          group.push(event);
+        } else {
+          depositMap.set(event.precommitment, [event]);
+        }
+      }
 
-        // If no existing event, or current event is older (earlier block), use current event
-        if (!existingEvent || event.blockNumber < existingEvent.blockNumber) {
-          depositMap.set(event.precommitment, event);
+      // Deterministic order: oldest block first, tx hash as tie-break.
+      for (const [precommitment, group] of depositMap.entries()) {
+        if (group.length > 1) {
+          group.sort(
+            (a, b) =>
+              a.blockNumber === b.blockNumber
+                ? a.transactionHash.localeCompare(b.transactionHash)
+                : a.blockNumber < b.blockNumber ? -1 : 1
+          );
+          this.logger.warn(
+            `Multiple deposits share one precommitment — the same deposit index was used more than once`,
+            {
+              precommitment,
+              scope: pool.scope,
+              count: group.length,
+              txHashes: group.map((e) => e.transactionHash),
+            }
+          );
         }
       }
 
@@ -766,15 +863,18 @@ export class AccountService {
    * Deterministically generate deposit secrets and check if they match on-chain deposits
    *
    * @param scope - The scope of the pool
-   * @param depositEvents - The map of deposit events
+   * @param depositEvents - Deposit events grouped by precommitment
    *
    */
   private _processDepositEvents(
     scope: Hash,
-    depositEvents: Map<Hash, DepositEvent>,
+    depositEvents: Map<Hash, DepositEvent[]>,
     startIndex: bigint = 0n,
+    extraMissTolerance: number = 0,
   ): void {
-    const MAX_CONSECUTIVE_MISSES = 10; // Large enough to avoid tx failures
+    // Large enough to avoid tx failures, plus headroom for indices skipped by
+    // historical off-by-migration-count deposits (see `_processEvents`).
+    const MAX_CONSECUTIVE_MISSES = 10 + extraMissTolerance;
 
     const foundIndices = new Set<bigint>();
     let consecutiveMisses = 0;
@@ -786,10 +886,12 @@ export class AccountService {
         index
       );
 
-      // Look for a deposit with this precommitment
-      const event = depositEvents.get(precommitment);
+      // Look for deposits with this precommitment. More than one is possible
+      // when the same index was used twice; every one of them is spendable and
+      // must become its own account.
+      const events = depositEvents.get(precommitment);
 
-      if (!event) {
+      if (!events || events.length === 0) {
         consecutiveMisses++;
         if (consecutiveMisses >= MAX_CONSECUTIVE_MISSES) {
           break;
@@ -802,18 +904,24 @@ export class AccountService {
       consecutiveMisses = 0;
       foundIndices.add(index);
 
-      // Create a new pool account for this deposit
-      this.addPoolAccount(
-        scope,
-        event.value,
-        nullifier,
-        secret,
-        event.label,
-        event.blockNumber,
-        event.transactionHash
-      );
+      for (const event of events) {
+        // Create a new pool account for this deposit, recording the derivation
+        // index so the next index never has to be inferred from array position.
+        this.addPoolAccount(
+          scope,
+          event.value,
+          nullifier,
+          secret,
+          event.label,
+          event.blockNumber,
+          event.transactionHash,
+          { depositIndex: index }
+        );
+      }
 
-      this.logger.debug(`Found deposit at index ${index} for scope ${scope}`);
+      this.logger.debug(
+        `Found ${events.length} deposit(s) at index ${index} for scope ${scope}`
+      );
     }
   }
 
@@ -1016,6 +1124,7 @@ export class AccountService {
         label,
         withdrawalEvent.blockNumber,
         withdrawalEvent.transactionHash,
+        { isMigrationDerived: true },
       );
 
       this.addWithdrawalCommitment(
@@ -1050,8 +1159,15 @@ export class AccountService {
    *
    * @returns The initialized AccountService instance and array of errors if any pool events fetching fails
    *
-   * if any pool events fetching fails, the account will be initialized without the events for that pool
-   * user can then call to this method again with the same account and missing pools to fetch the missing events
+   * If any pool's event fetching fails, the account is initialized without the
+   * events for that pool and the scope is recorded as incomplete (see
+   * {@link AccountService.isScopeComplete}). Reconstructed state for such a
+   * scope is absent, NOT empty — callers must not read it as "no accounts".
+   *
+   * To retry, call this method again with `{ service, legacyService }` — both
+   * values returned by the original `{ mnemonic }` call. Passing
+   * `legacyService` keeps the retry migration-aware; omitting it reconstructs
+   * the retried scopes without migration discovery.
    *
    * @throws {AccountError} If account state reconstruction fails or if duplicate pools are found
    */
@@ -1063,6 +1179,14 @@ export class AccountService {
       }
       | {
         service: AccountService;
+        /**
+         * The legacy-key service returned alongside `service` by the original
+         * `{ mnemonic }` call. Pass it so a retry stays migration-aware:
+         * without it the retried scopes are reconstructed with no migration
+         * discovery, which silently omits migration-derived accounts and
+         * produces a different — also incomplete — view of the same account.
+         */
+        legacyService?: AccountService;
       },
     pools: PoolInfo[],
     options?: AccountServiceOptions
@@ -1080,26 +1204,37 @@ export class AccountService {
       uniqueScopes.add(pool.scope);
     }
 
-    // Retry path (non-migration): reuse the existing service's account and
-    // only process pools whose scopes haven't been fully processed yet.
-    // Already-processed scopes are skipped to avoid duplicate deposits and
+    // Retry path: reuse the existing service's account and only reprocess
+    // scopes that actually still need it, to avoid duplicate deposits and
     // withdrawal misclassification.
     //
-    // This path performs simple deposit/withdrawal/ragequit processing only
-    // — no migration discovery. For migration-aware retries, the caller
-    // should re-invoke with { mnemonic } scoped to only the failed pools;
-    // the mnemonic path builds both safe and legacy accounts from scratch
-    // with no shared references.
+    // When the caller passes `legacyService`, the retry runs the same
+    // migration-aware pipeline as the mnemonic path. Without it the retry can
+    // only do simple deposit/withdrawal/ragequit processing, which omits
+    // migration-derived accounts for the retried scopes.
     if (!('mnemonic' in source)) {
       const account = new AccountService(
         dataService,
         { account: source.service.account, ...options }
       );
-      const processedScopes = source.service.account.poolAccounts;
-      const newPools = pools.filter((p) => !processedScopes.has(p.scope));
 
-      const errors = await account._processEvents(newPools);
-      return { account, errors };
+      // Carry over which scopes are still incomplete so the retry targets them
+      // precisely. `poolAccounts.has(scope)` is only a proxy for "processed":
+      // a scope that processed successfully but matched no commitments leaves
+      // no entry, and reprocessing it would duplicate legacy-side accounts.
+      const carriedIncomplete = new Set<Hash>(source.service.getIncompleteScopes());
+      for (const scope of carriedIncomplete) {
+        account.incompleteScopes.add(scope);
+      }
+
+      const processedScopes = source.service.account.poolAccounts;
+      const newPools = carriedIncomplete.size > 0
+        ? pools.filter((p) => carriedIncomplete.has(p.scope))
+        : pools.filter((p) => !processedScopes.has(p.scope));
+
+      const legacyAccount = source.legacyService;
+      const errors = await account._processEvents(newPools, legacyAccount);
+      return { account, legacyAccount, errors };
     }
 
     // Mnemonic path: phased processing with migration discovery
@@ -1118,15 +1253,18 @@ export class AccountService {
    * for each scope:
    *   1. Legacy account: process deposits and withdrawals (to detect migrations)
    *   2. Safe account: discover migrated commitments from the legacy accounts
-   *   3. Safe account (this): process deposits (starting after migrated accounts)
+   *   3. Safe account (this): process deposits, always scanning from index 0
    *   4. Safe account: process withdrawals (now includes migrated accounts)
    *   5. Both accounts: process ragequits
    *
-   * Migration discovery (step 2) must run before safe deposit scanning (step 3)
-   * so that the migrated account count can be used as the starting index.
-   * Post-migration deposits use poolAccounts.length as their index, which
-   * sits right after the migrated slots; scanning from 0 would hit
-   * MAX_CONSECUTIVE_MISSES on the legacy-key indices and never reach them.
+   * Step 3 always scans from index 0. Deposit indices and migration-derived
+   * accounts live in separate namespaces — deposit indices are never offset by
+   * the number of migrations — so starting the scan at the migrated-account
+   * count silently skips any deposit made while fewer migrations were visible
+   * (a scope whose history failed to load, or a deposit placed between two
+   * staged migrations). The miss tolerance is widened by the migration count
+   * instead, which bridges gaps left by older versions that did offset the
+   * index without ever skipping a real deposit.
    *
    * Without a legacyAccount, only steps 3, 4, and 5 run (simple processing).
    *
@@ -1144,6 +1282,7 @@ export class AccountService {
 
     for (const [scope, result] of events.entries()) {
       if ("reason" in result) {
+        this.incompleteScopes.add(scope);
         errors.push(result);
       } else {
         try {
@@ -1162,11 +1301,23 @@ export class AccountService {
             this._discoverMigratedCommitments(scope, legacyAccounts, result.withdrawalEvents);
           }
 
-          // c. Safe: process deposits, starting after any migrated accounts.
-          //    New deposits created after migration use poolAccounts.length as
-          //    their index, so they sit right after the migrated slots.
-          const depositStartIndex = BigInt(this.account.poolAccounts.get(scope)?.length ?? 0);
-          this._processDepositEvents(scope, result.depositEvents, depositStartIndex);
+          // c. Safe: process deposits. ALWAYS scan from index 0 — deposit
+          //    indices live in their own namespace and are never offset by the
+          //    number of migration-derived accounts. Starting the scan at the
+          //    migrated-account count silently skips any deposit made while
+          //    fewer migrations were visible (failed history load, or a
+          //    deposit placed between two staged migrations).
+          //
+          //    Historical deposits may still sit at an offset index because
+          //    older versions derived the index from poolAccounts.length, so
+          //    widen the miss tolerance by the migration count to bridge the
+          //    resulting gap.
+          this._processDepositEvents(
+            scope,
+            result.depositEvents,
+            0n,
+            this._migrationDerivedCount(scope),
+          );
 
           // d. Safe: process withdrawals (now includes migrated accounts)
           this._processWithdrawalEvents(scope, result.withdrawalEvents);
@@ -1176,9 +1327,12 @@ export class AccountService {
             legacyAccount._processRagequitEvents(scope, result.ragequitEvents);
           }
           this._processRagequitEvents(scope, result.ragequitEvents);
+
+          this.incompleteScopes.delete(scope);
         } catch (e) {
           this.account.poolAccounts.delete(scope);
           legacyAccount?.account.poolAccounts.delete(scope);
+          this.incompleteScopes.add(scope);
           errors.push({
             reason: e instanceof Error ? e.message : String(e),
             scope,
@@ -1279,7 +1433,8 @@ export class AccountService {
             secret,
             deposit.label,
             deposit.blockNumber,
-            deposit.transactionHash
+            deposit.transactionHash,
+            { depositIndex: index }
           );
 
           // Track the found deposit

@@ -30,7 +30,9 @@ export class DataService {
   /**
    * Initialize the data service with chain configurations
    *
-   * @param chainConfigs - Array of chain configurations containing chainId, RPC URL, and API key
+   * @param chainConfigs - Array of chain configurations containing chainId, RPC URL, and API key.
+   *                       Optionally carries per-chain transport tuning (`timeout`, `retryCount`)
+   *                       applied to the viem client built for that chain.
    * @param logFetchConfig - Per-chain configuration for rate-limited log fetching as a Map<chainId, config>.
    *                         Each chain can have its own specific settings (e.g., different block chunk sizes).
    * @throws {DataError} If client initialization fails for any chain
@@ -57,8 +59,13 @@ export class DataService {
           throw new Error(`Missing RPC URL for chain ${config.chainId}`);
         }
 
+        // `timeout`/`retryCount` fall back to viem's own defaults when
+        // undefined (10s and 3 retries), so omitting them changes nothing.
         const client = createPublicClient({
-          transport: http(config.rpcUrl),
+          transport: http(config.rpcUrl, {
+            timeout: config.timeout,
+            retryCount: config.retryCount,
+          }),
         });
         this.clients.set(config.chainId, client);
       }

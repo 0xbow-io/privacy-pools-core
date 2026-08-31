@@ -45,6 +45,30 @@ export interface ChainConfig {
   privacyPoolAddress: Address;
   startBlock: bigint;
   rpcUrl: string;
+
+  /**
+   * Timeout in milliseconds for a single RPC request to `rpcUrl`.
+   *
+   * Chunked log fetching issues one `eth_getLogs` per block range, so this is
+   * the ceiling on how long a single chunk may take. Raise it when reading
+   * wide ranges through an indexer that needs longer than viem's default —
+   * otherwise the caller aborts while the request is still in flight, and the
+   * effective chunk size is capped by this value rather than by the provider.
+   *
+   * Default: 10_000 (viem's `http` transport default)
+   */
+  timeout?: number;
+
+  /**
+   * How many times viem's transport retries a failed RPC request before the
+   * error surfaces. Note this is transport-level and multiplies with the
+   * chunk-level `maxRetries` in `LogFetchConfig`: a chunk can be attempted
+   * `(retryCount + 1) * (maxRetries + 1)` times in the worst case. viem
+   * retries timeouts and 429s, so lower this when a provider is rate-limiting.
+   *
+   * Default: 3 (viem's `http` transport default)
+   */
+  retryCount?: number;
 }
 
 /**
@@ -67,7 +91,15 @@ export interface PoolEvents {
 }
 
 export interface PoolEventsSuccess {
-  depositEvents: Map<Hash, DepositEvent>;
+  /**
+   * Deposit events grouped by precommitment, oldest block first.
+   *
+   * Grouped rather than keyed one-to-one because two deposits can legitimately
+   * share a precommitment when the same deposit index was handed out twice
+   * (possible on SDK versions that inferred the index from incomplete state).
+   * Collapsing the group would silently drop every deposit but one.
+   */
+  depositEvents: Map<Hash, DepositEvent[]>;
   withdrawalEvents: Map<Hash, WithdrawalEvent>;
   ragequitEvents: Map<Hash, RagequitEvent>;
 }
@@ -79,4 +111,4 @@ export interface PoolEventsError {
 
 export type PoolEventsResult = Map<Hash, PoolEventsSuccess | PoolEventsError>;
 
-export type ProcessedDepositEventsResult = Map<Hash, DepositEvent>;
+export type ProcessedDepositEventsResult = Map<Hash, DepositEvent[]>;
