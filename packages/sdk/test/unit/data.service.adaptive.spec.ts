@@ -63,10 +63,13 @@ describe('DataService adaptive block ranges', () => {
     return new DataService([config], logFetchConfig);
   };
 
+  // `mock.calls` is `any[][]`, so the shape is asserted inside rather than in
+  // the parameter position, where it does not match the callback signature.
   const spans = () =>
-    mockGetLogs.mock.calls.map(
-      ([args]: [{ fromBlock: bigint; toBlock: bigint }]) => args.toBlock - args.fromBlock + 1n,
-    );
+    mockGetLogs.mock.calls.map((call) => {
+      const args = call[0] as { fromBlock: bigint; toBlock: bigint };
+      return args.toBlock - args.fromBlock + 1n;
+    });
 
   beforeEach(() => {
     mockGetLogs.mockReset();
