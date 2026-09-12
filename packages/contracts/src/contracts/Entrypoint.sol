@@ -42,6 +42,13 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
   /// @dev 0xfc84ade01695dae2ade01aa4226dc40bdceaf9d5dbd3bf8630b1dd5af195bbc5
   bytes32 internal constant _ASP_POSTMAN = keccak256('ASP_POSTMAN');
 
+  /*///////////////////////////////////////////////////////////////
+                            CUSTOM ERRORS
+  ///////////////////////////////////////////////////////////////*/
+
+  error InvalidFeeSplit();
+  error FeeTransferFailed();
+
   /// @inheritdoc IEntrypoint
   mapping(uint256 _scope => IPrivacyPool _pool) public scopeToPool;
 
@@ -53,6 +60,18 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
 
   /// @inheritdoc IEntrypoint
   mapping(uint256 _precommitment => bool _used) public usedPrecommitments;
+
+  /*///////////////////////////////////////////////////////////////
+                                EVENTS
+  ///////////////////////////////////////////////////////////////*/
+
+  /// @notice Emitted when fees are distributed from deposits or relays
+  event FeeDistributed(
+      address indexed asset,
+      uint256 vettingFee,
+      uint256 relayFee,
+      address feeRecipient
+  );
 
   /*///////////////////////////////////////////////////////////////
                           INITIALIZATION
@@ -131,48 +150,49 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
 
   /// @inheritdoc IEntrypoint
   function relay(
-    IPrivacyPool.Withdrawal calldata _withdrawal,
-    ProofLib.WithdrawProof calldata _proof,
-    uint256 _scope
+      IPrivacyPool.Withdrawal calldata _withdrawal,
+      ProofLib.WithdrawProof calldata _proof,
+      uint256 _scope
   ) external nonReentrant {
-    // Check withdrawn amount is non-zero
-    if (_proof.withdrawnValue() == 0) revert InvalidWithdrawalAmount();
-    // Check allowed processooor is this Entrypoint
-    if (_withdrawal.processooor != address(this)) revert InvalidProcessooor();
+      // Check withdrawn amount is non-zero
+      if (_proof.withdrawnValue() == 0) revert InvalidWithdrawalAmount();
+      // Check allowed processooor is this Entrypoint
+      if (_withdrawal.processooor != address(this)) revert InvalidProcessooor();
 
-    // Fetch pool by scope
-    IPrivacyPool _pool = scopeToPool[_scope];
-    if (address(_pool) == address(0)) revert PoolNotFound();
+      // Fetch pool by scope
+      IPrivacyPool _pool = scopeToPool[_scope];
+      if (address(_pool) == address(0)) revert PoolNotFound();
 
-    // Store pool asset
-    IERC20 _asset = IERC20(_pool.ASSET());
-    uint256 _balanceBefore = _assetBalance(_asset);
+      // === GAS OPTIMIZATION: Cache storage reads ===
+      IERC20 _asset = IERC20(_pool.ASSET());
+      AssetConfig memory _config = assetConfig[_asset];
+      uint256 _balanceBefore = _assetBalance(_asset);
 
-    // Process withdrawal
-    _pool.withdraw(_withdrawal, _proof);
+      // Process withdrawal
+      _pool.withdraw(_withdrawal, _proof);
 
-    // Decode relay data
-    RelayData memory _data = abi.decode(_withdrawal.data, (RelayData));
+      // Decode relay data
+      RelayData memory _data = abi.decode(_withdrawal.data, (RelayData));
 
-    if (_data.relayFeeBPS > assetConfig[_asset].maxRelayFeeBPS) revert RelayFeeGreaterThanMax();
+      if (_data.relayFeeBPS > _config.maxRelayFeeBPS) revert RelayFeeGreaterThanMax();
 
-    uint256 _withdrawnAmount = _proof.withdrawnValue();
+      uint256 _withdrawnAmount = _proof.withdrawnValue();
 
-    // Deduct fees
-    uint256 _amountAfterFees = _deductFee(_withdrawnAmount, _data.relayFeeBPS);
+      // Deduct fees
+      uint256 _amountAfterFees = _deductFee(_withdrawnAmount, _data.relayFeeBPS);
+      uint256 _feeAmount = _withdrawnAmount - _amountAfterFees;
 
-    uint256 _feeAmount = _withdrawnAmount - _amountAfterFees;
+      // Transfer withdrawn funds to recipient
+      _transfer(_asset, _data.recipient, _amountAfterFees);
+      // Transfer fees to fee recipient
+      _transfer(_asset, _data.feeRecipient, _feeAmount);
 
-    // Transfer withdrawn funds to recipient
-    _transfer(_asset, _data.recipient, _amountAfterFees);
-    // Transfer fees to fee recipient
-    _transfer(_asset, _data.feeRecipient, _feeAmount);
+      // Check pool balance has not been reduced
+      uint256 _balanceAfter = _assetBalance(_asset);
+      if (_balanceBefore > _balanceAfter) revert InvalidPoolState();
 
-    // Check pool balance has not been reduced
-    uint256 _balanceAfter = _assetBalance(_asset);
-    if (_balanceBefore > _balanceAfter) revert InvalidPoolState();
-
-    emit WithdrawalRelayed(msg.sender, _data.recipient, _asset, _withdrawnAmount, _feeAmount);
+      emit WithdrawalRelayed(msg.sender, _data.recipient, _asset, _withdrawnAmount, _feeAmount);
+      emit FeeDistributed(address(_asset), 0, _feeAmount, _data.feeRecipient);
   }
 
   /*///////////////////////////////////////////////////////////////
@@ -315,27 +335,30 @@ contract Entrypoint is AccessControlUpgradeable, UUPSUpgradeable, ReentrancyGuar
    * @return _commitment The deposit commitment hash
    */
   function _handleDeposit(IERC20 _asset, uint256 _value, uint256 _precommitment) internal returns (uint256 _commitment) {
-    // Fetch pool by asset
-    AssetConfig memory _config = assetConfig[_asset];
-    IPrivacyPool _pool = _config.pool;
-    if (address(_pool) == address(0)) revert PoolNotFound();
+      // === GAS OPTIMIZATION: Cache storage read ===
+      AssetConfig memory _config = assetConfig[_asset];
+      IPrivacyPool _pool = _config.pool;
+      if (address(_pool) == address(0)) revert PoolNotFound();
 
-    // Check if the `_precommitment` has already been used
-    if (usedPrecommitments[_precommitment]) revert PrecommitmentAlreadyUsed();
-    // Mark it as used
-    usedPrecommitments[_precommitment] = true;
+      // Check if the `_precommitment` has already been used
+      if (usedPrecommitments[_precommitment]) revert PrecommitmentAlreadyUsed();
+      usedPrecommitments[_precommitment] = true;
 
-    // Check minimum deposit amount
-    if (_value < _config.minimumDepositAmount) revert MinimumDepositAmount();
+      // Check minimum deposit amount
+      if (_value < _config.minimumDepositAmount) revert MinimumDepositAmount();
 
-    // Deduct vetting fees
-    uint256 _amountAfterFees = _deductFee(_value, _config.vettingFeeBPS);
+      // Deduct vetting fees
+      uint256 _amountAfterFees = _deductFee(_value, _config.vettingFeeBPS);
+      uint256 _vettingFee = _value - _amountAfterFees;
 
-    // Deposit commitment into pool (forwarding native asset if applicable)
-    uint256 _nativeAssetValue = address(_asset) == Constants.NATIVE_ASSET ? _amountAfterFees : 0;
-    _commitment = _pool.deposit{value: _nativeAssetValue}(msg.sender, _amountAfterFees, _precommitment);
+      // Deposit commitment into pool (forwarding native asset if applicable)
+      uint256 _nativeAssetValue = address(_asset) == Constants.NATIVE_ASSET ? _amountAfterFees : 0;
+      _commitment = _pool.deposit{value: _nativeAssetValue}(msg.sender, _amountAfterFees, _precommitment);
 
-    emit Deposited(msg.sender, _pool, _commitment, _amountAfterFees);
+      emit Deposited(msg.sender, _pool, _commitment, _amountAfterFees);
+      if (_vettingFee > 0) {
+          emit FeeDistributed(address(_asset), _vettingFee, 0, address(0));
+      }
   }
 
   /**
