@@ -32,7 +32,7 @@ We use the Personal Data that we collect:
 
 To provide **relevant marketing** including providing you with information about events or services that may be of interest to you. It is necessary for our legitimate business interests to process this information in order to provide you with tailored and relevant marketing, updates and invitations.
 
-To **consider individuals for employment and contractor opportunities and manage on-boarding processes** we use job applicant data. The processing is necessary for the purposes of recruitment and on-boarding.
+To **consider individuals for employment and contractor opportunities and manage on-boarding processes** we use job applicant data. The processing is necessary for the purposes of recruitment and onboarding.
 
 To carry out any other legitimate purpose for which the information was collected.
 
@@ -42,7 +42,7 @@ We may also use automated technologies to sense, detect or collect information a
 
 With vendors, consultants and other service providers who need access to such information to carry out work on our behalf;
 
-In response to a request for information if we believe disclosure is in accordance with any applicable law, regulation or legal process, or as otherwise required by any applicable law, rule or regulation;
+In response to a request for information on whether we believe disclosure is in accordance with any applicable law, regulation or legal process, or as otherwise required by any applicable law, rule or regulation;
 
 If we believe your actions are inconsistent with our user agreements or policies, or to protect the rights, property and safety of us or any third-party;
 
@@ -54,7 +54,7 @@ We may also share aggregated or de-identified information, which cannot reasonab
 
 ## Legal Bases For Processing (For EEA and other Users)
 
-**Specific provisions for EU-residents:** This Section 6 applies to you, if you are from the European Union. 0xbow adopted the following provisions, to comply with the EU 2016/679 Directive General Data Protection Regulation ("GDPR"), pursuant to which 0xbow will be considered as a "Data Controller" with respect to our use of Personal Information of resident of the European Union.
+**Specific provisions for EU-residents:** This Section 6 applies to you, if you are from the European Union. 0xbow adopted the following provisions to comply with the EU 2016/679 Directive General Data Protection Regulation ("GDPR"), pursuant to which 0xbow will be considered as a "Data Controller" with respect to our use of Personal Information of resident of the European Union.
 
 **Legal Basis**. We base our processing of any personal data as "Data Controllers" based on the following lawful grounds: 0xbow relies, primarily, on your consent to the terms of this Policy and the terms set forth under our [Terms of](https://www.dynamic.xyz/terms-conditions) Use, as a legal basis for processing:
 
@@ -62,7 +62,7 @@ any Personal Information related to you or communicating any other promotional m
 
 may collect and use your Personal Information when it is necessary for one of the legitimate uses set out in Section 3 above, which we believe are not overridden by your fundamental rights.
 
-may process your Personal Information to comply with a legal obligation and to protect our users' vital interests. If, at any time, you wish to exercise your rights in accordance with the provisions provided by law (including as provided under Section ‎12 of this Policy) you may send us an email to via support@0xbow.io and request: to access your Personal Information together with information about how, and on what basis, such information is being processed. Should you desire to receive such information in a different format than the one that was provided to you, you can contact us via support@0xbow.io and we shall use commercially reasonable efforts to accommodate your request, if applicable; rectify any of the Personal Information being held when such information is inaccurate; to delete or restrict access to your Personal Information in limited circumstances as described under the GDPR. Please note that if we need to delete any Personal Information related to you, as per your request, it can take time until we completely delete residual copies of such data from our servers and backup systems.
+may process your Personal Information to comply with a legal obligation and to protect our users' vital interests. If, at any time, you wish to exercise your rights in accordance with the provisions provided by law (including as provided under Section ‎12 of this Policy) you may send us an email to support@0xbow.io and request: to access your Personal Information together with information about how, and on what basis, such information is being processed. Should you desire to receive such information in a different format than the one that was provided to you, you can contact us via support@0xbow.io and we shall use commercially reasonable efforts to accommodate your request, if applicable; rectify any of the Personal Information being held when such information is inaccurate; to delete or restrict access to your Personal Information in limited circumstances as described under the GDPR. Please note that if we need to delete any Personal Information related to you, as per your request, it can take time until we completely delete residual copies of such data from our servers and backup systems.
 
 to withdraw your consent to the processing of your Personal Information. However, please note that exercising this right will not affect the lawfulness of any previous processing activities based on consent that was lawfully obtained before its withdrawal.
 
@@ -80,7 +80,7 @@ Identifiers and Personal information as listed in the California Customer Record
 
 Electronic network activity information, including, but not limited to, browsing history and any additional information related to your interaction with our Service.
 
-0xbow has obtained such information as set forth in Section ‎7.1 above and Personal Information as provided under Section ‎1.1 above (for the purpose of this Section ‎7, the "Personal Data").
+0xbow has obtained such information as outlined in Section ‎7.1 above and Personal Information as provided under Section ‎1.1 above (for the purpose of this Section ‎7, the "Personal Data").
 
 0xbow may use the Personal Data it collects or receives for its legitimate interests (as set out in Section 3 above), which 0xbow believes are not overridden by your fundamental rights. 0xbow may also disclose such Personal Data to third parties for its legitimate purposes as described in Section 5 above.
 
