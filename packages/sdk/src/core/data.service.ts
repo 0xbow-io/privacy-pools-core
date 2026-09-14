@@ -8,6 +8,17 @@ import {Logger, LogLevel} from "../utils/logger.js";
 import {DataError} from "../errors/data.error.js";
 import {ErrorCode} from "../errors/base.error.js";
 
+/**
+ * How many times a refused block range may be halved before we give up.
+ *
+ * 8 takes a 1,500,000 block chunk (what a hypersync-backed deployment
+ * configures) down to under 6,000, which is below every documented provider
+ * cap, and a 10,000 block default down to 39. Past that the endpoint is not
+ * rate limiting us, it is broken, and splitting further only multiplies the
+ * requests we make while it is already refusing them.
+ */
+const MAX_RANGE_SPLIT_DEPTH = 8;
+
 // Event signatures from the contract
 const DEPOSIT_EVENT = parseAbiItem('event Deposited(address indexed _depositor, uint256 _commitment, uint256 _label, uint256 _value, uint256 _merkleRoot)');
 const WITHDRAWAL_EVENT = parseAbiItem('event Withdrawn(address indexed _processooor, uint256 _value, uint256 _spentNullifier, uint256 _newCommitment)');
@@ -429,7 +440,8 @@ export class DataService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     event: any,
     range: BlockRange,
-    logConfig: LogFetchConfig
+    logConfig: LogFetchConfig,
+    splitDepth = 0
   ): Promise<T[]> {
     const maxRetries = logConfig.retryOnFailure
       ? logConfig.maxRetries
@@ -460,7 +472,82 @@ export class DataService {
       }
     }
 
+    // Retrying was never going to help for these two.
+    //
+    // A 429 means the endpoint is asking us to slow down, and re-sending the
+    // identical request at the identical size is not slowing down. A
+    // range-too-large means this request will NEVER succeed, however many
+    // times it is repeated, because the endpoint caps the span.
+    //
+    // So adapt instead: halve the range and fetch both halves in sequence.
+    // Sequential matters - the point is to be gentler, and firing the two
+    // halves together would keep the same instantaneous rate that earned the
+    // 429. Halving repeats as needed, so a caller configured for a hypersync
+    // proxy (some deployments use chunks in the millions) converges on
+    // whatever the endpoint will actually serve rather than failing the whole
+    // scan. A failed scan is not a log line to the user: it is an account
+    // that loads with no pools and no balances.
+    const span = range.toBlock - range.fromBlock;
+    if (
+      this.shouldNarrowRange(lastError) &&
+      splitDepth < MAX_RANGE_SPLIT_DEPTH &&
+      span > 0n
+    ) {
+      const midpoint = range.fromBlock + span / 2n;
+      this.logger.warn(
+        `Log fetch failed on a ${span + 1n} block range; halving and retrying`,
+        { error: lastError?.message, range, splitDepth }
+      );
+      const first = await this.fetchLogsWithRetry<T>(
+        client,
+        address,
+        event,
+        { fromBlock: range.fromBlock, toBlock: midpoint },
+        logConfig,
+        splitDepth + 1
+      );
+      if (logConfig.chunkDelayMs > 0) {
+        await this.sleep(logConfig.chunkDelayMs);
+      }
+      const second = await this.fetchLogsWithRetry<T>(
+        client,
+        address,
+        event,
+        { fromBlock: midpoint + 1n, toBlock: range.toBlock },
+        logConfig,
+        splitDepth + 1
+      );
+      return [...first, ...second];
+    }
+
     throw lastError;
+  }
+
+  /**
+   * Is this the kind of failure a smaller range fixes?
+   *
+   * Matched on the message because that is all a JSON-RPC error reliably
+   * gives us: providers disagree on codes and shapes, but every one of them
+   * says something recognisable in the text. Deliberately narrow - a wrong
+   * chain, a bad address or a dead host are not helped by splitting, and
+   * splitting them would turn one clear failure into 2^depth of them.
+   */
+  private shouldNarrowRange(error: Error | undefined): boolean {
+    if (!error) return false;
+    const text = `${error.message} ${String(
+      (error as Error & { cause?: unknown }).cause ?? ""
+    )}`.toLowerCase();
+    return (
+      // Rate limited. -32005 is the de facto "limit exceeded" code across
+      // Alchemy, Infura and QuickNode.
+      /\b429\b|too many requests|rate limit|ratelimit|-32005|compute unit|capacity exceeded/.test(
+        text
+      ) ||
+      // The span itself is refused.
+      /block range|range is too large|query returned more than|exceeds? the (?:maximum|limit)|logs matched|response size|query timeout/.test(
+        text
+      )
+    );
   }
 
   /**
