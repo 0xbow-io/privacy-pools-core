@@ -1,13 +1,14 @@
 /**
  * Handles withdrawal requests within the Privacy Pool relayer.
  */
-import { Address, getAddress } from "viem";
+import { Address, getAddress, getContract } from "viem";
 import {
   getAssetConfig,
   getEntrypointAddress,
   getFeeReceiverAddress,
   getSignerPrivateKey
 } from "../config/index.js";
+import { IERC20MinimalABI } from "../providers/uniswap/abis/erc20.abi.js";
 import {
   BlockchainError,
   RelayerError,
@@ -161,18 +162,165 @@ export class PrivacyPoolRelayer {
 
     const relayerGasRefundValue = gasPrice * quoteService.extraGasTxCost + relayGasPrice * relayGasUsed;
 
-    const txHash = await this.uniswapProvider.swapExactInputForWeth({
+    const swapResult = await this.attemptSwapForNative({
       chainId,
       feeGross,
       feeBase,
       refundAmount: relayerGasRefundValue,
       tokenIn: assetAddress,
       nativeRecipient: recipient,
-      feeReceiver
+      feeReceiver,
     });
 
-    return txHash;
+    if (swapResult.txHash) {
+      return swapResult.txHash;
+    }
 
+    // Swap could not be completed (after retries / receipt revert). The user
+    // already received their withdrawal, but the extraGas portion never reached
+    // them as native. Refund the excess fee in the original asset directly to
+    // the recipient so they are not worse off in dollar value, and forward the
+    // base protocol fee to the configured fee receiver if it differs from the
+    // relayer signer.
+    console.error(
+      `[swapForNativeAndFund] swap failed after retries for relayTx=${relayTx} chainId=${chainId} recipient=${recipient}; falling back to ERC20 refund. lastError=${swapResult.lastError}`
+    );
+    return this.refundExtraGasInAsset({
+      chainId,
+      tokenIn: assetAddress,
+      recipient,
+      feeReceiver,
+      excessAmount: feeGross - feeBase,
+      feeBase,
+    });
+  }
+
+  /**
+   * Attempts the Uniswap swap that converts a portion of the relayer's collected
+   * fees into the native token for the recipient. Retries on transient failures
+   * (network errors, mempool issues, broadcast errors) AND on receipt-level
+   * reverts (e.g. slippage moves between simulation and execution).
+   *
+   * Returns `{ txHash }` on confirmed on-chain success, or `{ txHash: null, lastError }`
+   * if all attempts are exhausted or the receipt cannot be obtained safely.
+   */
+  private async attemptSwapForNative(
+    params: {
+      chainId: number;
+      feeGross: bigint;
+      feeBase: bigint;
+      refundAmount: bigint;
+      tokenIn: Address;
+      nativeRecipient: Address;
+      feeReceiver: Address;
+    },
+    maxAttempts = 3,
+  ): Promise<{ txHash: `0x${string}` | null; lastError?: unknown }> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      let txHash: `0x${string}` | undefined;
+      try {
+        txHash = await this.uniswapProvider.swapExactInputForWeth(params);
+      } catch (err) {
+        // Broadcast failed (path/simulation/RPC). Nothing was sent on-chain so retrying is safe.
+        lastError = err;
+        console.warn(
+          `[attemptSwapForNative] attempt ${attempt}/${maxAttempts} failed before broadcast: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        if (attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, attempt * 2000));
+        }
+        continue;
+      }
+
+      // Tx was broadcast — wait for the receipt to know whether it actually succeeded.
+      try {
+        const receipt = await web3Provider.client(params.chainId).waitForTransactionReceipt({ hash: txHash });
+        if (receipt.status === "success") {
+          return { txHash };
+        }
+        lastError = new Error(`swap tx ${txHash} reverted on attempt ${attempt}`);
+        console.warn(`[attemptSwapForNative] ${lastError}`);
+      } catch (waitErr) {
+        // We don't know if the tx was mined or not; retrying could double-spend the relayer's
+        // fees. Bail without further attempts and let the caller decide on a fallback.
+        return {
+          txHash: null,
+          lastError: new Error(
+            `swap tx ${txHash} broadcast but receipt unavailable: ${waitErr instanceof Error ? waitErr.message : String(waitErr)}`,
+          ),
+        };
+      }
+
+      if (attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, attempt * 2000));
+      }
+    }
+    return { txHash: null, lastError };
+  }
+
+  /**
+   * Fallback path when the Uniswap-based swap into native fails. We can't
+   * deliver native gas to the recipient, so instead we transfer the excess
+   * relayer fee back to them in the original asset (e.g. USDC). The user is
+   * left whole in dollar terms but will need to source gas elsewhere.
+   *
+   * If the protocol fee receiver differs from the relayer signer, also forward
+   * the base protocol fee. A failure on that secondary transfer is logged but
+   * does not throw — the user-facing refund must always settle.
+   */
+  private async refundExtraGasInAsset(params: {
+    chainId: number;
+    tokenIn: Address;
+    recipient: Address;
+    feeReceiver: Address;
+    excessAmount: bigint;
+    feeBase: bigint;
+  }): Promise<`0x${string}` | undefined> {
+    const { chainId, tokenIn, recipient, feeReceiver, excessAmount, feeBase } = params;
+    const relayer = privateKeyToAccount(getSignerPrivateKey(chainId) as `0x${string}`);
+    const client = web3Provider.client(chainId);
+    const erc20 = getContract({ abi: IERC20MinimalABI, address: tokenIn, client });
+
+    let refundTxHash: `0x${string}` | undefined;
+    if (excessAmount > 0n) {
+      try {
+        refundTxHash = await erc20.write.transfer([recipient, excessAmount], {
+          chain: client.chain,
+          account: relayer,
+        });
+        console.log(
+          `[refundExtraGasInAsset] refunded excess ${excessAmount} of ${tokenIn} to ${recipient} tx=${refundTxHash}`,
+        );
+      } catch (err) {
+        console.error(
+          `[refundExtraGasInAsset] failed to refund excess to recipient ${recipient}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        throw err;
+      }
+    }
+
+    // Forward the base protocol fee to the configured fee receiver if it
+    // isn't already the relayer signer. The original swap multicall handled
+    // this in-bundle; in fallback we have to do it explicitly.
+    if (!isFeeReceiverSameAsSigner(chainId) && feeBase > 0n) {
+      try {
+        const feeReceiverTx = await erc20.write.transfer([feeReceiver, feeBase], {
+          chain: client.chain,
+          account: relayer,
+        });
+        console.log(
+          `[refundExtraGasInAsset] forwarded base fee ${feeBase} of ${tokenIn} to feeReceiver=${feeReceiver} tx=${feeReceiverTx}`,
+        );
+      } catch (err) {
+        // Don't fail the user-facing flow because of an internal accounting transfer.
+        console.error(
+          `[refundExtraGasInAsset] failed to forward base fee to feeReceiver ${feeReceiver}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    return refundTxHash;
   }
 
   /**
