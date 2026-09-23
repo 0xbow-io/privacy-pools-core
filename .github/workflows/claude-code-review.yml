@@ -2,18 +2,22 @@ name: Claude Code Review
 
 on:
   pull_request:
-    # `labeled` so adding the label starts a review without a new push.
-    types: [opened, synchronize, ready_for_review, reopened, labeled]
+    types: [opened, synchronize, ready_for_review, reopened]
+    # Optional: Only run on specific file changes
+    # paths:
+    #   - "src/**/*.ts"
+    #   - "src/**/*.tsx"
+    #   - "src/**/*.js"
+    #   - "src/**/*.jsx"
 
 jobs:
   claude-review:
-    # Opt-in per PR: runs only while the PR carries the `llm-review` label.
-    # A later push to a labelled PR reviews again; removing the label stops it.
-    # On a `labeled` event, only the llm-review label itself triggers a run, so
-    # adding some other label to an already-labelled PR does not re-review it.
-    if: >-
-      contains(github.event.pull_request.labels.*.name, 'llm-review')
-      && (github.event.action != 'labeled' || github.event.label.name == 'llm-review')
+    # Optional: Filter by PR author
+    # if: |
+    #   github.event.pull_request.user.login == 'external-contributor' ||
+    #   github.event.pull_request.user.login == 'new-developer' ||
+    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
+
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -32,38 +36,10 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # The review posts ONE comment on the PR.
-          #
-          # Reading the PR and the checkout is what a review needs, so those
-          # are allowed, and the only write is the one comment. Allowing only
-          # the inline-comment tool (the action's template) leaves the review
-          # unable to read the diff: in asp-v2 and privacy-pools-website-v2 it
-          # hit a permission denial on every run and exited green with no
-          # output (checked 2026-09-23).
-          prompt: |
-            REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
+          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
+          plugins: 'code-review@claude-code-plugins'
+          prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
+          claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment"'
+          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
+          # or https://code.claude.com/docs/en/cli-reference for available options
 
-            Review this pull request for real defects: logic errors, broken
-            edge cases, wrong units or decimals on amounts, error handling that
-            hides a failure, contract changes that break access control, storage
-            layout or an invariant, circuit changes that leave a signal
-            unconstrained, SDK or relayer API changes that break an existing
-            client, and anything that links a deposit to a withdrawal. Skip
-            style, naming and formatting.
-
-            Read the change with `gh pr view` and `gh pr diff`, and read the
-            surrounding code in the checkout before deciding anything is a
-            defect. Only report what you have confirmed in the code.
-
-            When you are done, post exactly one comment on the PR with
-            `gh pr comment ${{ github.event.pull_request.number }} --body-file <file>`.
-            List each finding as file:line, what is wrong, and what input makes
-            it fail, most severe first. If you found nothing, say so in one line.
-            Keep it short. No em dashes.
-          # `opus` is the CLI alias for the latest Opus, so a new release is
-          # picked up without editing this file. It costs more per run than the
-          # action's Sonnet default, which the opt-in label above keeps bounded.
-          claude_args: >-
-            --model opus
-            --allowedTools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Read,Grep,Glob,Write"
