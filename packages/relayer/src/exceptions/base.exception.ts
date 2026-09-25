@@ -16,6 +16,7 @@ export enum ErrorCode {
   CONTEXT_MISMATCH = "CONTEXT_MISMATCH",
   RELAYER_COMMITMENT_REJECTED = "RELAYER_COMMITMENT_REJECTED",
   INSUFFICIENT_WITHDRAWN_VALUE = "INSUFFICIENT_WITHDRAWN_VALUE",
+  MISMATCHING_WITHDRAWN_VALUE = "MISMATCHING_WITHDRAWN_VALUE",
   ASSET_NOT_SUPPORTED = "ASSET_NOT_SUPPORTED",
 
   // Config errors
@@ -245,6 +246,14 @@ export class WithdrawalValidationError extends RelayerError {
   }
 
   public static withdrawnValueTooSmall(details: string) {
+    return new WithdrawalValidationError(
+      "Withdrawn value is too small",
+      ErrorCode.INSUFFICIENT_WITHDRAWN_VALUE,
+      details,
+    );
+  }
+
+  public static withdrawnValueMismatch(details: string) {
     return new WithdrawalValidationError(
       "Withdrawn value is too small",
       ErrorCode.INSUFFICIENT_WITHDRAWN_VALUE,
