@@ -6,7 +6,7 @@ export async function fetchVersionedArtifact(
   try {
     const fs = (await import("fs")).default;
     const readPromise: Promise<Buffer> = new Promise((resolve, reject) => {
-      fs.readFile(artifactUrl.pathname, (err, data) => {
+      fs.readFile(artifactUrl, (err, data) => {
         if (err) {
           reject(err);
         } else {
