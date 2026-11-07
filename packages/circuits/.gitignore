@@ -122,3 +122,6 @@ ptau
 
 # artifacts
 artifacts/**
+
+# builds of circomkit's WitnessTester
+build/.witness-tester/

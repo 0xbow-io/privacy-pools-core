@@ -2,7 +2,7 @@
   "name": "@privacy-pool-core/circuits",
   "version": "1.0.0",
   "description": "Circom circuits for the Privacy Pool protocol",
-  "repository": "https://github.com/defi-wonderland/privacy-pool-core",
+  "repository": "https://github.com/0xbow-io/privacy-pools-core",
   "license": "Apache-2.0",
   "author": "Wonderland",
   "scripts": {
@@ -30,7 +30,7 @@
   "dependencies": {
     "@zk-kit/lean-imt": "2.2.2",
     "chai": "5.1.2",
-    "circomkit": "0.3.2",
+    "circomkit": "0.4.0",
     "circomlib": "2.0.5",
     "maci-circuits": "2.5.0",
     "maci-crypto": "2.5.0",
