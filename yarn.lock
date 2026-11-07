@@ -183,6 +183,11 @@
   resolved "https://registry.yarnpkg.com/@bcoe/v8-coverage/-/v8-coverage-1.0.2.tgz#bbe12dca5b4ef983a0d0af4b07b9bc90ea0ababa"
   integrity sha512-6zABk/ECA/QYSCQ1NGiVwwbQerUCZ+TQbp64Q3AgmfNvurHH0j8TtXa1qbShXA6qqkpAj4V5W8pP6mLe1mcMqA==
 
+"@commander-js/extra-typings@^12.1.0":
+  version "12.1.0"
+  resolved "https://registry.yarnpkg.com/@commander-js/extra-typings/-/extra-typings-12.1.0.tgz#5441bae756d326d34f1b9dceb0d78dbf5bc05d81"
+  integrity sha512-wf/lwQvWAA0goIghcb91dQYpkLBcyhOhQNqG/VgWhnKzgt+UOMvra7EX/2fv70arm5RW+PUHoQHHDa6/p77Eqg==
+
 "@commitlint/cli@19.3.0":
   version "19.3.0"
   resolved "https://registry.yarnpkg.com/@commitlint/cli/-/cli-19.3.0.tgz#44e6da9823a01f0cdcc43054bbefdd2c6c5ddf39"
@@ -3392,7 +3397,17 @@ circom_tester@^0.0.19:
     tmp-promise "^3.0.3"
     util "^0.12.4"
 
-circomkit@0.3.2, circomkit@^0.3.1:
+circomkit@0.4.0:
+  version "0.4.0"
+  resolved "https://registry.yarnpkg.com/circomkit/-/circomkit-0.4.0.tgz#2af85ddf12db7f3e6eed3b888bafb3ac39c2bf6c"
+  integrity sha512-XxhvM29VHzKoNCGTr2VS7etu0FNCdrhtz2srMss6ekp/9jO8P14LSZEn+WIDqsA4ywk+slnVTOg21nMDg6IErw==
+  dependencies:
+    "@commander-js/extra-typings" "^12.1.0"
+    commander "^12.1.0"
+    ffjavascript "^0.3.1"
+    loglevel "^1.9.2"
+
+circomkit@^0.3.1:
   version "0.3.2"
   resolved "https://registry.yarnpkg.com/circomkit/-/circomkit-0.3.2.tgz#9a0630cfc04595c494ffcfaf2be999fa77c85e3c"
   integrity sha512-/ek/xtVNaBFlp2g12TPAfn9kSFUnZuKOiCvZFFnPn3JtZwi40r4eTDozPaaJKH4ZZx3alEgCr9MhOP24+o4CvA==
@@ -4436,7 +4451,7 @@ ffjavascript@0.3.0:
     wasmcurves "0.2.2"
     web-worker "1.2.0"
 
-ffjavascript@0.3.1, ffjavascript@^0.3.0:
+ffjavascript@0.3.1, ffjavascript@^0.3.0, ffjavascript@^0.3.1:
   version "0.3.1"
   resolved "https://registry.yarnpkg.com/ffjavascript/-/ffjavascript-0.3.1.tgz#3761bbb3f4a67b58a94a463080272bf6b5877b03"
   integrity sha512-4PbK1WYodQtuF47D4pRI5KUg3Q392vuP5WjE1THSnceHdXwU3ijaoS0OqxTzLknCtz4Z2TtABzkBdBdMn3B/Aw==
